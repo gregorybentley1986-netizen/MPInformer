@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 rem Messages are ASCII-only so CMD (CP866/1252) does not garble UTF-8 Cyrillic.
 rem Usage:
 rem   push-and-deploy.bat [mode] [ssh_target]
@@ -338,7 +338,7 @@ if /I "!DEPLOY_SKIP_PIP!"=="1" (
   exit /b 0
 )
 echo [INFO] Server: ensure venv + pip install -r requirements.txt
-ssh %SSH_OPTS% !SERVER! "cd \"!REMOTE_PATH!\" && CUR_HASH=\$(sha256sum requirements.txt | awk '{print \$1}') && OLD_HASH=\$(cat .deploy-requirements.sha256 2>/dev/null || true) && if test -x venv/bin/python && test \"\$CUR_HASH\" = \"\$OLD_HASH\"; then echo [SKIP] requirements unchanged, pip skipped; else python3 -m venv venv && venv/bin/python -m pip install -r requirements.txt && printf \"%s\" \"\$CUR_HASH\" > .deploy-requirements.sha256 && echo [OK] pip install executed; fi"
+ssh %SSH_OPTS% !SERVER! "cd \"!REMOTE_PATH!\" && CUR_HASH=$(sha256sum requirements.txt | awk '{print $1}') && OLD_HASH=$(cat .deploy-requirements.sha256 2>/dev/null || true) && if test -x venv/bin/python && test \"$CUR_HASH\" = \"$OLD_HASH\"; then echo [SKIP] requirements unchanged, pip skipped; else python3 -m venv venv && venv/bin/python -m pip install -r requirements.txt && printf \"%%s\" \"$CUR_HASH\" > .deploy-requirements.sha256 && echo [OK] pip install executed; fi"
 if errorlevel 1 (
   echo [ERROR] pip install on server failed.
   exit /b 1
