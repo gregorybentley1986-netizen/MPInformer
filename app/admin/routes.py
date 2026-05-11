@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections import defaultdict
 import re
 import socket
 import subprocess
@@ -118,6 +119,91 @@ async def _sync_finance_entry_tags(db: AsyncSession, entry_id: int, tag_ids: lis
         await db.execute(
             insert(finance_entry_tags).values(finance_entry_id=entry_id, finance_tag_id=tid)
         )
+
+
+_MONTH_SHORT_RU = (
+    "янв.", "февр.", "мар.", "апр.", "мая", "июн.",
+    "июл.", "авг.", "сент.", "окт.", "нояб.", "дек.",
+)
+
+
+def _parse_analytics_int_ids(raw_values: list[str]) -> list[int]:
+    out: list[int] = []
+    seen: set[int] = set()
+    for raw in raw_values:
+        s = (raw or "").strip()
+        if not s:
+            continue
+        try:
+            v = int(s)
+        except ValueError:
+            continue
+        if v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out
+
+
+def _analytics_parse_dates(from_raw: str | None, to_raw: str | None) -> tuple[datetime, datetime, date, date]:
+    """Полуинтервал [from_dt, to_dt) в UTC по календарным дням."""
+    today = datetime.now(timezone.utc).date()
+    year = today.year
+    fr = (from_raw or "").strip()
+    tr = (to_raw or "").strip()
+    try:
+        d_from = datetime.strptime(fr, "%Y-%m-%d").date() if fr else date(year, 1, 1)
+    except ValueError:
+        d_from = date(year, 1, 1)
+    try:
+        d_to = datetime.strptime(tr, "%Y-%m-%d").date() if tr else today
+    except ValueError:
+        d_to = today
+    if d_from > d_to:
+        d_from, d_to = d_to, d_from
+    from_dt = datetime.combine(d_from, datetime.min.time(), tzinfo=timezone.utc)
+    to_dt = datetime.combine(d_to + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+    return from_dt, to_dt, d_from, d_to
+
+
+def _month_keys_in_range(d_from: date, d_to: date) -> list[str]:
+    keys: list[str] = []
+    y, m = d_from.year, d_from.month
+    while True:
+        keys.append(f"{y:04d}-{m:02d}")
+        if y == d_to.year and m == d_to.month:
+            break
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return keys
+
+
+def _ym_label_ru(ym: str) -> str:
+    y, mo = ym.split("-")
+    return f"{_MONTH_SHORT_RU[int(mo) - 1]} {y}"
+
+
+async def _finance_entries_for_analytics(
+    db: AsyncSession,
+    from_dt: datetime,
+    to_dt: datetime,
+    counterparty_ids: list[int],
+    tag_ids: list[int],
+    operation_types: list[str],
+) -> list[FinanceEntry]:
+    q = select(FinanceEntry).options(selectinload(FinanceEntry.tags))
+    q = q.where(FinanceEntry.created_at >= from_dt)
+    q = q.where(FinanceEntry.created_at < to_dt)
+    q = q.where(FinanceEntry.operation_type.in_(operation_types))
+    if counterparty_ids:
+        q = q.where(FinanceEntry.counterparty_id.in_(counterparty_ids))
+    res = await db.execute(q)
+    rows = list(res.scalars().all())
+    if tag_ids:
+        wanted = set(tag_ids)
+        rows = [r for r in rows if any((t.id in wanted) for t in (r.tags or []))]
+    return rows
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -3770,6 +3856,107 @@ async def admin_finance_entry_delete(
     await db.delete(row)
     await db.commit()
     return RedirectResponse(url="/admin/finance?tab=income-expense&success=deleted", status_code=303)
+
+
+@router.get("/finance/analytics", response_class=HTMLResponse)
+async def admin_finance_analytics(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Страница BI-диаграмм по финансам (Apache ECharts на клиенте)."""
+    today = datetime.now(timezone.utc).date()
+    income_dirs_res = await db.execute(
+        select(FinanceCounterparty)
+        .where(FinanceCounterparty.operation_type == "income")
+        .order_by(FinanceCounterparty.sort_order.asc(), FinanceCounterparty.id.asc())
+    )
+    expense_dirs_res = await db.execute(
+        select(FinanceCounterparty)
+        .where(FinanceCounterparty.operation_type == "expense")
+        .order_by(FinanceCounterparty.sort_order.asc(), FinanceCounterparty.id.asc())
+    )
+    finance_tags_res = await db.execute(
+        select(FinanceTag).order_by(FinanceTag.sort_order.asc(), FinanceTag.id.asc())
+    )
+    return templates.TemplateResponse(
+        "admin/finance_analytics.html",
+        {
+            "request": request,
+            "default_from": date(today.year, 1, 1).isoformat(),
+            "default_to": today.isoformat(),
+            "income_counterparties": income_dirs_res.scalars().all(),
+            "expense_counterparties": expense_dirs_res.scalars().all(),
+            "finance_tags": finance_tags_res.scalars().all(),
+        },
+    )
+
+
+@router.get("/api/finance/charts/monthly-line")
+async def api_finance_chart_monthly_line(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Доходы и расходы по месяцам (линии по точкам)."""
+    from_dt, to_dt, d_from, d_to = _analytics_parse_dates(
+        request.query_params.get("from_date"),
+        request.query_params.get("to_date"),
+    )
+    cp_ids = _parse_analytics_int_ids(request.query_params.getlist("counterparty_id"))
+    tag_ids = _parse_analytics_int_ids(request.query_params.getlist("tag_id"))
+    rows = await _finance_entries_for_analytics(
+        db, from_dt, to_dt, cp_ids, tag_ids, ["income", "expense"]
+    )
+    inc_by_m: defaultdict[str, float] = defaultdict(float)
+    exp_by_m: defaultdict[str, float] = defaultdict(float)
+    for r in rows:
+        if not r.created_at:
+            continue
+        ym = r.created_at.strftime("%Y-%m")
+        if r.operation_type == "income":
+            inc_by_m[ym] += float(r.amount or 0)
+        else:
+            exp_by_m[ym] += float(r.amount or 0)
+    month_keys = _month_keys_in_range(d_from, d_to)
+    income_vals = [round(inc_by_m[k], 2) for k in month_keys]
+    expense_vals = [round(exp_by_m[k], 2) for k in month_keys]
+    labels = [_ym_label_ru(k) for k in month_keys]
+    return JSONResponse(
+        {
+            "month_keys": month_keys,
+            "month_labels": labels,
+            "income": income_vals,
+            "expense": expense_vals,
+        }
+    )
+
+
+@router.get("/api/finance/charts/expenses-pie")
+async def api_finance_chart_expenses_pie(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Расходы по категориям (справочник «На что потрачено»)."""
+    from_dt, to_dt, _, _ = _analytics_parse_dates(
+        request.query_params.get("from_date"),
+        request.query_params.get("to_date"),
+    )
+    cp_ids = _parse_analytics_int_ids(request.query_params.getlist("counterparty_id"))
+    tag_ids = _parse_analytics_int_ids(request.query_params.getlist("tag_id"))
+    rows = await _finance_entries_for_analytics(
+        db, from_dt, to_dt, cp_ids, tag_ids, ["expense"]
+    )
+    by_cat: defaultdict[str, float] = defaultdict(float)
+    for r in rows:
+        label = (r.counterparty_name or "").strip() or "Не указано"
+        by_cat[label] += float(r.amount or 0)
+    pie_data = [
+        {"name": name, "value": round(val, 2)}
+        for name, val in sorted(by_cat.items(), key=lambda x: -x[1])
+    ]
+    return JSONResponse({"data": pie_data})
 
 
 @router.post("/finance/counterparty/save")
