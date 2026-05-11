@@ -223,6 +223,54 @@
         padding-bottom: 8px;
     }
     .edit-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+    .edit-dialog .finance-form {
+        max-width: 440px;
+        margin: 0 auto;
+        gap: 10px;
+    }
+    .edit-dialog .form-group {
+        display: grid;
+        gap: 6px;
+    }
+    .edit-dialog .form-group > label {
+        font-size: 0.84rem;
+        color: #666;
+    }
+    .edit-dialog input[type="number"],
+    .edit-dialog input[type="date"],
+    .edit-dialog select,
+    .edit-dialog textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--main-text);
+        font-family: 'Play', sans-serif;
+        font-size: 0.95rem;
+        box-sizing: border-box;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    .edit-dialog input[type="number"]:focus,
+    .edit-dialog input[type="date"]:focus,
+    .edit-dialog select:focus,
+    .edit-dialog textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(244, 208, 63, 0.22);
+    }
+    .edit-dialog textarea {
+        min-height: 86px;
+        resize: vertical;
+    }
+    .edit-dialog .operation-row {
+        grid-template-columns: 110px minmax(140px, 1fr) 110px;
+        gap: 10px;
+    }
+    .edit-dialog .comment-wrap {
+        max-width: none;
+        justify-self: stretch;
+    }
     .counterparty-layout {
         display: grid;
         grid-template-columns: 1fr 1fr;
