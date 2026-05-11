@@ -374,6 +374,32 @@
         <label>До
             <input type="date" name="end_date" id="end_date" value="{{ end_date or '' }}">
         </label>
+        <label>Операция
+            <select name="operation_filter" id="operation_filter">
+                <option value="all" {% if operation_filter == 'all' %}selected{% endif %}>Все</option>
+                <option value="income" {% if operation_filter == 'income' %}selected{% endif %}>Доход</option>
+                <option value="expense" {% if operation_filter == 'expense' %}selected{% endif %}>Расход</option>
+            </select>
+        </label>
+        <label>На что/Откуда
+            <select name="counterparty_filter" id="counterparty_filter">
+                <option value="" {% if not counterparty_filter %}selected{% endif %}>Все</option>
+                {% if expense_counterparties %}
+                <optgroup label="На что потрачено">
+                    {% for item in expense_counterparties %}
+                    <option value="{{ item.id }}" {% if counterparty_filter == (item.id|string) %}selected{% endif %}>{{ item.name }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endif %}
+                {% if income_counterparties %}
+                <optgroup label="Откуда">
+                    {% for item in income_counterparties %}
+                    <option value="{{ item.id }}" {% if counterparty_filter == (item.id|string) %}selected{% endif %}>{{ item.name }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endif %}
+            </select>
+        </label>
         <button type="submit" class="btn">Применить</button>
     </form>
     <div class="saldo-bar">
@@ -392,6 +418,7 @@
                 <tr>
                     <th>Дата/время</th>
                     <th>Операция</th>
+                    <th>На что/Откуда</th>
                     <th>Комментарий</th>
                     <th>Сумма</th>
                     <th>Действия</th>
@@ -415,12 +442,8 @@
                         <span class="op-badge op-expense">Расход</span>
                         {% endif %}
                     </td>
-                    <td>
-                        {% if row.counterparty_name %}
-                            <div><strong>{% if row.operation_type == "income" %}Откуда:{% else %}На что потрачено:{% endif %}</strong> {{ row.counterparty_name }}</div>
-                        {% endif %}
-                        <div>{{ row.comment or "-" }}</div>
-                    </td>
+                    <td>{{ row.counterparty_name or "-" }}</td>
+                    <td>{{ row.comment or "-" }}</td>
                     <td class="{% if row.operation_type == 'income' %}sum-income{% else %}sum-expense{% endif %}">
                         {{ '%.2f'|format(row.amount) }}
                     </td>
@@ -438,7 +461,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5">Записей пока нет.</td>
+                    <td colspan="6">Записей пока нет.</td>
                 </tr>
                 {% endfor %}
             </tbody>

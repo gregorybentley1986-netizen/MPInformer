@@ -3480,6 +3480,8 @@ async def admin_finance(
     if tab not in ("income-expense", "counterparties"):
         tab = "income-expense"
     period = (request.query_params.get("period") or "month").strip().lower()
+    operation_filter = (request.query_params.get("operation_filter") or "all").strip().lower()
+    counterparty_filter_raw = (request.query_params.get("counterparty_filter") or "").strip()
     start_date_raw = (request.query_params.get("start_date") or "").strip()
     end_date_raw = (request.query_params.get("end_date") or "").strip()
 
@@ -3553,12 +3555,24 @@ async def admin_finance(
     )
     income_counterparties = income_dirs_res.scalars().all()
     expense_counterparties = expense_dirs_res.scalars().all()
+    counterparty_filter_id = None
+    if counterparty_filter_raw:
+        try:
+            counterparty_filter_id = int(counterparty_filter_raw)
+        except (TypeError, ValueError):
+            counterparty_filter_id = None
 
     query = select(FinanceEntry)
     if start_dt is not None:
         query = query.where(FinanceEntry.created_at >= start_dt)
     if end_dt is not None:
         query = query.where(FinanceEntry.created_at < end_dt)
+    if operation_filter in ("income", "expense"):
+        query = query.where(FinanceEntry.operation_type == operation_filter)
+    else:
+        operation_filter = "all"
+    if counterparty_filter_id is not None:
+        query = query.where(FinanceEntry.counterparty_id == counterparty_filter_id)
 
     res = await db.execute(query.order_by(FinanceEntry.created_at.desc(), FinanceEntry.id.desc()))
     entries = res.scalars().all()
@@ -3582,6 +3596,8 @@ async def admin_finance(
             "saldo_total": saldo_total,
             "income_counterparties": income_counterparties,
             "expense_counterparties": expense_counterparties,
+            "operation_filter": operation_filter,
+            "counterparty_filter": str(counterparty_filter_id) if counterparty_filter_id is not None else "",
         },
     )
 
