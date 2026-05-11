@@ -3,7 +3,7 @@ rem Messages are ASCII-only so CMD (CP866/1252) does not garble UTF-8 Cyrillic.
 rem Usage:
 rem   push-and-deploy.bat [mode] [ssh_target]
 rem   mode:
-rem     (empty)   GitHub push + server git pull + restart
+rem     (empty)   GitHub push + server git sync + pip + restart + wait /health
 rem     rollback
 rem     localsync  No GitHub: pipe git archive HEAD to server via SSH
 rem   ssh_target examples:
@@ -11,7 +11,10 @@ rem     root@203.0.113.10
 rem     ubuntu@mpi.example.com
 rem   Or set MPINFORMER_SSH_TARGET (or SSH_TARGET) instead of the 2nd argument.
 rem
-rem VPS defaults (MPInformer): /opt/MPInformer, mpinformer, health on 8001.
+rem VPS defaults (MPInformer): /opt/MPInformer, mpinformer, health http://127.0.0.1:8000/health
+rem Override: set DEPLOY_HEALTH_URL=...   match systemd uvicorn --port
+rem Skip pip on server: set DEPLOY_SKIP_PIP=1
+rem Close window without pause: set DEPLOY_NO_PAUSE=1
 rem LAN PrintFarm override example:
 rem   set "DEPLOY_REMOTE_PATH=/home/esox/PrintFarm"
 rem   set "DEPLOY_SERVICE=printfarm"
@@ -22,7 +25,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 set "GIT_BRANCH=main"
 set "REMOTE_PATH=/opt/MPInformer"
 set "SERVICE=mpinformer"
-set "HEALTH_URL=http://127.0.0.1:8001/health"
+set "HEALTH_URL=http://127.0.0.1:8000/health"
 if defined DEPLOY_REMOTE_PATH set "REMOTE_PATH=!DEPLOY_REMOTE_PATH!"
 if defined DEPLOY_SERVICE set "SERVICE=!DEPLOY_SERVICE!"
 if defined DEPLOY_HEALTH_URL set "HEALTH_URL=!DEPLOY_HEALTH_URL!"
@@ -59,6 +62,7 @@ if "!RC!"=="0" (
 ) else (
   echo [FAILED] Finished with error code !RC!.
 )
+if defined DEPLOY_NO_PAUSE exit /b !RC!
 pause
 exit /b !RC!
 
@@ -96,7 +100,7 @@ if errorlevel 1 (
 echo [OK] Restart command sent.
 
 echo [3/3] Wait for health...
-ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'until curl -fsS !HEALTH_URL! >/dev/null; do sleep 1; done'"
+ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'until curl -fsS -X GET !HEALTH_URL! -o /dev/null; do sleep 1; done'"
 if errorlevel 1 (
   echo [ERROR] Health check failed after rollback.
   echo [INFO] Current service status:
@@ -144,6 +148,8 @@ if errorlevel 1 (
 )
 echo [OK] Files unpacked on server.
 
+call :remote_prepare_runtime
+
 echo [2/3] Restart service...
 ssh %SSH_OPTS% !SERVER! "sudo -n systemctl restart !SERVICE!"
 if errorlevel 1 (
@@ -153,7 +159,7 @@ if errorlevel 1 (
 echo [OK] Restart command sent.
 
 echo [3/3] Wait for health...
-ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'until curl -fsS !HEALTH_URL! >/dev/null; do sleep 1; done'"
+ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'until curl -fsS -X GET !HEALTH_URL! -o /dev/null; do sleep 1; done'"
 if errorlevel 1 (
   echo [ERROR] Health check failed after localsync.
   ssh %SSH_OPTS% !SERVER! "sudo -n systemctl --no-pager status !SERVICE! -n 40"
@@ -176,12 +182,13 @@ echo SERVER=!SERVER!
 echo REMOTE_PATH=!REMOTE_PATH!
 echo SERVICE=!SERVICE!
 echo HEALTH_URL=!HEALTH_URL!
+echo PIP_ON_SERVER=^(skip if DEPLOY_SKIP_PIP=1^)
 echo TIMEOUT=!RESTART_TIMEOUT_SEC!s
 echo SSH_OPTS=%SSH_OPTS%
 echo ==============================================================
 echo.
 
-echo [1/7] Check local changes...
+echo [1/8] Check local changes...
 git status --short
 if errorlevel 1 (
   echo [ERROR] git status failed.
@@ -190,13 +197,13 @@ if errorlevel 1 (
 echo [OK] git status done.
 echo.
 
-echo [2/7] Build auto commit message...
+echo [2/8] Build auto commit message...
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format \"yyyy-MM-dd HH:mm:ss\""') do set "NOW_TS=%%i"
 set "COMMIT_MSG=auto-deploy: !NOW_TS!"
 echo [OK] Commit message: !COMMIT_MSG!
 echo.
 
-echo [3/7] git add -A ...
+echo [3/8] git add -A ...
 git add -A
 if errorlevel 1 (
   echo [ERROR] git add failed.
@@ -205,7 +212,7 @@ if errorlevel 1 (
 echo [OK] git add done.
 echo.
 
-echo [4/7] git commit ...
+echo [4/8] git commit ...
 git commit -m "!COMMIT_MSG!"
 if errorlevel 1 (
   echo [WARN] No new commit ^(nothing to commit - working tree clean is usual^).
@@ -215,7 +222,7 @@ if errorlevel 1 (
 )
 echo.
 
-echo [5a/7] git fetch + count commits not yet on GitHub...
+echo [5a/8] git fetch + count commits not yet on GitHub...
 git fetch origin
 if errorlevel 1 (
   echo [WARN] git fetch failed - check network and origin remote.
@@ -231,7 +238,7 @@ if "!AHEAD_COUNT!"=="0" (
   echo [INFO] Commits on PC but not on GitHub yet: !AHEAD_COUNT! ^(need successful push^).
 )
 
-echo [5b/7] git push origin !GIT_BRANCH! ...
+echo [5b/8] git push origin !GIT_BRANCH! ...
 git push origin !GIT_BRANCH!
 if errorlevel 1 (
   echo [ERROR] git push failed.
@@ -245,7 +252,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [5c/7] Verify: after push, HEAD must match origin/!GIT_BRANCH!...
+echo [5c/8] Verify: after push, HEAD must match origin/!GIT_BRANCH!...
 git fetch origin
 for /f %%a in ('git rev-parse HEAD') do set "VERIFY_HEAD=%%a"
 for /f %%b in ('git rev-parse origin/!GIT_BRANCH!') do set "VERIFY_ORIGIN=%%b"
@@ -265,7 +272,7 @@ echo [INFO] Local HEAD: !LOCAL_HEAD_SHORT! ^(!LOCAL_HEAD_FULL!^)
 git log -1 --oneline
 echo.
 
-echo [6/7] Server: stash, hard-sync to origin/!GIT_BRANCH!, verify ...
+echo [6/8] Server: stash, hard-sync to origin/!GIT_BRANCH!, verify ...
 echo [INFO] VERIFY "HEAD now" on server must equal PC hash: !LOCAL_HEAD_FULL!
 echo [INFO] systemd WorkingDirectory must match repo: !REMOTE_PATH!
 echo [INFO] Uses: checkout -B !GIT_BRANCH! origin/!GIT_BRANCH! + reset --hard ^(after stash^).
@@ -292,7 +299,11 @@ echo [INFO] Match VERIFY HEAD with PC hash !LOCAL_HEAD_FULL!
 echo [INFO] Server edits may be in: git stash list ^(on server^)
 echo.
 
-echo [7/7] Restart service and wait for health...
+echo [7/8] Server: uploads dir + pip install ^(unless DEPLOY_SKIP_PIP=1^) ...
+call :remote_prepare_runtime
+if errorlevel 1 exit /b 1
+
+echo [8/8] Restart service and wait for health GET !HEALTH_URL! ...
 ssh %SSH_OPTS% !SERVER! "sudo -n systemctl restart !SERVICE!"
 if errorlevel 1 (
   echo [ERROR] Service restart failed.
@@ -301,8 +312,8 @@ if errorlevel 1 (
 )
 echo [OK] Restart command sent.
 
-echo [INFO] Waiting for health endpoint timeout !RESTART_TIMEOUT_SEC!s ...
-ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'until curl -fsS !HEALTH_URL! >/dev/null; do sleep 1; done'"
+echo [INFO] Waiting for health GET timeout !RESTART_TIMEOUT_SEC!s ...
+ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'until curl -fsS -X GET !HEALTH_URL! -o /dev/null; do sleep 1; done'"
 if errorlevel 1 (
   echo [ERROR] Restart timeout reached.
   echo [INFO] Current service status:
@@ -311,4 +322,24 @@ if errorlevel 1 (
 )
 
 echo [OK] Service is healthy on !HEALTH_URL!.
+exit /b 0
+
+rem ---------- Remote venv + uploads (after git sync or localsync) ----------
+:remote_prepare_runtime
+ssh %SSH_OPTS% !SERVER! bash -lc "cd !REMOTE_PATH! && mkdir -p uploads"
+if errorlevel 1 (
+  echo [ERROR] mkdir uploads on server failed.
+  exit /b 1
+)
+if /I "!DEPLOY_SKIP_PIP!"=="1" (
+  echo [SKIP] DEPLOY_SKIP_PIP=1 — pip install on server skipped.
+  exit /b 0
+)
+echo [INFO] Server: ./venv/bin/pip install -r requirements.txt
+ssh %SSH_OPTS% !SERVER! bash -lc "cd !REMOTE_PATH! && ./venv/bin/pip install -r requirements.txt"
+if errorlevel 1 (
+  echo [ERROR] pip install on server failed.
+  exit /b 1
+)
+echo [OK] pip install on server completed.
 exit /b 0
