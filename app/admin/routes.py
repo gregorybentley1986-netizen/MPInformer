@@ -3480,8 +3480,8 @@ async def admin_finance(
     if tab not in ("income-expense", "counterparties"):
         tab = "income-expense"
     period = (request.query_params.get("period") or "month").strip().lower()
-    operation_filter = (request.query_params.get("operation_filter") or "all").strip().lower()
-    counterparty_filter_raw = (request.query_params.get("counterparty_filter") or "").strip()
+    operation_filter_raw = request.query_params.getlist("operation_filter")
+    counterparty_filter_raw = request.query_params.getlist("counterparty_filter")
     start_date_raw = (request.query_params.get("start_date") or "").strip()
     end_date_raw = (request.query_params.get("end_date") or "").strip()
 
@@ -3555,24 +3555,38 @@ async def admin_finance(
     )
     income_counterparties = income_dirs_res.scalars().all()
     expense_counterparties = expense_dirs_res.scalars().all()
-    counterparty_filter_id = None
-    if counterparty_filter_raw:
+    selected_operation_filters = []
+    for value in operation_filter_raw:
+        op_value = (value or "").strip().lower()
+        if op_value in ("income", "expense") and op_value not in selected_operation_filters:
+            selected_operation_filters.append(op_value)
+    if not selected_operation_filters:
+        selected_operation_filters = ["income", "expense"]
+
+    selected_counterparty_filters = []
+    counterparty_filter_ids = []
+    for value in counterparty_filter_raw:
+        raw_value = (value or "").strip()
+        if not raw_value:
+            continue
         try:
-            counterparty_filter_id = int(counterparty_filter_raw)
+            cid = int(raw_value)
         except (TypeError, ValueError):
-            counterparty_filter_id = None
+            continue
+        as_str = str(cid)
+        if as_str in selected_counterparty_filters:
+            continue
+        selected_counterparty_filters.append(as_str)
+        counterparty_filter_ids.append(cid)
 
     query = select(FinanceEntry)
     if start_dt is not None:
         query = query.where(FinanceEntry.created_at >= start_dt)
     if end_dt is not None:
         query = query.where(FinanceEntry.created_at < end_dt)
-    if operation_filter in ("income", "expense"):
-        query = query.where(FinanceEntry.operation_type == operation_filter)
-    else:
-        operation_filter = "all"
-    if counterparty_filter_id is not None:
-        query = query.where(FinanceEntry.counterparty_id == counterparty_filter_id)
+    query = query.where(FinanceEntry.operation_type.in_(selected_operation_filters))
+    if counterparty_filter_ids:
+        query = query.where(FinanceEntry.counterparty_id.in_(counterparty_filter_ids))
 
     res = await db.execute(query.order_by(FinanceEntry.created_at.desc(), FinanceEntry.id.desc()))
     entries = res.scalars().all()
@@ -3596,8 +3610,9 @@ async def admin_finance(
             "saldo_total": saldo_total,
             "income_counterparties": income_counterparties,
             "expense_counterparties": expense_counterparties,
-            "operation_filter": operation_filter,
-            "counterparty_filter": str(counterparty_filter_id) if counterparty_filter_id is not None else "",
+            "selected_operation_filters": selected_operation_filters,
+            "selected_counterparty_filters": selected_counterparty_filters,
+            "default_operation_date": now_utc.date().isoformat(),
         },
     )
 
@@ -3610,6 +3625,7 @@ async def admin_finance_entry_save(
     comment: str = Form(""),
     entry_id: str = Form(""),
     counterparty_id: str = Form(""),
+    operation_date: str = Form(""),
     db: AsyncSession = Depends(get_db),
     username: str = Depends(verify_admin),
 ):
@@ -3627,6 +3643,15 @@ async def admin_finance_entry_save(
     comment_value = (comment or "").strip()
     if len(comment_value) > 512:
         comment_value = comment_value[:512]
+    operation_date_raw = (operation_date or "").strip()
+    try:
+        if operation_date_raw:
+            operation_date_value = datetime.strptime(operation_date_raw, "%Y-%m-%d").date()
+        else:
+            operation_date_value = datetime.now(timezone.utc).date()
+        operation_dt = datetime.combine(operation_date_value, datetime.min.time(), tzinfo=timezone.utc)
+    except ValueError:
+        return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_date", status_code=303)
     counterparty_value = (counterparty_id or "").strip()
 
     counterparty_id_value = None
@@ -3655,6 +3680,7 @@ async def admin_finance_entry_save(
         row.comment = comment_value
         row.counterparty_id = counterparty_id_value
         row.counterparty_name = counterparty_name_value
+        row.created_at = operation_dt
         await db.commit()
         return RedirectResponse(url="/admin/finance?tab=income-expense&success=updated", status_code=303)
 
@@ -3664,6 +3690,7 @@ async def admin_finance_entry_save(
         comment=comment_value,
         counterparty_id=counterparty_id_value,
         counterparty_name=counterparty_name_value,
+        created_at=operation_dt,
     )
     db.add(row)
     await db.commit()

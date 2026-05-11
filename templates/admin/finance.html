@@ -271,6 +271,26 @@
     }
     .inline-form { display: contents; }
     .hide { display: none !important; }
+    .th-filter {
+        margin-top: 6px;
+        display: grid;
+        gap: 4px;
+        max-height: 96px;
+        overflow-y: auto;
+        font-weight: 400;
+    }
+    .th-filter label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.78rem;
+        white-space: nowrap;
+    }
+    .th-filter input[type="checkbox"] {
+        margin: 0;
+        width: 14px;
+        height: 14px;
+    }
     @media (max-width: 940px) {
         .split-forms, .counterparty-layout { grid-template-columns: 1fr; }
     }
@@ -297,6 +317,8 @@
 <div class="alert alert-error">Некорректный тип операции.</div>
 {% elif request.query_params.get("error") == "invalid_counterparty" %}
 <div class="alert alert-error">Выберите корректное значение из списка.</div>
+{% elif request.query_params.get("error") == "invalid_date" %}
+<div class="alert alert-error">Укажите корректную дату операции.</div>
 {% elif request.query_params.get("error") == "empty_name" %}
 <div class="alert alert-error">Введите значение справочника.</div>
 {% elif request.query_params.get("error") == "notfound" %}
@@ -314,6 +336,10 @@
             <div class="form-group">
                 <label for="expense_amount">Сумма</label>
                 <input type="number" id="expense_amount" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
+            </div>
+            <div class="form-group">
+                <label for="expense_operation_date">Дата</label>
+                <input type="date" id="expense_operation_date" name="operation_date" value="{{ default_operation_date }}">
             </div>
             <div class="form-group">
                 <label for="expense_counterparty_id">На что потрачено</label>
@@ -340,6 +366,10 @@
                 <input type="number" id="income_amount" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
             </div>
             <div class="form-group">
+                <label for="income_operation_date">Дата</label>
+                <input type="date" id="income_operation_date" name="operation_date" value="{{ default_operation_date }}">
+            </div>
+            <div class="form-group">
                 <label for="income_counterparty_id">Откуда</label>
                 <select id="income_counterparty_id" name="counterparty_id">
                     <option value="">Не выбрано</option>
@@ -360,6 +390,12 @@
 <div class="card" style="margin-top:14px;">
     <form method="GET" action="/admin/finance" class="saldo-filter" id="saldo-filter-form">
         <input type="hidden" name="tab" value="income-expense">
+        {% for op in selected_operation_filters %}
+        <input type="hidden" name="operation_filter" value="{{ op }}">
+        {% endfor %}
+        {% for cp in selected_counterparty_filters %}
+        <input type="hidden" name="counterparty_filter" value="{{ cp }}">
+        {% endfor %}
         <label>Период
             <select name="period" id="period">
                 <option value="week" {% if period == 'week' %}selected{% endif %}>Неделя</option>
@@ -374,32 +410,6 @@
         <label>До
             <input type="date" name="end_date" id="end_date" value="{{ end_date or '' }}">
         </label>
-        <label>Операция
-            <select name="operation_filter" id="operation_filter">
-                <option value="all" {% if operation_filter == 'all' %}selected{% endif %}>Все</option>
-                <option value="income" {% if operation_filter == 'income' %}selected{% endif %}>Доход</option>
-                <option value="expense" {% if operation_filter == 'expense' %}selected{% endif %}>Расход</option>
-            </select>
-        </label>
-        <label>На что/Откуда
-            <select name="counterparty_filter" id="counterparty_filter">
-                <option value="" {% if not counterparty_filter %}selected{% endif %}>Все</option>
-                {% if expense_counterparties %}
-                <optgroup label="На что потрачено">
-                    {% for item in expense_counterparties %}
-                    <option value="{{ item.id }}" {% if counterparty_filter == (item.id|string) %}selected{% endif %}>{{ item.name }}</option>
-                    {% endfor %}
-                </optgroup>
-                {% endif %}
-                {% if income_counterparties %}
-                <optgroup label="Откуда">
-                    {% for item in income_counterparties %}
-                    <option value="{{ item.id }}" {% if counterparty_filter == (item.id|string) %}selected{% endif %}>{{ item.name }}</option>
-                    {% endfor %}
-                </optgroup>
-                {% endif %}
-            </select>
-        </label>
         <button type="submit" class="btn">Применить</button>
     </form>
     <div class="saldo-bar">
@@ -413,12 +423,47 @@
         <div class="saldo-meta">Расход: <strong>{{ '%.2f'|format(expense_total) }}</strong></div>
     </div>
     <div class="table-wrap">
+        <div
+            id="table-filter-meta"
+            data-tab="income-expense"
+            data-period="{{ period }}"
+            data-start-date="{{ start_date or '' }}"
+            data-end-date="{{ end_date or '' }}"
+        ></div>
         <table class="log-table">
             <thead>
                 <tr>
-                    <th>Дата/время</th>
-                    <th>Операция</th>
-                    <th>На что/Откуда</th>
+                    <th>Дата</th>
+                    <th>
+                        Операция
+                        <div class="th-filter">
+                            <label>
+                                <input class="js-table-filter" type="checkbox" name="operation_filter" value="income" {% if 'income' in selected_operation_filters %}checked{% endif %}>
+                                Доход
+                            </label>
+                            <label>
+                                <input class="js-table-filter" type="checkbox" name="operation_filter" value="expense" {% if 'expense' in selected_operation_filters %}checked{% endif %}>
+                                Расход
+                            </label>
+                        </div>
+                    </th>
+                    <th>
+                        На что/Откуда
+                        <div class="th-filter">
+                            {% for item in expense_counterparties %}
+                            <label>
+                                <input class="js-table-filter" type="checkbox" name="counterparty_filter" value="{{ item.id }}" {% if (item.id|string) in selected_counterparty_filters %}checked{% endif %}>
+                                {{ item.name }}
+                            </label>
+                            {% endfor %}
+                            {% for item in income_counterparties %}
+                            <label>
+                                <input class="js-table-filter" type="checkbox" name="counterparty_filter" value="{{ item.id }}" {% if (item.id|string) in selected_counterparty_filters %}checked{% endif %}>
+                                {{ item.name }}
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </th>
                     <th>Комментарий</th>
                     <th>Сумма</th>
                     <th>Действия</th>
@@ -433,8 +478,9 @@
                     data-comment="{{ row.comment | e }}"
                     data-counterparty-id="{{ row.counterparty_id or '' }}"
                     data-counterparty-name="{{ row.counterparty_name | e }}"
+                    data-operation-date="{{ row.created_at.strftime('%Y-%m-%d') if row.created_at else '' }}"
                 >
-                    <td>{{ row.created_at.strftime("%d.%m.%Y %H:%M") if row.created_at else "-" }}</td>
+                    <td>{{ row.created_at.strftime("%d.%m.%Y") if row.created_at else "-" }}</td>
                     <td>
                         {% if row.operation_type == "income" %}
                         <span class="op-badge op-income">Доход</span>
@@ -534,6 +580,10 @@
             <input type="hidden" name="entry_id" id="edit_entry_id" value="">
             <input type="hidden" name="operation_type" id="edit_operation_type" value="">
             <div class="form-group">
+                <label for="edit_operation_date">Дата</label>
+                <input type="date" id="edit_operation_date" name="operation_date">
+            </div>
+            <div class="form-group">
                 <label for="edit_counterparty_income" id="edit_counterparty_label">Откуда/На что потрачено</label>
                 <select class="amount-input hide" id="edit_counterparty_income" name="counterparty_id">
                     <option value="">Не выбрано</option>
@@ -583,8 +633,11 @@
     var editCounterpartyIncome = document.getElementById('edit_counterparty_income');
     var editCounterpartyExpense = document.getElementById('edit_counterparty_expense');
     var editCounterpartyLabel = document.getElementById('edit_counterparty_label');
+    var editOperationDate = document.getElementById('edit_operation_date');
     var saveCounterpartyButtons = document.querySelectorAll('.save-counterparty');
     var counterpartyLists = document.querySelectorAll('.counterparty-list');
+    var tableFilterInputs = document.querySelectorAll('.js-table-filter');
+    var tableFilterMeta = document.getElementById('table-filter-meta');
 
     function isCustomPeriod() {
         return periodSelect && periodSelect.value === 'custom';
@@ -602,6 +655,7 @@
         editEntryId.value = tr.dataset.id || '';
         editAmount.value = tr.dataset.amount || '';
         editComment.value = tr.dataset.comment || '';
+        editOperationDate.value = tr.dataset.operationDate || '';
         setEditOperation((tr.dataset.operation || 'income').toLowerCase(), tr.dataset.counterpartyId || '');
         editModal.classList.add('visible');
         editModal.setAttribute('aria-hidden', 'false');
@@ -731,6 +785,23 @@
                 alert('Не удалось сохранить порядок');
             });
     }
+    tableFilterInputs.forEach(function(input) {
+        input.addEventListener('change', function() {
+            if (!tableFilterMeta) return;
+            var params = new URLSearchParams();
+            params.set('tab', tableFilterMeta.dataset.tab || 'income-expense');
+            params.set('period', tableFilterMeta.dataset.period || 'month');
+            if (tableFilterMeta.dataset.startDate) params.set('start_date', tableFilterMeta.dataset.startDate);
+            if (tableFilterMeta.dataset.endDate) params.set('end_date', tableFilterMeta.dataset.endDate);
+            document.querySelectorAll('input[name="operation_filter"]:checked').forEach(function(el) {
+                params.append('operation_filter', el.value);
+            });
+            document.querySelectorAll('input[name="counterparty_filter"]:checked').forEach(function(el) {
+                params.append('counterparty_filter', el.value);
+            });
+            window.location.href = '/admin/finance?' + params.toString();
+        });
+    });
 })();
 </script>
 {% endblock %}
