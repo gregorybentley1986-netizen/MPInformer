@@ -42,7 +42,7 @@ if "!SERVER!"=="" (
 )
 
 set "RESTART_TIMEOUT_SEC=90"
-set "SSH_OPTS=-o ConnectTimeout=15 -o ServerAliveInterval=12 -o ServerAliveCountMax=4"
+set "SSH_OPTS=-o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=12 -o ServerAliveCountMax=4"
 for /f %%u in ('git remote get-url origin 2^>nul') do set "ORIGIN_URL=%%u"
 
 if /I "%~1"=="rollback" goto rollback
