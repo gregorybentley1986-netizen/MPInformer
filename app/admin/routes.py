@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -26,7 +27,9 @@ from jinja2 import TemplateNotFound
 from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import delete, select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from typing import Optional
 
@@ -70,10 +73,41 @@ from app.db.models import (
     SupplyQueueScan,
     FinanceEntry,
     FinanceCounterparty,
+    FinanceTag,
 )
 from app.modules.notifications.scheduler import scheduler, stop_scheduler, start_scheduler
 from app.telegram.bot import stop_bot
 from app.site.routes import _spool_svg_dataurl
+
+
+_FINANCE_TAG_HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def _normalize_finance_tag_hex(raw: str) -> str:
+    s = (raw or "").strip()
+    if not s.startswith("#"):
+        s = "#" + s
+    if _FINANCE_TAG_HEX_RE.match(s):
+        return s.lower()
+    return "#607d8b"
+
+
+def _parse_finance_tag_ids_from_form(form) -> list[int]:
+    """Уникальные id тегов из полей form tag_ids."""
+    out: list[int] = []
+    seen: set[int] = set()
+    for value in form.getlist("tag_ids"):
+        raw = (value or "").strip()
+        if not raw:
+            continue
+        try:
+            tid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if tid not in seen:
+            seen.add(tid)
+            out.append(tid)
+    return out
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -3555,6 +3589,10 @@ async def admin_finance(
     )
     income_counterparties = income_dirs_res.scalars().all()
     expense_counterparties = expense_dirs_res.scalars().all()
+    finance_tags_res = await db.execute(
+        select(FinanceTag).order_by(FinanceTag.sort_order.asc(), FinanceTag.id.asc())
+    )
+    finance_tags = finance_tags_res.scalars().all()
     selected_operation_filters = []
     for value in operation_filter_raw:
         op_value = (value or "").strip().lower()
@@ -3579,7 +3617,7 @@ async def admin_finance(
         selected_counterparty_filters.append(as_str)
         counterparty_filter_ids.append(cid)
 
-    query = select(FinanceEntry)
+    query = select(FinanceEntry).options(selectinload(FinanceEntry.tags))
     if start_dt is not None:
         query = query.where(FinanceEntry.created_at >= start_dt)
     if end_dt is not None:
@@ -3613,6 +3651,7 @@ async def admin_finance(
             "selected_operation_filters": selected_operation_filters,
             "selected_counterparty_filters": selected_counterparty_filters,
             "default_operation_date": now_utc.date().isoformat(),
+            "finance_tags": finance_tags,
         },
     )
 
@@ -3620,30 +3659,30 @@ async def admin_finance(
 @router.post("/finance/entry/save")
 async def admin_finance_entry_save(
     request: Request,
-    operation_type: str = Form(...),
-    amount: str = Form(...),
-    comment: str = Form(""),
-    entry_id: str = Form(""),
-    counterparty_id: str = Form(""),
-    operation_date: str = Form(""),
     db: AsyncSession = Depends(get_db),
     username: str = Depends(verify_admin),
 ):
     """Создать/обновить запись дохода/расхода."""
-    op = (operation_type or "").strip().lower()
+    form = await request.form()
+    operation_type = (form.get("operation_type") or "").strip()
+    amount_raw = (form.get("amount") or "").strip().replace(" ", "").replace(",", ".")
+    comment_value = (form.get("comment") or "").strip()
+    entry_id = (form.get("entry_id") or "").strip()
+    counterparty_value = (form.get("counterparty_id") or "").strip()
+    operation_date_raw = (form.get("operation_date") or "").strip()
+    tag_ids = _parse_finance_tag_ids_from_form(form)
+
+    op = operation_type.lower()
     if op not in ("income", "expense"):
         return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_operation", status_code=303)
-    amount_raw = (amount or "").strip().replace(" ", "").replace(",", ".")
     try:
         amount_value = float(amount_raw)
     except (TypeError, ValueError):
         return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_amount", status_code=303)
     if amount_value <= 0:
         return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_amount", status_code=303)
-    comment_value = (comment or "").strip()
     if len(comment_value) > 512:
         comment_value = comment_value[:512]
-    operation_date_raw = (operation_date or "").strip()
     try:
         if operation_date_raw:
             operation_date_value = datetime.strptime(operation_date_raw, "%Y-%m-%d").date()
@@ -3652,7 +3691,6 @@ async def admin_finance_entry_save(
         operation_dt = datetime.combine(operation_date_value, datetime.min.time(), tzinfo=timezone.utc)
     except ValueError:
         return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_date", status_code=303)
-    counterparty_value = (counterparty_id or "").strip()
 
     counterparty_id_value = None
     counterparty_name_value = ""
@@ -3667,7 +3705,14 @@ async def admin_finance_entry_save(
         counterparty_id_value = c_row.id
         counterparty_name_value = (c_row.name or "").strip()
 
-    if (entry_id or "").strip():
+    tag_rows: list[FinanceTag] = []
+    if tag_ids:
+        tr = await db.execute(select(FinanceTag).where(FinanceTag.id.in_(tag_ids)))
+        tag_rows = list(tr.scalars().all())
+        if {t.id for t in tag_rows} != set(tag_ids):
+            return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_tag", status_code=303)
+
+    if entry_id:
         try:
             eid = int(entry_id)
         except (TypeError, ValueError):
@@ -3681,6 +3726,7 @@ async def admin_finance_entry_save(
         row.counterparty_id = counterparty_id_value
         row.counterparty_name = counterparty_name_value
         row.created_at = operation_dt
+        row.tags = tag_rows
         await db.commit()
         return RedirectResponse(url="/admin/finance?tab=income-expense&success=updated", status_code=303)
 
@@ -3693,6 +3739,8 @@ async def admin_finance_entry_save(
         created_at=operation_dt,
     )
     db.add(row)
+    await db.flush()
+    row.tags = tag_rows
     await db.commit()
     return RedirectResponse(url="/admin/finance?tab=income-expense&success=created", status_code=303)
 
@@ -3775,6 +3823,65 @@ async def admin_finance_counterparty_delete(
     await db.delete(row)
     await db.commit()
     return RedirectResponse(url="/admin/finance?tab=counterparties&success=deleted", status_code=303)
+
+
+@router.post("/finance/tag/save")
+async def admin_finance_tag_save(
+    name: str = Form(...),
+    color_hex: str = Form(""),
+    tag_id: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Добавить или изменить тег (справочник)."""
+    value = (name or "").strip()
+    if not value:
+        return RedirectResponse(url="/admin/finance?tab=counterparties&error=empty_tag_name", status_code=303)
+    if len(value) > 128:
+        value = value[:128]
+    hex_norm = _normalize_finance_tag_hex(color_hex)
+
+    if (tag_id or "").strip():
+        try:
+            tid = int(tag_id)
+        except (TypeError, ValueError):
+            return RedirectResponse(url="/admin/finance?tab=counterparties&error=notfound", status_code=303)
+        row = await db.get(FinanceTag, tid)
+        if not row:
+            return RedirectResponse(url="/admin/finance?tab=counterparties&error=notfound", status_code=303)
+        row.name = value
+        row.hex = hex_norm
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            return RedirectResponse(url="/admin/finance?tab=counterparties&error=duplicate_tag_name", status_code=303)
+        return RedirectResponse(url="/admin/finance?tab=counterparties&success=tag_updated", status_code=303)
+
+    max_order_q = await db.execute(select(func.coalesce(func.max(FinanceTag.sort_order), 0)))
+    max_order = int(max_order_q.scalar_one() or 0)
+    db.add(FinanceTag(name=value, hex=hex_norm, sort_order=max_order + 1))
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        return RedirectResponse(url="/admin/finance?tab=counterparties&error=duplicate_tag_name", status_code=303)
+    return RedirectResponse(url="/admin/finance?tab=counterparties&success=tag_created", status_code=303)
+
+
+@router.post("/finance/tag/delete")
+async def admin_finance_tag_delete(
+    tag_id: int = Form(...),
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Удалить тег из справочника (связи с операциями снимутся каскадом)."""
+    row = await db.get(FinanceTag, tag_id)
+    if not row:
+        return RedirectResponse(url="/admin/finance?tab=counterparties&error=notfound", status_code=303)
+    await db.delete(row)
+    await db.commit()
+    return RedirectResponse(url="/admin/finance?tab=counterparties&success=tag_deleted", status_code=303)
 
 
 @router.post("/finance/counterparty/reorder")

@@ -94,6 +94,19 @@
         min-height: 86px;
         resize: vertical;
     }
+    .entry-form .finance-tags-field {
+        width: min(260px, 100%);
+        margin: 0 auto;
+    }
+    .entry-form .finance-tags-field > label {
+        position: static;
+        transform: none;
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.86rem;
+        color: #666;
+        pointer-events: auto;
+    }
     .operation-row {
         display: grid;
         grid-template-columns: auto minmax(180px, 240px) auto;
@@ -417,6 +430,92 @@
         outline: 2px solid var(--accent);
         outline-offset: 2px;
     }
+    .finance-tags-checkboxes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+        align-items: center;
+    }
+    .finance-tag-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.82rem;
+        cursor: pointer;
+        user-select: none;
+    }
+    .finance-tag-option input {
+        width: auto;
+        margin: 0;
+    }
+    .finance-tag-pill {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-weight: 600;
+        color: #fff;
+        text-shadow: 0 1px 1px rgba(0,0,0,0.25);
+        white-space: nowrap;
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: middle;
+    }
+    .entry-form .finance-tags-field .finance-tags-checkboxes {
+        justify-content: flex-start;
+    }
+    .finance-tags-cell {
+        font-size: 0.82rem;
+        line-height: 1.35;
+    }
+    .finance-tags-ref-add {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: flex-end;
+        margin-bottom: 12px;
+    }
+    .finance-tags-ref-add input[type="text"] {
+        flex: 1;
+        min-width: 160px;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+    .finance-tags-ref-add input[type="color"] {
+        width: 44px;
+        height: 36px;
+        padding: 2px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fff;
+        cursor: pointer;
+    }
+    .finance-tag-ref-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+    }
+    .finance-tag-ref-row:last-child { border-bottom: none; }
+    .finance-tag-ref-row input[type="text"] {
+        flex: 1;
+        min-width: 140px;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+    .finance-tag-ref-row input[type="color"] {
+        width: 40px;
+        height: 34px;
+        padding: 2px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+    }
     @media (max-width: 940px) {
         .split-forms, .counterparty-layout { grid-template-columns: 1fr; }
     }
@@ -436,6 +535,12 @@
 <div class="alert alert-success">Запись обновлена.</div>
 {% elif request.query_params.get("success") == "deleted" %}
 <div class="alert alert-success">Запись удалена.</div>
+{% elif request.query_params.get("success") == "tag_created" %}
+<div class="alert alert-success">Тег добавлен.</div>
+{% elif request.query_params.get("success") == "tag_updated" %}
+<div class="alert alert-success">Тег обновлён.</div>
+{% elif request.query_params.get("success") == "tag_deleted" %}
+<div class="alert alert-success">Тег удалён.</div>
 {% endif %}
 {% if request.query_params.get("error") == "invalid_amount" %}
 <div class="alert alert-error">Укажите корректную сумму больше нуля.</div>
@@ -445,6 +550,12 @@
 <div class="alert alert-error">Выберите корректное значение из списка.</div>
 {% elif request.query_params.get("error") == "invalid_date" %}
 <div class="alert alert-error">Укажите корректную дату операции.</div>
+{% elif request.query_params.get("error") == "invalid_tag" %}
+<div class="alert alert-error">Выберите только существующие теги из справочника.</div>
+{% elif request.query_params.get("error") == "empty_tag_name" %}
+<div class="alert alert-error">Введите название тега.</div>
+{% elif request.query_params.get("error") == "duplicate_tag_name" %}
+<div class="alert alert-error">Тег с таким названием уже есть.</div>
 {% elif request.query_params.get("error") == "empty_name" %}
 <div class="alert alert-error">Введите значение справочника.</div>
 {% elif request.query_params.get("error") == "notfound" %}
@@ -480,6 +591,19 @@
                 <label for="expense_comment">Комментарий</label>
                 <textarea id="expense_comment" name="comment" placeholder="Комментарий"></textarea>
             </div>
+            {% if finance_tags %}
+            <div class="form-group finance-tags-field">
+                <label>Теги</label>
+                <div class="finance-tags-checkboxes">
+                    {% for tag in finance_tags %}
+                    <label class="finance-tag-option">
+                        <input type="checkbox" name="tag_ids" value="{{ tag.id }}">
+                        <span class="finance-tag-pill" style="background: {{ tag.hex }}">{{ tag.name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
             <button type="submit" class="btn btn-op btn-expense">Добавить расход</button>
         </form>
     </div>
@@ -508,6 +632,19 @@
                 <label for="income_comment">Комментарий</label>
                 <textarea id="income_comment" name="comment" placeholder="Комментарий"></textarea>
             </div>
+            {% if finance_tags %}
+            <div class="form-group finance-tags-field">
+                <label>Теги</label>
+                <div class="finance-tags-checkboxes">
+                    {% for tag in finance_tags %}
+                    <label class="finance-tag-option">
+                        <input type="checkbox" name="tag_ids" value="{{ tag.id }}">
+                        <span class="finance-tag-pill" style="background: {{ tag.hex }}">{{ tag.name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
             <button type="submit" class="btn btn-op btn-income">Добавить доход</button>
         </form>
     </div>
@@ -617,6 +754,7 @@
                             </div>
                         </div>
                     </th>
+                    <th>Теги</th>
                     <th>Сумма</th>
                     <th>Действия</th>
                 </tr>
@@ -631,6 +769,7 @@
                     data-counterparty-id="{{ row.counterparty_id or '' }}"
                     data-counterparty-name="{{ row.counterparty_name | e }}"
                     data-operation-date="{{ row.created_at.strftime('%Y-%m-%d') if row.created_at else '' }}"
+                    data-tag-ids="{% for t in row.tags %}{{ t.id }}{% if not loop.last %},{% endif %}{% endfor %}"
                 >
                     <td>{{ row.created_at.strftime("%d.%m.%Y") if row.created_at else "-" }}</td>
                     <td>
@@ -643,6 +782,15 @@
                     <td>{% if row.operation_type == "income" %}{{ row.counterparty_name or "-" }}{% else %}-{% endif %}</td>
                     <td>{{ row.comment or "-" }}</td>
                     <td>{% if row.operation_type == "expense" %}{{ row.counterparty_name or "-" }}{% else %}-{% endif %}</td>
+                    <td class="finance-tags-cell">
+                        {% if row.tags %}
+                            {% for t in row.tags %}
+                            <span class="finance-tag-pill" style="background: {{ t.hex }}">{{ t.name }}</span>
+                            {% endfor %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
                     <td class="{% if row.operation_type == 'income' %}sum-income{% else %}sum-expense{% endif %}">
                         {{ '%.2f'|format(row.amount) }}
                     </td>
@@ -660,7 +808,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7">Записей пока нет.</td>
+                    <td colspan="8">Записей пока нет.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -724,6 +872,31 @@
         </div>
     </div>
 </div>
+<div class="card" style="margin-top:14px;">
+    <h3 style="font-family:'Russo One',sans-serif;font-size:1rem;margin-bottom:12px;">Теги операций</h3>
+    <p style="font-size:0.86rem;color:#666;margin:0 0 12px;">Теги выбираются при добавлении дохода/расхода и отображаются в журнале.</p>
+    <form method="POST" action="/admin/finance/tag/save" class="finance-tags-ref-add">
+        <input type="text" name="name" placeholder="Название тега" required maxlength="128" autocomplete="off">
+        <input type="color" name="color_hex" value="#607d8b" title="Цвет тега">
+        <button type="submit" class="btn btn-op btn-income">Добавить тег</button>
+    </form>
+    {% for item in finance_tags %}
+    <div class="finance-tag-ref-row">
+        <form method="POST" action="/admin/finance/tag/save" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1;min-width:200px;">
+            <input type="hidden" name="tag_id" value="{{ item.id }}">
+            <input type="color" name="color_hex" value="{{ item.hex }}" title="Цвет">
+            <input type="text" name="name" value="{{ item.name }}" required maxlength="128" autocomplete="off">
+            <button type="submit" class="btn">Сохранить</button>
+        </form>
+        <form method="POST" action="/admin/finance/tag/delete">
+            <input type="hidden" name="tag_id" value="{{ item.id }}">
+            <button type="submit" class="btn btn-op btn-expense">Удалить</button>
+        </form>
+    </div>
+    {% else %}
+    <p style="color:#666;font-size:0.9rem;margin:0;">Тегов пока нет — добавьте первый выше.</p>
+    {% endfor %}
+</div>
 {% endif %}
 
 <div class="edit-modal" id="edit-modal" aria-hidden="true">
@@ -759,6 +932,19 @@
             <div class="form-group comment-wrap">
                 <textarea class="comment-input" id="edit_comment" name="comment" placeholder="Комментарий"></textarea>
             </div>
+            {% if finance_tags %}
+            <div class="form-group">
+                <label>Теги</label>
+                <div class="finance-tags-checkboxes">
+                    {% for tag in finance_tags %}
+                    <label class="finance-tag-option">
+                        <input type="checkbox" class="edit-tag-cb" name="tag_ids" value="{{ tag.id }}">
+                        <span class="finance-tag-pill" style="background: {{ tag.hex }}">{{ tag.name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
             <div class="actions">
                 <button type="submit" class="btn">Сохранить</button>
                 <button type="button" class="btn" id="edit-cancel-btn">Отмена</button>
@@ -809,6 +995,15 @@
         editAmount.value = tr.dataset.amount || '';
         editComment.value = tr.dataset.comment || '';
         editOperationDate.value = tr.dataset.operationDate || '';
+        var tagIdsRaw = (tr.dataset.tagIds || '').split(',');
+        var selectedSet = {};
+        tagIdsRaw.forEach(function(s) {
+            var v = (s || '').trim();
+            if (v) selectedSet[v] = true;
+        });
+        document.querySelectorAll('.edit-tag-cb').forEach(function(cb) {
+            cb.checked = !!selectedSet[String(cb.value)];
+        });
         setEditOperation((tr.dataset.operation || 'income').toLowerCase(), tr.dataset.counterpartyId || '');
         editModal.classList.add('visible');
         editModal.setAttribute('aria-hidden', 'false');

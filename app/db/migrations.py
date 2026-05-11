@@ -474,3 +474,32 @@ def ensure_finance_schema(conn):
         ))
     except Exception:
         pass
+
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS finance_tags (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            name VARCHAR(128) NOT NULL,
+            hex VARCHAR(7) NOT NULL DEFAULT '#607d8b',
+            sort_order INTEGER NOT NULL DEFAULT 0
+        )
+    """))
+    try:
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_finance_tags_name ON finance_tags (name)"
+        ))
+    except Exception:
+        pass
+    try:
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_finance_tags_sort_order ON finance_tags (sort_order, id)"
+        ))
+    except Exception:
+        pass
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS finance_entry_tags (
+            finance_entry_id INTEGER NOT NULL REFERENCES finance_entries(id) ON DELETE CASCADE,
+            finance_tag_id INTEGER NOT NULL REFERENCES finance_tags(id) ON DELETE CASCADE,
+            PRIMARY KEY (finance_entry_id, finance_tag_id)
+        )
+    """))

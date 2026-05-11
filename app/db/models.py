@@ -1,9 +1,28 @@
 """
 Модели базы данных
 """
-from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, UniqueConstraint, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, UniqueConstraint, ForeignKey, Table
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
+
+
+finance_entry_tags = Table(
+    "finance_entry_tags",
+    Base.metadata,
+    Column(
+        "finance_entry_id",
+        Integer,
+        ForeignKey("finance_entries.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "finance_tag_id",
+        Integer,
+        ForeignKey("finance_tags.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
 
 
 class User(Base):
@@ -448,6 +467,12 @@ class FinanceEntry(Base):
     counterparty_name = Column(String(256), nullable=False, default="")
     comment = Column(String(512), nullable=False, default="")
     amount = Column(Float, nullable=False, default=0.0)
+    tags = relationship(
+        "FinanceTag",
+        secondary=finance_entry_tags,
+        back_populates="entries",
+        lazy="selectin",
+    )
 
 
 class FinanceCounterparty(Base):
@@ -462,3 +487,21 @@ class FinanceCounterparty(Base):
     operation_type = Column(String(16), nullable=False, index=True)  # income | expense
     name = Column(String(256), nullable=False)
     sort_order = Column(Integer, nullable=False, default=0, index=True)
+
+
+class FinanceTag(Base):
+    """Тег для финансовых операций (справочник): название и цвет."""
+    __tablename__ = "finance_tags"
+    __table_args__ = (UniqueConstraint("name", name="uq_finance_tags_name"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    name = Column(String(128), nullable=False)
+    hex = Column(String(7), nullable=False, default="#607d8b")
+    sort_order = Column(Integer, nullable=False, default=0, index=True)
+
+    entries = relationship(
+        "FinanceEntry",
+        secondary=finance_entry_tags,
+        back_populates="tags",
+    )
