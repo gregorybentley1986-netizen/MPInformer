@@ -556,6 +556,8 @@
 <div class="alert alert-error">Введите название тега.</div>
 {% elif request.query_params.get("error") == "duplicate_tag_name" %}
 <div class="alert alert-error">Тег с таким названием уже есть.</div>
+{% elif request.query_params.get("error") == "save_failed" %}
+<div class="alert alert-error">Не удалось сохранить операцию (БД или связь тегов). Перезапустите приложение после деплоя и проверьте логи сервера.</div>
 {% elif request.query_params.get("error") == "empty_name" %}
 <div class="alert alert-error">Введите значение справочника.</div>
 {% elif request.query_params.get("error") == "notfound" %}

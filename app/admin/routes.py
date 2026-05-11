@@ -26,7 +26,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import TemplateNotFound
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import delete, select, func
+from sqlalchemy import delete, insert, select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -74,6 +74,7 @@ from app.db.models import (
     FinanceEntry,
     FinanceCounterparty,
     FinanceTag,
+    finance_entry_tags,
 )
 from app.modules.notifications.scheduler import scheduler, stop_scheduler, start_scheduler
 from app.telegram.bot import stop_bot
@@ -108,6 +109,15 @@ def _parse_finance_tag_ids_from_form(form) -> list[int]:
             seen.add(tid)
             out.append(tid)
     return out
+
+
+async def _sync_finance_entry_tags(db: AsyncSession, entry_id: int, tag_ids: list[int]) -> None:
+    """Перезаписать связи операции с тегами (явный SQL — стабильнее async/SQLite, чем row.tags = …)."""
+    await db.execute(delete(finance_entry_tags).where(finance_entry_tags.c.finance_entry_id == entry_id))
+    for tid in tag_ids:
+        await db.execute(
+            insert(finance_entry_tags).values(finance_entry_id=entry_id, finance_tag_id=tid)
+        )
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -3699,13 +3709,13 @@ async def admin_finance_entry_save(
         counterparty_id_value = c_row.id
         counterparty_name_value = (c_row.name or "").strip()
 
-    tag_rows: list[FinanceTag] = []
     if tag_ids:
         tr = await db.execute(select(FinanceTag).where(FinanceTag.id.in_(tag_ids)))
-        tag_rows = list(tr.scalars().all())
-        if {t.id for t in tag_rows} != set(tag_ids):
+        found_ids = {t.id for t in tr.scalars().all()}
+        if found_ids != set(tag_ids):
             return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_tag", status_code=303)
 
+    success_kind = "created"
     if entry_id:
         try:
             eid = int(entry_id)
@@ -3720,22 +3730,29 @@ async def admin_finance_entry_save(
         row.counterparty_id = counterparty_id_value
         row.counterparty_name = counterparty_name_value
         row.created_at = operation_dt
-        row.tags = tag_rows
-        await db.commit()
-        return RedirectResponse(url="/admin/finance?tab=income-expense&success=updated", status_code=303)
+        success_kind = "updated"
+    else:
+        row = FinanceEntry(
+            operation_type=op,
+            amount=amount_value,
+            comment=comment_value,
+            counterparty_id=counterparty_id_value,
+            counterparty_name=counterparty_name_value,
+            created_at=operation_dt,
+        )
+        db.add(row)
 
-    row = FinanceEntry(
-        operation_type=op,
-        amount=amount_value,
-        comment=comment_value,
-        counterparty_id=counterparty_id_value,
-        counterparty_name=counterparty_name_value,
-        created_at=operation_dt,
-    )
-    db.add(row)
-    await db.flush()
-    row.tags = tag_rows
-    await db.commit()
+    try:
+        await db.flush()
+        await _sync_finance_entry_tags(db, row.id, tag_ids)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception("Ошибка сохранения финансовой операции (entry_id={}, tag_ids={})", entry_id or "new", tag_ids)
+        return RedirectResponse(url="/admin/finance?tab=income-expense&error=save_failed", status_code=303)
+
+    if success_kind == "updated":
+        return RedirectResponse(url="/admin/finance?tab=income-expense&success=updated", status_code=303)
     return RedirectResponse(url="/admin/finance?tab=income-expense&success=created", status_code=303)
 
 
