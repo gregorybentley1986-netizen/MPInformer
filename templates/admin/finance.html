@@ -21,6 +21,16 @@
         margin: 0 auto;
         max-width: 740px;
     }
+    .split-forms {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(280px, 1fr));
+        gap: 14px;
+    }
+    .split-forms .card h3 {
+        margin-bottom: 10px;
+        font-family: 'Russo One', sans-serif;
+        font-size: 1rem;
+    }
     .operation-row {
         display: grid;
         grid-template-columns: auto minmax(180px, 240px) auto;
@@ -150,6 +160,57 @@
         padding-bottom: 8px;
     }
     .edit-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+    .counterparty-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+    }
+    .counterparty-column h3 {
+        margin-bottom: 8px;
+        font-family: 'Russo One', sans-serif;
+        font-size: 1rem;
+    }
+    .counterparty-add {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+    .counterparty-add input,
+    .counterparty-item input {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+    .counterparty-list {
+        display: grid;
+        gap: 8px;
+        min-height: 28px;
+    }
+    .counterparty-item {
+        display: grid;
+        grid-template-columns: 24px 1fr auto auto;
+        gap: 8px;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+        background: #fff;
+    }
+    .counterparty-item.dragging { opacity: 0.6; }
+    .drag-handle {
+        cursor: grab;
+        user-select: none;
+        text-align: center;
+        color: #666;
+        font-size: 16px;
+    }
+    .inline-form { display: contents; }
+    .hide { display: none !important; }
+    @media (max-width: 940px) {
+        .split-forms, .counterparty-layout { grid-template-columns: 1fr; }
+    }
 </style>
 {% endblock %}
 {% block content %}
@@ -157,6 +218,7 @@
 
 <div class="tabs">
     <a href="/admin/finance?tab=income-expense" class="tab-btn {% if tab == 'income-expense' %}active{% endif %}">Доходы-Расходы</a>
+    <a href="/admin/finance?tab=counterparties" class="tab-btn {% if tab == 'counterparties' %}active{% endif %}">Справочники</a>
 </div>
 
 {% if request.query_params.get("success") == "created" %}
@@ -170,26 +232,61 @@
 <div class="alert alert-error">Укажите корректную сумму больше нуля.</div>
 {% elif request.query_params.get("error") == "invalid_operation" %}
 <div class="alert alert-error">Некорректный тип операции.</div>
+{% elif request.query_params.get("error") == "invalid_counterparty" %}
+<div class="alert alert-error">Выберите корректное значение из списка.</div>
+{% elif request.query_params.get("error") == "empty_name" %}
+<div class="alert alert-error">Введите значение справочника.</div>
 {% elif request.query_params.get("error") == "notfound" %}
 <div class="alert alert-error">Запись не найдена.</div>
 {% elif request.query_params.get("error") %}
 <div class="alert alert-error">Ошибка операции.</div>
 {% endif %}
 
-<div class="card">
-    <form method="POST" action="/admin/finance/entry/save" id="finance-form" class="finance-form">
-        <div class="operation-row">
-            <button type="submit" class="btn btn-op btn-expense" name="operation_type" value="expense">Расход</button>
-            <input type="number" class="amount-input" id="amount" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
-            <button type="submit" class="btn btn-op btn-income" name="operation_type" value="income">Доход</button>
-        </div>
-        <div class="form-group comment-wrap">
-            <textarea class="comment-input" id="comment" name="comment" placeholder="Комментарий"></textarea>
-        </div>
-    </form>
+{% if tab == "income-expense" %}
+<div class="split-forms">
+    <div class="card">
+        <h3>Расход</h3>
+        <form method="POST" action="/admin/finance/entry/save" class="finance-form">
+            <input type="hidden" name="operation_type" value="expense">
+            <div class="form-group">
+                <label for="expense_counterparty_id">Куда</label>
+                <select class="amount-input" id="expense_counterparty_id" name="counterparty_id">
+                    <option value="">Не выбрано</option>
+                    {% for item in expense_counterparties %}
+                    <option value="{{ item.id }}">{{ item.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <input type="number" class="amount-input" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
+            <div class="form-group comment-wrap">
+                <textarea class="comment-input" name="comment" placeholder="Комментарий"></textarea>
+            </div>
+            <button type="submit" class="btn btn-op btn-expense">Добавить расход</button>
+        </form>
+    </div>
+    <div class="card">
+        <h3>Доход</h3>
+        <form method="POST" action="/admin/finance/entry/save" class="finance-form">
+            <input type="hidden" name="operation_type" value="income">
+            <div class="form-group">
+                <label for="income_counterparty_id">Откуда</label>
+                <select class="amount-input" id="income_counterparty_id" name="counterparty_id">
+                    <option value="">Не выбрано</option>
+                    {% for item in income_counterparties %}
+                    <option value="{{ item.id }}">{{ item.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <input type="number" class="amount-input" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
+            <div class="form-group comment-wrap">
+                <textarea class="comment-input" name="comment" placeholder="Комментарий"></textarea>
+            </div>
+            <button type="submit" class="btn btn-op btn-income">Добавить доход</button>
+        </form>
+    </div>
 </div>
 
-<div class="card">
+<div class="card" style="margin-top:14px;">
     <form method="GET" action="/admin/finance" class="saldo-filter" id="saldo-filter-form">
         <input type="hidden" name="tab" value="income-expense">
         <label>Период
@@ -236,6 +333,8 @@
                     data-operation="{{ row.operation_type }}"
                     data-amount="{{ '%.2f'|format(row.amount) }}"
                     data-comment="{{ row.comment | e }}"
+                    data-counterparty-id="{{ row.counterparty_id or '' }}"
+                    data-counterparty-name="{{ row.counterparty_name | e }}"
                 >
                     <td>{{ row.created_at.strftime("%d.%m.%Y %H:%M") if row.created_at else "-" }}</td>
                     <td>
@@ -245,7 +344,12 @@
                         <span class="op-badge op-expense">Расход</span>
                         {% endif %}
                     </td>
-                    <td>{{ row.comment or "-" }}</td>
+                    <td>
+                        {% if row.counterparty_name %}
+                            <div><strong>{% if row.operation_type == "income" %}Откуда:{% else %}Куда:{% endif %}</strong> {{ row.counterparty_name }}</div>
+                        {% endif %}
+                        <div>{{ row.comment or "-" }}</div>
+                    </td>
                     <td class="{% if row.operation_type == 'income' %}sum-income{% else %}sum-expense{% endif %}">
                         {{ '%.2f'|format(row.amount) }}
                     </td>
@@ -270,21 +374,96 @@
         </table>
     </div>
 </div>
+{% endif %}
+
+{% if tab == "counterparties" %}
+<div class="card">
+    <div class="counterparty-layout">
+        <div class="counterparty-column">
+            <h3>Откуда (Доход)</h3>
+            <form method="POST" action="/admin/finance/counterparty/save" class="counterparty-add">
+                <input type="hidden" name="operation_type" value="income">
+                <input type="text" name="name" placeholder="Новое значение" required>
+                <button type="submit" class="btn btn-op btn-income">Добавить</button>
+            </form>
+            <div class="counterparty-list" data-operation-type="income">
+                {% for item in income_counterparties %}
+                <div class="counterparty-item" draggable="true" data-id="{{ item.id }}">
+                    <div class="drag-handle">⋮⋮</div>
+                    <form method="POST" action="/admin/finance/counterparty/save" class="inline-form">
+                        <input type="hidden" name="counterparty_id" value="{{ item.id }}">
+                        <input type="hidden" name="operation_type" value="income">
+                        <input type="text" name="name" value="{{ item.name }}">
+                    </form>
+                    <button type="button" class="btn save-counterparty">Сохранить</button>
+                    <form method="POST" action="/admin/finance/counterparty/delete">
+                        <input type="hidden" name="counterparty_id" value="{{ item.id }}">
+                        <button type="submit" class="btn btn-op btn-expense">Удалить</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="counterparty-column">
+            <h3>Куда (Расход)</h3>
+            <form method="POST" action="/admin/finance/counterparty/save" class="counterparty-add">
+                <input type="hidden" name="operation_type" value="expense">
+                <input type="text" name="name" placeholder="Новое значение" required>
+                <button type="submit" class="btn btn-op btn-expense">Добавить</button>
+            </form>
+            <div class="counterparty-list" data-operation-type="expense">
+                {% for item in expense_counterparties %}
+                <div class="counterparty-item" draggable="true" data-id="{{ item.id }}">
+                    <div class="drag-handle">⋮⋮</div>
+                    <form method="POST" action="/admin/finance/counterparty/save" class="inline-form">
+                        <input type="hidden" name="counterparty_id" value="{{ item.id }}">
+                        <input type="hidden" name="operation_type" value="expense">
+                        <input type="text" name="name" value="{{ item.name }}">
+                    </form>
+                    <button type="button" class="btn save-counterparty">Сохранить</button>
+                    <form method="POST" action="/admin/finance/counterparty/delete">
+                        <input type="hidden" name="counterparty_id" value="{{ item.id }}">
+                        <button type="submit" class="btn btn-op btn-expense">Удалить</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div class="edit-modal" id="edit-modal" aria-hidden="true">
     <div class="edit-dialog">
         <h3>Режим редактирования</h3>
         <form method="POST" action="/admin/finance/entry/save" id="edit-form" class="finance-form">
             <input type="hidden" name="entry_id" id="edit_entry_id" value="">
+            <input type="hidden" name="operation_type" id="edit_operation_type" value="">
+            <div class="form-group">
+                <label for="edit_counterparty_income" id="edit_counterparty_label">Откуда/Куда</label>
+                <select class="amount-input hide" id="edit_counterparty_income" name="counterparty_id">
+                    <option value="">Не выбрано</option>
+                    {% for item in income_counterparties %}
+                    <option value="{{ item.id }}">{{ item.name }}</option>
+                    {% endfor %}
+                </select>
+                <select class="amount-input hide" id="edit_counterparty_expense" name="counterparty_id">
+                    <option value="">Не выбрано</option>
+                    {% for item in expense_counterparties %}
+                    <option value="{{ item.id }}">{{ item.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="operation-row">
-                <button type="submit" class="btn btn-op btn-expense" name="operation_type" value="expense">Расход</button>
+                <button type="button" class="btn btn-op btn-expense" id="edit-mode-expense">Расход</button>
                 <input type="number" class="amount-input" id="edit_amount" name="amount" step="0.01" min="0.01" required>
-                <button type="submit" class="btn btn-op btn-income" name="operation_type" value="income">Доход</button>
+                <button type="button" class="btn btn-op btn-income" id="edit-mode-income">Доход</button>
             </div>
             <div class="form-group comment-wrap">
                 <textarea class="comment-input" id="edit_comment" name="comment" placeholder="Комментарий"></textarea>
             </div>
             <div class="actions">
+                <button type="submit" class="btn">Сохранить</button>
                 <button type="button" class="btn" id="edit-cancel-btn">Отмена</button>
             </div>
         </form>
@@ -304,6 +483,14 @@
     var editAmount = document.getElementById('edit_amount');
     var editComment = document.getElementById('edit_comment');
     var editCancelBtn = document.getElementById('edit-cancel-btn');
+    var editOpInput = document.getElementById('edit_operation_type');
+    var editModeIncome = document.getElementById('edit-mode-income');
+    var editModeExpense = document.getElementById('edit-mode-expense');
+    var editCounterpartyIncome = document.getElementById('edit_counterparty_income');
+    var editCounterpartyExpense = document.getElementById('edit_counterparty_expense');
+    var editCounterpartyLabel = document.getElementById('edit_counterparty_label');
+    var saveCounterpartyButtons = document.querySelectorAll('.save-counterparty');
+    var counterpartyLists = document.querySelectorAll('.counterparty-list');
 
     function isCustomPeriod() {
         return periodSelect && periodSelect.value === 'custom';
@@ -321,6 +508,7 @@
         editEntryId.value = tr.dataset.id || '';
         editAmount.value = tr.dataset.amount || '';
         editComment.value = tr.dataset.comment || '';
+        setEditOperation((tr.dataset.operation || 'income').toLowerCase(), tr.dataset.counterpartyId || '');
         editModal.classList.add('visible');
         editModal.setAttribute('aria-hidden', 'false');
         editAmount.focus();
@@ -328,6 +516,24 @@
     function closeEditModal() {
         editModal.classList.remove('visible');
         editModal.setAttribute('aria-hidden', 'true');
+    }
+    function setEditOperation(op, counterpartyId) {
+        var isIncome = op === 'income';
+        editOpInput.value = isIncome ? 'income' : 'expense';
+        editModeIncome.classList.toggle('active', isIncome);
+        editModeExpense.classList.toggle('active', !isIncome);
+        editCounterpartyIncome.classList.toggle('hide', !isIncome);
+        editCounterpartyExpense.classList.toggle('hide', isIncome);
+        editCounterpartyIncome.disabled = !isIncome;
+        editCounterpartyExpense.disabled = isIncome;
+        editCounterpartyLabel.textContent = isIncome ? 'Откуда' : 'Куда';
+        if (isIncome) {
+            editCounterpartyIncome.value = counterpartyId || '';
+            editCounterpartyExpense.value = '';
+        } else {
+            editCounterpartyExpense.value = counterpartyId || '';
+            editCounterpartyIncome.value = '';
+        }
     }
 
     editButtons.forEach(function(btn) {
@@ -360,10 +566,76 @@
     if (editCancelBtn) {
         editCancelBtn.addEventListener('click', closeEditModal);
     }
+    if (editModeIncome) {
+        editModeIncome.addEventListener('click', function() {
+            setEditOperation('income', editCounterpartyIncome.value || '');
+        });
+    }
+    if (editModeExpense) {
+        editModeExpense.addEventListener('click', function() {
+            setEditOperation('expense', editCounterpartyExpense.value || '');
+        });
+    }
     if (editModal) {
         editModal.addEventListener('click', function(e) {
             if (e.target === editModal) closeEditModal();
         });
+    }
+    saveCounterpartyButtons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var container = btn.closest('.counterparty-item');
+            if (!container) return;
+            var form = container.querySelector('form.inline-form');
+            if (form) form.submit();
+        });
+    });
+
+    counterpartyLists.forEach(function(list) {
+        var dragged = null;
+        list.querySelectorAll('.counterparty-item').forEach(function(item) {
+            item.addEventListener('dragstart', function() {
+                dragged = item;
+                item.classList.add('dragging');
+            });
+            item.addEventListener('dragend', function() {
+                item.classList.remove('dragging');
+                dragged = null;
+                saveOrder(list);
+            });
+            item.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                if (!dragged || dragged === item) return;
+                var rect = item.getBoundingClientRect();
+                var after = (e.clientY - rect.top) > (rect.height / 2);
+                if (after) {
+                    item.parentNode.insertBefore(dragged, item.nextSibling);
+                } else {
+                    item.parentNode.insertBefore(dragged, item);
+                }
+            });
+        });
+    });
+
+    function saveOrder(list) {
+        if (!list) return;
+        var ids = Array.prototype.map.call(
+            list.querySelectorAll('.counterparty-item'),
+            function(item) { return Number(item.dataset.id); }
+        );
+        var op = list.dataset.operationType;
+        var fd = new FormData();
+        fd.append('operation_type', op);
+        fd.append('ordered_ids', JSON.stringify(ids));
+        fetch('/admin/finance/counterparty/reorder', { method: 'POST', body: fd })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (!data || !data.ok) {
+                    alert('Не удалось сохранить порядок');
+                }
+            })
+            .catch(function() {
+                alert('Не удалось сохранить порядок');
+            });
     }
 })();
 </script>

@@ -69,6 +69,7 @@ from app.db.models import (
     SlotsTrackerConfig,
     SupplyQueueScan,
     FinanceEntry,
+    FinanceCounterparty,
 )
 from app.modules.notifications.scheduler import scheduler, stop_scheduler, start_scheduler
 from app.telegram.bot import stop_bot
@@ -3474,9 +3475,9 @@ async def admin_finance(
     db: AsyncSession = Depends(get_db),
     username: str = Depends(verify_admin),
 ):
-    """Раздел «Финансы» — вкладка «Доходы-Расходы»."""
+    """Раздел «Финансы»: операции и справочники направлений."""
     tab = (request.query_params.get("tab") or "income-expense").strip()
-    if tab != "income-expense":
+    if tab not in ("income-expense", "counterparties"):
         tab = "income-expense"
     period = (request.query_params.get("period") or "month").strip().lower()
     start_date_raw = (request.query_params.get("start_date") or "").strip()
@@ -3540,6 +3541,19 @@ async def admin_finance(
         start_dt = datetime.combine(month_start, datetime.min.time(), tzinfo=timezone.utc)
         end_dt = datetime.combine(next_month, datetime.min.time(), tzinfo=timezone.utc)
 
+    income_dirs_res = await db.execute(
+        select(FinanceCounterparty)
+        .where(FinanceCounterparty.operation_type == "income")
+        .order_by(FinanceCounterparty.sort_order.asc(), FinanceCounterparty.id.asc())
+    )
+    expense_dirs_res = await db.execute(
+        select(FinanceCounterparty)
+        .where(FinanceCounterparty.operation_type == "expense")
+        .order_by(FinanceCounterparty.sort_order.asc(), FinanceCounterparty.id.asc())
+    )
+    income_counterparties = income_dirs_res.scalars().all()
+    expense_counterparties = expense_dirs_res.scalars().all()
+
     query = select(FinanceEntry)
     if start_dt is not None:
         query = query.where(FinanceEntry.created_at >= start_dt)
@@ -3566,6 +3580,8 @@ async def admin_finance(
             "income_total": income_total,
             "expense_total": expense_total,
             "saldo_total": saldo_total,
+            "income_counterparties": income_counterparties,
+            "expense_counterparties": expense_counterparties,
         },
     )
 
@@ -3577,6 +3593,7 @@ async def admin_finance_entry_save(
     amount: str = Form(...),
     comment: str = Form(""),
     entry_id: str = Form(""),
+    counterparty_id: str = Form(""),
     db: AsyncSession = Depends(get_db),
     username: str = Depends(verify_admin),
 ):
@@ -3594,6 +3611,20 @@ async def admin_finance_entry_save(
     comment_value = (comment or "").strip()
     if len(comment_value) > 512:
         comment_value = comment_value[:512]
+    counterparty_value = (counterparty_id or "").strip()
+
+    counterparty_id_value = None
+    counterparty_name_value = ""
+    if counterparty_value:
+        try:
+            cpid = int(counterparty_value)
+        except (TypeError, ValueError):
+            return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_counterparty", status_code=303)
+        c_row = await db.get(FinanceCounterparty, cpid)
+        if not c_row or c_row.operation_type != op:
+            return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_counterparty", status_code=303)
+        counterparty_id_value = c_row.id
+        counterparty_name_value = (c_row.name or "").strip()
 
     if (entry_id or "").strip():
         try:
@@ -3606,6 +3637,8 @@ async def admin_finance_entry_save(
         row.operation_type = op
         row.amount = amount_value
         row.comment = comment_value
+        row.counterparty_id = counterparty_id_value
+        row.counterparty_name = counterparty_name_value
         await db.commit()
         return RedirectResponse(url="/admin/finance?tab=income-expense&success=updated", status_code=303)
 
@@ -3613,6 +3646,8 @@ async def admin_finance_entry_save(
         operation_type=op,
         amount=amount_value,
         comment=comment_value,
+        counterparty_id=counterparty_id_value,
+        counterparty_name=counterparty_name_value,
     )
     db.add(row)
     await db.commit()
@@ -3633,3 +3668,108 @@ async def admin_finance_entry_delete(
     await db.delete(row)
     await db.commit()
     return RedirectResponse(url="/admin/finance?tab=income-expense&success=deleted", status_code=303)
+
+
+@router.post("/finance/counterparty/save")
+async def admin_finance_counterparty_save(
+    request: Request,
+    operation_type: str = Form(...),
+    name: str = Form(...),
+    counterparty_id: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Добавить/переименовать значение в справочнике Откуда/Куда."""
+    op = (operation_type or "").strip().lower()
+    if op not in ("income", "expense"):
+        return RedirectResponse(url="/admin/finance?tab=counterparties&error=invalid_operation", status_code=303)
+    value = (name or "").strip()
+    if not value:
+        return RedirectResponse(url="/admin/finance?tab=counterparties&error=empty_name", status_code=303)
+    if len(value) > 256:
+        value = value[:256]
+
+    if (counterparty_id or "").strip():
+        try:
+            cid = int(counterparty_id)
+        except (TypeError, ValueError):
+            return RedirectResponse(url="/admin/finance?tab=counterparties&error=notfound", status_code=303)
+        row = await db.get(FinanceCounterparty, cid)
+        if not row:
+            return RedirectResponse(url="/admin/finance?tab=counterparties&error=notfound", status_code=303)
+        row.name = value
+        row.operation_type = op
+        await db.commit()
+        return RedirectResponse(url="/admin/finance?tab=counterparties&success=updated", status_code=303)
+
+    max_order_q = await db.execute(
+        select(func.coalesce(func.max(FinanceCounterparty.sort_order), 0)).where(
+            FinanceCounterparty.operation_type == op
+        )
+    )
+    max_order = int(max_order_q.scalar_one() or 0)
+    db.add(FinanceCounterparty(operation_type=op, name=value, sort_order=max_order + 1))
+    await db.commit()
+    return RedirectResponse(url="/admin/finance?tab=counterparties&success=created", status_code=303)
+
+
+@router.post("/finance/counterparty/delete")
+async def admin_finance_counterparty_delete(
+    request: Request,
+    counterparty_id: int = Form(...),
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Удалить значение справочника и отвязать его от финансовых записей."""
+    row = await db.get(FinanceCounterparty, counterparty_id)
+    if not row:
+        return RedirectResponse(url="/admin/finance?tab=counterparties&error=notfound", status_code=303)
+    entries_q = await db.execute(
+        select(FinanceEntry).where(FinanceEntry.counterparty_id == counterparty_id)
+    )
+    for entry in entries_q.scalars().all():
+        entry.counterparty_id = None
+    await db.delete(row)
+    await db.commit()
+    return RedirectResponse(url="/admin/finance?tab=counterparties&success=deleted", status_code=303)
+
+
+@router.post("/finance/counterparty/reorder")
+async def admin_finance_counterparty_reorder(
+    request: Request,
+    operation_type: str = Form(...),
+    ordered_ids: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Сохранить ручную сортировку (drag&drop) значений справочника."""
+    op = (operation_type or "").strip().lower()
+    if op not in ("income", "expense"):
+        return JSONResponse({"ok": False, "error": "invalid_operation"}, status_code=400)
+    try:
+        ids = json.loads(ordered_ids or "[]")
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid_payload"}, status_code=400)
+    if not isinstance(ids, list):
+        return JSONResponse({"ok": False, "error": "invalid_payload"}, status_code=400)
+
+    ids_int = []
+    for value in ids:
+        try:
+            ids_int.append(int(value))
+        except (TypeError, ValueError):
+            return JSONResponse({"ok": False, "error": "invalid_payload"}, status_code=400)
+
+    rows_q = await db.execute(
+        select(FinanceCounterparty).where(FinanceCounterparty.operation_type == op)
+    )
+    rows = rows_q.scalars().all()
+    row_map = {row.id: row for row in rows}
+    current_ids = {row.id for row in rows}
+    if set(ids_int) != current_ids:
+        return JSONResponse({"ok": False, "error": "ids_mismatch"}, status_code=400)
+
+    for idx, cid in enumerate(ids_int, start=1):
+        row_map[cid].sort_order = idx
+    await db.commit()
+    return JSONResponse({"ok": True})

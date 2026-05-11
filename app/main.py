@@ -243,6 +243,7 @@ async def startup_event():
     ensure_assembled_product_stock_log_table,
     ensure_warehouse_defect_records_table,
     ensure_printed_part_stock_log_table,
+    ensure_finance_schema,
 )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -272,6 +273,7 @@ async def startup_event():
         await conn.run_sync(ensure_assembled_product_stock_log_table)
         await conn.run_sync(ensure_warehouse_defect_records_table)
         await conn.run_sync(ensure_printed_part_stock_log_table)
+        await conn.run_sync(ensure_finance_schema)
     logger.info("Запуск MPInformer...")
     logger.info(f"Время уведомлений: {getattr(settings, 'report_notification_times', '09:00')}")
     

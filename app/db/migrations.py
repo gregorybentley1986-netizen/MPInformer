@@ -433,3 +433,44 @@ def ensure_warehouse_assembly_batch_tables(conn):
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wh_assembly_batch_items_batch_id ON warehouse_assembly_batch_items (batch_id)"))
     except Exception:
         pass
+
+
+def ensure_finance_schema(conn):
+    """Таблица направлений финансов и новые поля в finance_entries."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS finance_counterparties (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            operation_type VARCHAR(16) NOT NULL,
+            name VARCHAR(256) NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0
+        )
+    """))
+    try:
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_finance_counterparties_op_name "
+            "ON finance_counterparties(operation_type, name)"
+        ))
+    except Exception:
+        pass
+    try:
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_finance_counterparties_op_sort "
+            "ON finance_counterparties(operation_type, sort_order, id)"
+        ))
+    except Exception:
+        pass
+
+    try:
+        conn.execute(text(
+            "ALTER TABLE finance_entries ADD COLUMN counterparty_id INTEGER "
+            "REFERENCES finance_counterparties(id) ON DELETE SET NULL"
+        ))
+    except Exception:
+        pass
+    try:
+        conn.execute(text(
+            "ALTER TABLE finance_entries ADD COLUMN counterparty_name VARCHAR(256) NOT NULL DEFAULT ''"
+        ))
+    except Exception:
+        pass

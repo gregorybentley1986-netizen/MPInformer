@@ -444,5 +444,21 @@ class FinanceEntry(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     operation_type = Column(String(16), nullable=False, index=True)  # income | expense
+    counterparty_id = Column(Integer, ForeignKey("finance_counterparties.id", ondelete="SET NULL"), nullable=True, index=True)
+    counterparty_name = Column(String(256), nullable=False, default="")
     comment = Column(String(512), nullable=False, default="")
     amount = Column(Float, nullable=False, default=0.0)
+
+
+class FinanceCounterparty(Base):
+    """Справочник направлений операций: income (Откуда), expense (Куда)."""
+    __tablename__ = "finance_counterparties"
+    __table_args__ = (
+        UniqueConstraint("operation_type", "name", name="uq_finance_counterparties_op_name"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    operation_type = Column(String(16), nullable=False, index=True)  # income | expense
+    name = Column(String(256), nullable=False)
+    sort_order = Column(Integer, nullable=False, default=0, index=True)
