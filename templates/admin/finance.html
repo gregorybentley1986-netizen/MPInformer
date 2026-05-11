@@ -661,6 +661,7 @@
         {% endfor %}
         <label>Период
             <select name="period" id="period">
+                <option value="all" {% if period == 'all' %}selected{% endif %}>Все записи</option>
                 <option value="week" {% if period == 'week' %}selected{% endif %}>Неделя</option>
                 <option value="month" {% if period == 'month' %}selected{% endif %}>Месяц (календарный)</option>
                 <option value="30days" {% if period == '30days' %}selected{% endif %}>30 дней</option>
@@ -1172,7 +1173,7 @@
             if (!tableFilterMeta) return;
             var params = new URLSearchParams();
             params.set('tab', tableFilterMeta.dataset.tab || 'income-expense');
-            params.set('period', tableFilterMeta.dataset.period || 'month');
+            params.set('period', tableFilterMeta.dataset.period || 'all');
             if (tableFilterMeta.dataset.startDate) params.set('start_date', tableFilterMeta.dataset.startDate);
             if (tableFilterMeta.dataset.endDate) params.set('end_date', tableFilterMeta.dataset.endDate);
             document.querySelectorAll('input[name="operation_filter"]:checked').forEach(function(el) {

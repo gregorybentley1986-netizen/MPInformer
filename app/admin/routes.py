@@ -3513,7 +3513,7 @@ async def admin_finance(
     tab = (request.query_params.get("tab") or "income-expense").strip()
     if tab not in ("income-expense", "counterparties"):
         tab = "income-expense"
-    period = (request.query_params.get("period") or "month").strip().lower()
+    period = (request.query_params.get("period") or "all").strip().lower()
     operation_filter_raw = request.query_params.getlist("operation_filter")
     counterparty_filter_raw = request.query_params.getlist("counterparty_filter")
     start_date_raw = (request.query_params.get("start_date") or "").strip()
@@ -3524,9 +3524,13 @@ async def admin_finance(
     end_dt = None
     start_date_value = ""
     end_date_value = ""
-    period_label = "Календарный месяц"
+    period_label = "Все записи"
 
-    if period == "week":
+    if period == "all":
+        period_label = "Все записи"
+        start_dt = None
+        end_dt = None
+    elif period == "week":
         period_label = "Календарная неделя"
         now_date = now_utc.date()
         week_start = now_date - timedelta(days=now_date.weekday())
@@ -3557,25 +3561,15 @@ async def admin_finance(
                 end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
                 end_date_value = end_date_raw
         except ValueError:
-            period = "month"
-            period_label = "Календарный месяц"
-            month_start = date(now_utc.year, now_utc.month, 1)
-            if now_utc.month == 12:
-                next_month = date(now_utc.year + 1, 1, 1)
-            else:
-                next_month = date(now_utc.year, now_utc.month + 1, 1)
-            start_dt = datetime.combine(month_start, datetime.min.time(), tzinfo=timezone.utc)
-            end_dt = datetime.combine(next_month, datetime.min.time(), tzinfo=timezone.utc)
+            period = "all"
+            period_label = "Все записи"
+            start_dt = None
+            end_dt = None
     else:
-        period = "month"
-        period_label = "Календарный месяц"
-        month_start = date(now_utc.year, now_utc.month, 1)
-        if now_utc.month == 12:
-            next_month = date(now_utc.year + 1, 1, 1)
-        else:
-            next_month = date(now_utc.year, now_utc.month + 1, 1)
-        start_dt = datetime.combine(month_start, datetime.min.time(), tzinfo=timezone.utc)
-        end_dt = datetime.combine(next_month, datetime.min.time(), tzinfo=timezone.utc)
+        period = "all"
+        period_label = "Все записи"
+        start_dt = None
+        end_dt = None
 
     income_dirs_res = await db.execute(
         select(FinanceCounterparty)
