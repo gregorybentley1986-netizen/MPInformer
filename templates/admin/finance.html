@@ -472,16 +472,24 @@
     .finance-tags-ref-add {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 10px;
         align-items: flex-end;
         margin-bottom: 12px;
     }
-    .finance-tags-ref-add input[type="text"] {
-        flex: 1;
-        min-width: 160px;
+    .finance-tags-ref-add .tag-add-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .finance-tags-ref-add input[type="text"].finance-tag-name-input {
+        width: 200px;
+        max-width: 100%;
+        flex: 0 0 auto;
         padding: 8px 10px;
         border: 1px solid var(--border);
         border-radius: 8px;
+        box-sizing: border-box;
     }
     .finance-tags-ref-add input[type="color"] {
         width: 44px;
@@ -542,19 +550,20 @@
     .finance-tag-ref-card .tag-name-row {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         flex-wrap: wrap;
     }
-    .finance-tag-ref-card .tag-name-row input[type="text"] {
-        flex: 1;
-        min-width: 120px;
+    .finance-tag-name-input {
+        width: 200px;
+        max-width: 100%;
+        box-sizing: border-box;
         padding: 8px 10px;
         border: 1px solid var(--border);
         border-radius: 8px;
     }
     .finance-tag-color-swatch {
-        width: 28px;
-        height: 28px;
+        width: 20px;
+        height: 20px;
         border-radius: 50%;
         border: none;
         padding: 0;
@@ -570,8 +579,8 @@
     }
     .finance-tag-color-input {
         opacity: 0;
-        width: 32px;
-        height: 32px;
+        width: 24px;
+        height: 24px;
         margin: -2px;
         padding: 0;
         border: none;
@@ -579,8 +588,9 @@
     }
     .finance-tag-op-row {
         display: flex;
-        flex-wrap: wrap;
-        gap: 12px 16px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
         font-size: 0.84rem;
         color: #444;
     }
@@ -591,14 +601,45 @@
         cursor: pointer;
         user-select: none;
     }
-    .finance-tag-ref-card .tag-card-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
+    .finance-tag-icon-btn {
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        display: inline-flex;
         align-items: center;
+        justify-content: center;
+        background: transparent;
+        flex-shrink: 0;
     }
-    .finance-tags-ref-add .finance-tag-color-swatch { align-self: flex-end; }
-    .finance-tags-ref-add .tag-op-row-add { margin-bottom: 0; }
+    .finance-tag-icon-btn svg {
+        width: 20px;
+        height: 20px;
+        display: block;
+    }
+    .finance-tag-save-btn svg {
+        fill: #2e7d32;
+    }
+    .finance-tag-save-btn:hover {
+        background: #e8f5e9;
+    }
+    .finance-tag-save-btn:focus-visible {
+        outline: 2px solid #2e7d32;
+        outline-offset: 2px;
+    }
+    .finance-tag-delete-btn svg {
+        fill: #c62828;
+    }
+    .finance-tag-delete-btn:hover {
+        background: #ffebee;
+    }
+    .finance-tag-delete-btn:focus-visible {
+        outline: 2px solid #c62828;
+        outline-offset: 2px;
+    }
+    .finance-tags-ref-add .finance-tag-color-swatch { align-self: center; }
     .bi-intro { font-size: 0.92rem; color: #666; margin-bottom: 18px; max-width: 720px; }
     .chart-card { margin-bottom: 22px; }
     .chart-card h2 { font-family: 'Russo One', sans-serif; font-size: 1.05rem; margin-bottom: 10px; }
@@ -1008,15 +1049,19 @@
     <h3 style="font-family:'Russo One',sans-serif;font-size:1rem;margin-bottom:12px;">Теги операций</h3>
     <p style="font-size:0.86rem;color:#666;margin:0 0 12px;">Отметьте, к каким операциям относится тег. Теги выбираются при добавлении дохода/расхода и отображаются в журнале.</p>
     <form method="POST" action="/admin/finance/tag/save" class="finance-tags-ref-add">
-        <input type="text" name="name" placeholder="Название тега" required maxlength="128" autocomplete="off">
-        <label class="finance-tag-color-swatch" title="Цвет тега" style="background:#607d8b;">
-            <input type="color" name="color_hex" class="finance-tag-color-input" value="#607d8b">
-        </label>
+        <div class="tag-add-row">
+            <label class="finance-tag-color-swatch" title="Цвет тега" style="background:#607d8b;">
+                <input type="color" name="color_hex" class="finance-tag-color-input" value="#607d8b">
+            </label>
+            <input type="text" name="name" class="finance-tag-name-input" placeholder="Название тега" required maxlength="128" autocomplete="off">
+            <button type="submit" class="finance-tag-icon-btn finance-tag-save-btn" title="Добавить тег" aria-label="Добавить тег">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+            </button>
+        </div>
         <div class="finance-tag-op-row tag-op-row-add">
             <label><input type="checkbox" name="apply_income" checked> Доход</label>
             <label><input type="checkbox" name="apply_expense" checked> Расход</label>
         </div>
-        <button type="submit" class="btn btn-op btn-income">Добавить тег</button>
     </form>
     {% if finance_tags %}
     <div class="finance-tags-ref-grid">
@@ -1028,19 +1073,18 @@
                     <label class="finance-tag-color-swatch" title="Цвет" style="background: {{ item.hex }};">
                         <input type="color" name="color_hex" class="finance-tag-color-input" value="{{ item.hex }}">
                     </label>
-                    <input type="text" name="name" value="{{ item.name }}" required maxlength="128" autocomplete="off">
+                    <input type="text" name="name" class="finance-tag-name-input" value="{{ item.name }}" required maxlength="128" autocomplete="off">
+                    <button type="submit" class="finance-tag-icon-btn finance-tag-save-btn" title="Сохранить" aria-label="Сохранить">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+                    </button>
+                    <button type="submit" class="finance-tag-icon-btn finance-tag-delete-btn" title="Удалить" aria-label="Удалить" formaction="/admin/finance/tag/delete" formmethod="POST">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zm13-15h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                    </button>
                 </div>
                 <div class="finance-tag-op-row">
                     <label><input type="checkbox" name="apply_income" {% if item.applies_to_income %}checked{% endif %}> Доход</label>
                     <label><input type="checkbox" name="apply_expense" {% if item.applies_to_expense %}checked{% endif %}> Расход</label>
                 </div>
-                <div class="tag-card-actions">
-                    <button type="submit" class="btn">Сохранить</button>
-                </div>
-            </form>
-            <form method="POST" action="/admin/finance/tag/delete">
-                <input type="hidden" name="tag_id" value="{{ item.id }}">
-                <button type="submit" class="btn btn-op btn-expense">Удалить</button>
             </form>
         </div>
         {% endfor %}
