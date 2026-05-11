@@ -32,13 +32,36 @@
         font-size: 1rem;
     }
     .entry-form {
-        max-width: 360px;
+        --entry-control-width: 170px;
+        max-width: 320px;
         margin: 0 auto;
         width: 100%;
     }
-    .entry-form .form-group,
+    .entry-form .form-group {
+        width: var(--entry-control-width);
+        margin: 0 auto;
+        position: relative;
+    }
+    .entry-form .form-group > label {
+        position: absolute;
+        right: calc(100% + 10px);
+        top: 50%;
+        transform: translateY(-50%);
+        margin: 0;
+        white-space: nowrap;
+        font-size: 0.86rem;
+        color: #666;
+        pointer-events: none;
+    }
+    .entry-form input,
+    .entry-form select,
+    .entry-form textarea,
     .entry-form .btn {
-        width: 100%;
+        width: var(--entry-control-width);
+        box-sizing: border-box;
+    }
+    .entry-form .btn {
+        margin: 0 auto;
     }
     .entry-form textarea {
         min-height: 86px;
@@ -266,6 +289,15 @@
                 <input type="number" id="expense_amount" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
             </div>
             <div class="form-group">
+                <label for="expense_counterparty_id">На что потрачено</label>
+                <select id="expense_counterparty_id" name="counterparty_id">
+                    <option value="">Не выбрано</option>
+                    {% for item in expense_counterparties %}
+                    <option value="{{ item.id }}">{{ item.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
                 <label for="expense_comment">Комментарий</label>
                 <textarea id="expense_comment" name="comment" placeholder="Комментарий"></textarea>
             </div>
@@ -279,6 +311,15 @@
             <div class="form-group">
                 <label for="income_amount">Сумма</label>
                 <input type="number" id="income_amount" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
+            </div>
+            <div class="form-group">
+                <label for="income_counterparty_id">Откуда</label>
+                <select id="income_counterparty_id" name="counterparty_id">
+                    <option value="">Не выбрано</option>
+                    {% for item in income_counterparties %}
+                    <option value="{{ item.id }}">{{ item.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="form-group">
                 <label for="income_comment">Комментарий</label>
