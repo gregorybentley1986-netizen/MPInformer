@@ -646,6 +646,43 @@
     .finance-tags-anchor-form {
         display: none;
     }
+    .finance-tag-create-panel {
+        margin-bottom: 22px;
+        padding: 14px 16px 16px;
+        background: #f5faf5;
+        border: 1px solid #c5e1c5;
+        border-radius: 10px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    }
+    .finance-tag-create-heading {
+        font-family: 'Russo One', sans-serif;
+        font-size: 0.95rem;
+        margin: 0 0 12px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid var(--accent);
+        color: #1b3d1b;
+    }
+    .finance-tags-table--create {
+        background: #fff;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .finance-tags-table--create thead th {
+        background: #e3efe3;
+    }
+    .finance-tags-list-heading {
+        font-family: 'Russo One', sans-serif;
+        font-size: 0.95rem;
+        margin: 0 0 10px;
+        color: #333;
+    }
+    .finance-tags-empty-cell {
+        text-align: center;
+        color: #777;
+        font-size: 0.9rem;
+        padding: 20px 12px;
+        background: #fafafa;
+    }
     .bi-intro { font-size: 0.92rem; color: #666; margin-bottom: 18px; max-width: 720px; }
     .chart-card { margin-bottom: 22px; }
     .chart-card h2 { font-family: 'Russo One', sans-serif; font-size: 1.05rem; margin-bottom: 10px; }
@@ -1048,6 +1085,47 @@
 <div class="card" style="margin-top:14px;">
     <h3 style="font-family:'Russo One',sans-serif;font-size:1rem;margin-bottom:12px;">Теги операций</h3>
     <p style="font-size:0.86rem;color:#666;margin:0 0 12px;">Отметьте, к каким операциям относится тег. Теги выбираются при добавлении дохода/расхода и отображаются в журнале.</p>
+    <div class="finance-tag-create-panel">
+        <h4 class="finance-tag-create-heading">Новый тег</h4>
+        <div class="table-wrap">
+            <table class="finance-tags-table finance-tags-table--create">
+                <thead>
+                    <tr>
+                        <th scope="col">Цвет и название</th>
+                        <th scope="col">Типы операций</th>
+                        <th scope="col" class="finance-tags-th-actions">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="finance-tags-row-add">
+                        <td class="finance-tags-td-left">
+                            <form id="finance-tag-add-anchor" class="finance-tags-anchor-form" method="POST" action="/admin/finance/tag/save" aria-hidden="true"></form>
+                            <div class="finance-tag-cell-left">
+                                <label class="finance-tag-color-swatch" title="Цвет тега" style="background:#607d8b;">
+                                    <input type="color" form="finance-tag-add-anchor" name="color_hex" class="finance-tag-color-input" value="#607d8b">
+                                </label>
+                                <input type="text" form="finance-tag-add-anchor" name="name" class="finance-tag-name-input" placeholder="Название нового тега" required maxlength="128" autocomplete="off">
+                            </div>
+                        </td>
+                        <td class="finance-tags-td-types">
+                            <div class="finance-tag-op-inline">
+                                <label><input type="checkbox" form="finance-tag-add-anchor" name="apply_income" checked> Доход</label>
+                                <label><input type="checkbox" form="finance-tag-add-anchor" name="apply_expense" checked> Расход</label>
+                            </div>
+                        </td>
+                        <td class="finance-tags-td-actions">
+                            <div class="finance-tag-actions-inner">
+                                <button type="submit" form="finance-tag-add-anchor" class="finance-tag-icon-btn finance-tag-save-btn" title="Добавить тег" aria-label="Добавить тег">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <h4 class="finance-tags-list-heading">Сохранённые теги</h4>
     <div class="table-wrap finance-tags-table-wrap">
         <table class="finance-tags-table">
             <thead>
@@ -1058,30 +1136,6 @@
                 </tr>
             </thead>
             <tbody>
-                <tr class="finance-tags-row-add">
-                    <td class="finance-tags-td-left">
-                        <form id="finance-tag-add-anchor" class="finance-tags-anchor-form" method="POST" action="/admin/finance/tag/save" aria-hidden="true"></form>
-                        <div class="finance-tag-cell-left">
-                            <label class="finance-tag-color-swatch" title="Цвет тега" style="background:#607d8b;">
-                                <input type="color" form="finance-tag-add-anchor" name="color_hex" class="finance-tag-color-input" value="#607d8b">
-                            </label>
-                            <input type="text" form="finance-tag-add-anchor" name="name" class="finance-tag-name-input" placeholder="Название нового тега" required maxlength="128" autocomplete="off">
-                        </div>
-                    </td>
-                    <td class="finance-tags-td-types">
-                        <div class="finance-tag-op-inline">
-                            <label><input type="checkbox" form="finance-tag-add-anchor" name="apply_income" checked> Доход</label>
-                            <label><input type="checkbox" form="finance-tag-add-anchor" name="apply_expense" checked> Расход</label>
-                        </div>
-                    </td>
-                    <td class="finance-tags-td-actions">
-                        <div class="finance-tag-actions-inner">
-                            <button type="submit" form="finance-tag-add-anchor" class="finance-tag-icon-btn finance-tag-save-btn" title="Добавить тег" aria-label="Добавить тег">
-                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
-                            </button>
-                        </div>
-                    </td>
-                </tr>
                 {% for item in finance_tags %}
                 <tr>
                     <td class="finance-tags-td-left">
@@ -1111,13 +1165,14 @@
                         </div>
                     </td>
                 </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" class="finance-tags-empty-cell">Пока нет сохранённых тегов — добавьте первый в блоке выше.</td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    {% if not finance_tags %}
-    <p style="color:#666;font-size:0.9rem;margin:10px 0 0;">В таблице пока только строка добавления — сохранённых тегов нет.</p>
-    {% endif %}
 </div>
 {% endif %}
 
