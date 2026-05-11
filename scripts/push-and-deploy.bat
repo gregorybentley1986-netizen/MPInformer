@@ -279,7 +279,7 @@ echo [INFO] VERIFY "HEAD now" on server must equal PC hash: !LOCAL_HEAD_FULL!
 echo [INFO] systemd WorkingDirectory must match repo: !REMOTE_PATH!
 echo [INFO] Uses: checkout -B !GIT_BRANCH! origin/!GIT_BRANCH! + reset --hard ^(after stash^).
 echo [INFO] SSH target: !SERVER!
-ssh %SSH_OPTS% !SERVER! bash -lc "mkdir -p !REMOTE_PATH! && cd !REMOTE_PATH! && if [ ! -d .git ]; then git init && git remote add origin !ORIGIN_URL!; fi && git fetch origin !GIT_BRANCH! && (git stash push -u -m auto-deploy-pre-pull || true) && git checkout -B !GIT_BRANCH! origin/!GIT_BRANCH! && git reset --hard origin/!GIT_BRANCH!"
+ssh %SSH_OPTS% !SERVER! bash -lc "mkdir -p '%REMOTE_PATH%' && cd '%REMOTE_PATH%' && if [ ! -d .git ]; then git init && git remote add origin '%ORIGIN_URL%'; fi && git fetch origin '%GIT_BRANCH%' && (git stash push -u -m auto-deploy-pre-pull || true) && git checkout -B '%GIT_BRANCH%' 'origin/%GIT_BRANCH%' && git reset --hard 'origin/%GIT_BRANCH%'"
 if errorlevel 1 (
   echo [WARN] Server git sync failed ^(fetch/checkout/reset^).
   echo [WARN] Possible reason: server has no internet/DNS to GitHub.
@@ -328,7 +328,7 @@ exit /b 0
 
 rem ---------- Remote venv + uploads (after git sync or localsync) ----------
 :remote_prepare_runtime
-ssh %SSH_OPTS% !SERVER! bash -lc "mkdir -p !REMOTE_PATH!/uploads"
+ssh %SSH_OPTS% !SERVER! bash -lc "mkdir -p '%REMOTE_PATH%/uploads'"
 if errorlevel 1 (
   echo [ERROR] mkdir uploads on server failed.
   exit /b 1
@@ -338,7 +338,7 @@ if /I "!DEPLOY_SKIP_PIP!"=="1" (
   exit /b 0
 )
 echo [INFO] Server: ensure venv + pip install -r requirements.txt
-ssh %SSH_OPTS% !SERVER! bash -lc "REQ_FILE=!REMOTE_PATH!/requirements.txt; HASH_FILE=!REMOTE_PATH!/.deploy-requirements.sha256; CUR_HASH=$(sha256sum \"$REQ_FILE\" | awk '{print $1}'); NEED_PIP=0; if [ ! -x !REMOTE_PATH!/venv/bin/python ]; then NEED_PIP=1; fi; if [ ! -f \"$HASH_FILE\" ]; then NEED_PIP=1; else OLD_HASH=$(cat \"$HASH_FILE\" 2>/dev/null || true); if [ \"$OLD_HASH\" != \"$CUR_HASH\" ]; then NEED_PIP=1; fi; fi; if [ \"$NEED_PIP\" = \"1\" ]; then python3 -m venv !REMOTE_PATH!/venv && !REMOTE_PATH!/venv/bin/python -m pip install -r \"$REQ_FILE\" && printf \"%s\" \"$CUR_HASH\" > \"$HASH_FILE\" && echo [OK] pip install executed; else echo [SKIP] requirements unchanged, pip skipped; fi"
+ssh %SSH_OPTS% !SERVER! bash -lc "REQ_FILE='%REMOTE_PATH%/requirements.txt'; HASH_FILE='%REMOTE_PATH%/.deploy-requirements.sha256'; CUR_HASH=\$(sha256sum \"\$REQ_FILE\" | awk '{print \$1}'); NEED_PIP=0; if [ ! -x '%REMOTE_PATH%/venv/bin/python' ]; then NEED_PIP=1; fi; if [ ! -f \"\$HASH_FILE\" ]; then NEED_PIP=1; else OLD_HASH=\$(cat \"\$HASH_FILE\" 2>/dev/null || true); if [ \"\$OLD_HASH\" != \"\$CUR_HASH\" ]; then NEED_PIP=1; fi; fi; if [ \"\$NEED_PIP\" = \"1\" ]; then python3 -m venv '%REMOTE_PATH%/venv' && '%REMOTE_PATH%/venv/bin/python' -m pip install -r \"\$REQ_FILE\" && printf \"%s\" \"\$CUR_HASH\" > \"\$HASH_FILE\" && echo [OK] pip install executed; else echo [SKIP] requirements unchanged, pip skipped; fi"
 if errorlevel 1 (
   echo [ERROR] pip install on server failed.
   exit /b 1
