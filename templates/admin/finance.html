@@ -81,6 +81,75 @@
     .btn-icon svg { width: 18px; height: 18px; fill: currentColor; }
     .btn-icon.delete { color: #c62828; }
     .btn-icon.delete:hover { background: #ffebee; }
+    .saldo-bar {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto;
+        gap: 10px;
+        align-items: end;
+        margin-bottom: 12px;
+    }
+    .saldo-main {
+        font-family: 'Russo One', sans-serif;
+        font-size: 1.05rem;
+    }
+    .saldo-main .value { margin-left: 8px; }
+    .saldo-main .value.positive { color: #1b5e20; }
+    .saldo-main .value.negative { color: #b71c1c; }
+    .saldo-filter {
+        display: flex;
+        align-items: end;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .saldo-filter label {
+        font-size: 0.82rem;
+        color: #666;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .saldo-filter select,
+    .saldo-filter input[type="date"] {
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fff;
+        min-width: 150px;
+    }
+    .saldo-meta {
+        font-size: 0.84rem;
+        color: #666;
+        margin-bottom: 10px;
+    }
+    .edit-modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 1500;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+    }
+    .edit-modal.visible { display: flex; }
+    .edit-dialog {
+        width: 100%;
+        max-width: 560px;
+        background: var(--main-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 18px;
+        box-shadow: 0 14px 36px rgba(0,0,0,0.25);
+    }
+    .edit-dialog h3 {
+        font-family: 'Russo One', sans-serif;
+        font-size: 1.1rem;
+        margin-bottom: 10px;
+        border-bottom: 2px solid var(--accent);
+        padding-bottom: 8px;
+    }
+    .edit-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
 </style>
 {% endblock %}
 {% block content %}
@@ -109,7 +178,6 @@
 
 <div class="card">
     <form method="POST" action="/admin/finance/entry/save" id="finance-form" class="finance-form">
-        <input type="hidden" name="entry_id" id="entry_id" value="">
         <div class="operation-row">
             <button type="submit" class="btn btn-op btn-expense" name="operation_type" value="expense">Расход</button>
             <input type="number" class="amount-input" id="amount" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
@@ -122,6 +190,34 @@
 </div>
 
 <div class="card">
+    <form method="GET" action="/admin/finance" class="saldo-filter" id="saldo-filter-form">
+        <input type="hidden" name="tab" value="income-expense">
+        <label>Период
+            <select name="period" id="period">
+                <option value="week" {% if period == 'week' %}selected{% endif %}>Неделя</option>
+                <option value="month" {% if period == 'month' %}selected{% endif %}>Месяц (календарный)</option>
+                <option value="30days" {% if period == '30days' %}selected{% endif %}>30 дней</option>
+                <option value="custom" {% if period == 'custom' %}selected{% endif %}>Свой диапазон</option>
+            </select>
+        </label>
+        <label>От
+            <input type="date" name="start_date" id="start_date" value="{{ start_date or '' }}">
+        </label>
+        <label>До
+            <input type="date" name="end_date" id="end_date" value="{{ end_date or '' }}">
+        </label>
+        <button type="submit" class="btn">Применить</button>
+    </form>
+    <div class="saldo-bar">
+        <div class="saldo-main">
+            Сальдо ({{ period_label }}):
+            <span class="value {% if saldo_total >= 0 %}positive{% else %}negative{% endif %}">
+                {{ '%.2f'|format(saldo_total) }}
+            </span>
+        </div>
+        <div class="saldo-meta">Доход: <strong>{{ '%.2f'|format(income_total) }}</strong></div>
+        <div class="saldo-meta">Расход: <strong>{{ '%.2f'|format(expense_total) }}</strong></div>
+    </div>
     <div class="table-wrap">
         <table class="log-table">
             <thead>
@@ -175,23 +271,70 @@
     </div>
 </div>
 
+<div class="edit-modal" id="edit-modal" aria-hidden="true">
+    <div class="edit-dialog">
+        <h3>Режим редактирования</h3>
+        <form method="POST" action="/admin/finance/entry/save" id="edit-form" class="finance-form">
+            <input type="hidden" name="entry_id" id="edit_entry_id" value="">
+            <div class="operation-row">
+                <button type="submit" class="btn btn-op btn-expense" name="operation_type" value="expense">Расход</button>
+                <input type="number" class="amount-input" id="edit_amount" name="amount" step="0.01" min="0.01" required>
+                <button type="submit" class="btn btn-op btn-income" name="operation_type" value="income">Доход</button>
+            </div>
+            <div class="form-group comment-wrap">
+                <textarea class="comment-input" id="edit_comment" name="comment" placeholder="Комментарий"></textarea>
+            </div>
+            <div class="actions">
+                <button type="button" class="btn" id="edit-cancel-btn">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 (function() {
-    var amountInput = document.getElementById('amount');
-    var commentInput = document.getElementById('comment');
-    var entryIdInput = document.getElementById('entry_id');
     var rows = document.querySelectorAll('.log-table tbody tr[data-id]');
     var editButtons = document.querySelectorAll('.btn-icon.edit');
     var deleteForms = document.querySelectorAll('.delete-form');
+    var periodSelect = document.getElementById('period');
+    var startDateInput = document.getElementById('start_date');
+    var endDateInput = document.getElementById('end_date');
+    var editModal = document.getElementById('edit-modal');
+    var editEntryId = document.getElementById('edit_entry_id');
+    var editAmount = document.getElementById('edit_amount');
+    var editComment = document.getElementById('edit_comment');
+    var editCancelBtn = document.getElementById('edit-cancel-btn');
+
+    function isCustomPeriod() {
+        return periodSelect && periodSelect.value === 'custom';
+    }
+    function syncDateInputsState() {
+        var enabled = isCustomPeriod();
+        startDateInput.disabled = !enabled;
+        endDateInput.disabled = !enabled;
+        if (!enabled) {
+            startDateInput.value = '';
+            endDateInput.value = '';
+        }
+    }
+    function openEditModal(tr) {
+        editEntryId.value = tr.dataset.id || '';
+        editAmount.value = tr.dataset.amount || '';
+        editComment.value = tr.dataset.comment || '';
+        editModal.classList.add('visible');
+        editModal.setAttribute('aria-hidden', 'false');
+        editAmount.focus();
+    }
+    function closeEditModal() {
+        editModal.classList.remove('visible');
+        editModal.setAttribute('aria-hidden', 'true');
+    }
 
     editButtons.forEach(function(btn) {
         btn.addEventListener('click', function() {
             var tr = btn.closest('tr');
             if (!tr) return;
-            entryIdInput.value = tr.dataset.id || '';
-            amountInput.value = tr.dataset.amount || '';
-            commentInput.value = tr.dataset.comment || '';
-            amountInput.focus();
+            openEditModal(tr);
         });
     });
 
@@ -209,6 +352,19 @@
             }
         });
     });
+
+    if (periodSelect) {
+        periodSelect.addEventListener('change', syncDateInputsState);
+        syncDateInputsState();
+    }
+    if (editCancelBtn) {
+        editCancelBtn.addEventListener('click', closeEditModal);
+    }
+    if (editModal) {
+        editModal.addEventListener('click', function(e) {
+            if (e.target === editModal) closeEditModal();
+        });
+    }
 })();
 </script>
 {% endblock %}

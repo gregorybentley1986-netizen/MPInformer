@@ -10,7 +10,7 @@ import socket
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone, date
 from pathlib import Path
 
 from dateutil import tz as dateutil_tz
@@ -3478,14 +3478,94 @@ async def admin_finance(
     tab = (request.query_params.get("tab") or "income-expense").strip()
     if tab != "income-expense":
         tab = "income-expense"
-    res = await db.execute(select(FinanceEntry).order_by(FinanceEntry.created_at.desc(), FinanceEntry.id.desc()))
+    period = (request.query_params.get("period") or "month").strip().lower()
+    start_date_raw = (request.query_params.get("start_date") or "").strip()
+    end_date_raw = (request.query_params.get("end_date") or "").strip()
+
+    now_utc = datetime.now(timezone.utc)
+    start_dt = None
+    end_dt = None
+    start_date_value = ""
+    end_date_value = ""
+    period_label = "Календарный месяц"
+
+    if period == "week":
+        period_label = "Календарная неделя"
+        now_date = now_utc.date()
+        week_start = now_date - timedelta(days=now_date.weekday())
+        start_dt = datetime.combine(week_start, datetime.min.time(), tzinfo=timezone.utc)
+        end_dt = start_dt + timedelta(days=7)
+    elif period == "month":
+        period_label = "Календарный месяц"
+        month_start = date(now_utc.year, now_utc.month, 1)
+        if now_utc.month == 12:
+            next_month = date(now_utc.year + 1, 1, 1)
+        else:
+            next_month = date(now_utc.year, now_utc.month + 1, 1)
+        start_dt = datetime.combine(month_start, datetime.min.time(), tzinfo=timezone.utc)
+        end_dt = datetime.combine(next_month, datetime.min.time(), tzinfo=timezone.utc)
+    elif period == "30days":
+        period_label = "Последние 30 дней"
+        start_dt = now_utc - timedelta(days=30)
+        end_dt = now_utc + timedelta(seconds=1)
+    elif period == "custom":
+        period_label = "Выбранный диапазон"
+        try:
+            if start_date_raw:
+                start_date = datetime.strptime(start_date_raw, "%Y-%m-%d").date()
+                start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+                start_date_value = start_date_raw
+            if end_date_raw:
+                end_date = datetime.strptime(end_date_raw, "%Y-%m-%d").date()
+                end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+                end_date_value = end_date_raw
+        except ValueError:
+            period = "month"
+            period_label = "Календарный месяц"
+            month_start = date(now_utc.year, now_utc.month, 1)
+            if now_utc.month == 12:
+                next_month = date(now_utc.year + 1, 1, 1)
+            else:
+                next_month = date(now_utc.year, now_utc.month + 1, 1)
+            start_dt = datetime.combine(month_start, datetime.min.time(), tzinfo=timezone.utc)
+            end_dt = datetime.combine(next_month, datetime.min.time(), tzinfo=timezone.utc)
+    else:
+        period = "month"
+        period_label = "Календарный месяц"
+        month_start = date(now_utc.year, now_utc.month, 1)
+        if now_utc.month == 12:
+            next_month = date(now_utc.year + 1, 1, 1)
+        else:
+            next_month = date(now_utc.year, now_utc.month + 1, 1)
+        start_dt = datetime.combine(month_start, datetime.min.time(), tzinfo=timezone.utc)
+        end_dt = datetime.combine(next_month, datetime.min.time(), tzinfo=timezone.utc)
+
+    query = select(FinanceEntry)
+    if start_dt is not None:
+        query = query.where(FinanceEntry.created_at >= start_dt)
+    if end_dt is not None:
+        query = query.where(FinanceEntry.created_at < end_dt)
+
+    res = await db.execute(query.order_by(FinanceEntry.created_at.desc(), FinanceEntry.id.desc()))
     entries = res.scalars().all()
+
+    income_total = sum((row.amount or 0.0) for row in entries if row.operation_type == "income")
+    expense_total = sum((row.amount or 0.0) for row in entries if row.operation_type == "expense")
+    saldo_total = income_total - expense_total
+
     return templates.TemplateResponse(
         "admin/finance.html",
         {
             "request": request,
             "tab": tab,
             "entries": entries,
+            "period": period,
+            "period_label": period_label,
+            "start_date": start_date_value,
+            "end_date": end_date_value,
+            "income_total": income_total,
+            "expense_total": expense_total,
+            "saldo_total": saldo_total,
         },
     )
 
