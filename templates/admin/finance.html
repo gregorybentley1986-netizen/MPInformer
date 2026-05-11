@@ -319,25 +319,103 @@
     }
     .inline-form { display: contents; }
     .hide { display: none !important; }
-    .th-filter {
-        margin-top: 6px;
-        display: grid;
-        gap: 4px;
-        max-height: 96px;
-        overflow-y: auto;
-        font-weight: 400;
+    .log-table thead th {
+        position: relative;
+        vertical-align: top;
     }
-    .th-filter label {
+    .th-with-filter {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 6px;
-        font-size: 0.78rem;
-        white-space: nowrap;
+        flex-wrap: nowrap;
     }
-    .th-filter input[type="checkbox"] {
-        margin: 0;
+    .th-with-filter .th-title {
+        flex: 1;
+        min-width: 0;
+        line-height: 1.25;
+    }
+    .th-filter-toggle {
+        flex-shrink: 0;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        color: #232323;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background .15s ease, border-color .15s ease;
+    }
+    .th-filter-toggle:hover {
+        background: #ececec;
+        border-color: #999;
+    }
+    .th-filter-toggle svg {
         width: 14px;
         height: 14px;
+        fill: currentColor;
+    }
+    .th-filter-panel {
+        display: none;
+        position: absolute;
+        top: calc(100% - 2px);
+        left: 0;
+        min-width: 220px;
+        max-width: min(280px, 90vw);
+        max-height: 240px;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+        z-index: 80;
+        font-weight: 400;
+    }
+    .th-filter-panel.open {
+        display: block;
+    }
+    .th-filter-panel .th-filter-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+        font-size: 0.8rem;
+        color: var(--main-text);
+        cursor: pointer;
+        user-select: none;
+    }
+    .th-filter-panel .filter-checkbox {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        margin: 0;
+        flex-shrink: 0;
+        border: 2px solid #000;
+        border-radius: 2px;
+        background: #fff;
+        cursor: pointer;
+        position: relative;
+        box-sizing: border-box;
+    }
+    .th-filter-panel .filter-checkbox:checked::after {
+        content: '';
+        position: absolute;
+        left: 3px;
+        top: 0;
+        width: 4px;
+        height: 8px;
+        border: solid #000;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+    }
+    .th-filter-panel .filter-checkbox:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
     }
     @media (max-width: 940px) {
         .split-forms, .counterparty-layout { grid-template-columns: 1fr; }
@@ -483,36 +561,62 @@
                 <tr>
                     <th>Дата</th>
                     <th>
-                        Операция
-                        <div class="th-filter">
-                            <label>
-                                <input class="js-table-filter" type="checkbox" name="operation_filter" value="income" {% if 'income' in selected_operation_filters %}checked{% endif %}>
-                                Доход
-                            </label>
-                            <label>
-                                <input class="js-table-filter" type="checkbox" name="operation_filter" value="expense" {% if 'expense' in selected_operation_filters %}checked{% endif %}>
-                                Расход
-                            </label>
+                        <div class="th-with-filter">
+                            <span class="th-title">Операция</span>
+                            <button type="button" class="th-filter-toggle" aria-expanded="false" aria-haspopup="true" aria-label="Фильтр по операции">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+                            </button>
+                            <div class="th-filter-panel" role="menu">
+                                <label class="th-filter-row">
+                                    <input class="js-table-filter filter-checkbox" type="checkbox" name="operation_filter" value="income" {% if 'income' in selected_operation_filters %}checked{% endif %}>
+                                    <span>Доход</span>
+                                </label>
+                                <label class="th-filter-row">
+                                    <input class="js-table-filter filter-checkbox" type="checkbox" name="operation_filter" value="expense" {% if 'expense' in selected_operation_filters %}checked{% endif %}>
+                                    <span>Расход</span>
+                                </label>
+                            </div>
                         </div>
                     </th>
                     <th>
-                        На что/Откуда
-                        <div class="th-filter">
-                            {% for item in expense_counterparties %}
-                            <label>
-                                <input class="js-table-filter" type="checkbox" name="counterparty_filter" value="{{ item.id }}" {% if (item.id|string) in selected_counterparty_filters %}checked{% endif %}>
-                                {{ item.name }}
-                            </label>
-                            {% endfor %}
-                            {% for item in income_counterparties %}
-                            <label>
-                                <input class="js-table-filter" type="checkbox" name="counterparty_filter" value="{{ item.id }}" {% if (item.id|string) in selected_counterparty_filters %}checked{% endif %}>
-                                {{ item.name }}
-                            </label>
-                            {% endfor %}
+                        <div class="th-with-filter">
+                            <span class="th-title">Откуда</span>
+                            <button type="button" class="th-filter-toggle" aria-expanded="false" aria-haspopup="true" aria-label="Фильтр по источнику дохода">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+                            </button>
+                            <div class="th-filter-panel" role="menu">
+                                {% for item in income_counterparties %}
+                                <label class="th-filter-row">
+                                    <input class="js-table-filter filter-checkbox" type="checkbox" name="counterparty_filter" value="{{ item.id }}" {% if (item.id|string) in selected_counterparty_filters %}checked{% endif %}>
+                                    <span>{{ item.name }}</span>
+                                </label>
+                                {% endfor %}
+                                {% if not income_counterparties %}
+                                <div class="th-filter-row" style="color:#888;font-size:0.78rem;">Нет значений в справочнике</div>
+                                {% endif %}
+                            </div>
                         </div>
                     </th>
                     <th>Комментарий</th>
+                    <th>
+                        <div class="th-with-filter">
+                            <span class="th-title">На что</span>
+                            <button type="button" class="th-filter-toggle" aria-expanded="false" aria-haspopup="true" aria-label="Фильтр по статье расхода">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+                            </button>
+                            <div class="th-filter-panel" role="menu">
+                                {% for item in expense_counterparties %}
+                                <label class="th-filter-row">
+                                    <input class="js-table-filter filter-checkbox" type="checkbox" name="counterparty_filter" value="{{ item.id }}" {% if (item.id|string) in selected_counterparty_filters %}checked{% endif %}>
+                                    <span>{{ item.name }}</span>
+                                </label>
+                                {% endfor %}
+                                {% if not expense_counterparties %}
+                                <div class="th-filter-row" style="color:#888;font-size:0.78rem;">Нет значений в справочнике</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </th>
                     <th>Сумма</th>
                     <th>Действия</th>
                 </tr>
@@ -536,8 +640,9 @@
                         <span class="op-badge op-expense">Расход</span>
                         {% endif %}
                     </td>
-                    <td>{{ row.counterparty_name or "-" }}</td>
+                    <td>{% if row.operation_type == "income" %}{{ row.counterparty_name or "-" }}{% else %}-{% endif %}</td>
                     <td>{{ row.comment or "-" }}</td>
+                    <td>{% if row.operation_type == "expense" %}{{ row.counterparty_name or "-" }}{% else %}-{% endif %}</td>
                     <td class="{% if row.operation_type == 'income' %}sum-income{% else %}sum-expense{% endif %}">
                         {{ '%.2f'|format(row.amount) }}
                     </td>
@@ -555,7 +660,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6">Записей пока нет.</td>
+                    <td colspan="7">Записей пока нет.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -833,6 +938,40 @@
                 alert('Не удалось сохранить порядок');
             });
     }
+    document.querySelectorAll('.th-filter-panel').forEach(function(panel) {
+        panel.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    });
+    document.querySelectorAll('.th-filter-toggle').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var wrap = btn.closest('.th-with-filter');
+            if (!wrap) return;
+            var panel = wrap.querySelector('.th-filter-panel');
+            if (!panel) return;
+            var willOpen = !panel.classList.contains('open');
+            document.querySelectorAll('.th-filter-panel').forEach(function(p) {
+                p.classList.remove('open');
+            });
+            document.querySelectorAll('.th-filter-toggle').forEach(function(b) {
+                b.setAttribute('aria-expanded', 'false');
+            });
+            if (willOpen) {
+                panel.classList.add('open');
+                btn.setAttribute('aria-expanded', 'true');
+            }
+        });
+    });
+    document.addEventListener('click', function() {
+        document.querySelectorAll('.th-filter-panel').forEach(function(p) {
+            p.classList.remove('open');
+        });
+        document.querySelectorAll('.th-filter-toggle').forEach(function(b) {
+            b.setAttribute('aria-expanded', 'false');
+        });
+    });
+
     tableFilterInputs.forEach(function(input) {
         input.addEventListener('change', function() {
             if (!tableFilterMeta) return;
