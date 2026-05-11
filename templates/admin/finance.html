@@ -249,7 +249,7 @@
         <form method="POST" action="/admin/finance/entry/save" class="finance-form">
             <input type="hidden" name="operation_type" value="expense">
             <div class="form-group">
-                <label for="expense_counterparty_id">Куда</label>
+                <label for="expense_counterparty_id">На что потрачено</label>
                 <select class="amount-input" id="expense_counterparty_id" name="counterparty_id">
                     <option value="">Не выбрано</option>
                     {% for item in expense_counterparties %}
@@ -346,7 +346,7 @@
                     </td>
                     <td>
                         {% if row.counterparty_name %}
-                            <div><strong>{% if row.operation_type == "income" %}Откуда:{% else %}Куда:{% endif %}</strong> {{ row.counterparty_name }}</div>
+                            <div><strong>{% if row.operation_type == "income" %}Откуда:{% else %}На что потрачено:{% endif %}</strong> {{ row.counterparty_name }}</div>
                         {% endif %}
                         <div>{{ row.comment or "-" }}</div>
                     </td>
@@ -380,6 +380,31 @@
 <div class="card">
     <div class="counterparty-layout">
         <div class="counterparty-column">
+            <h3>На что потрачено (Расход)</h3>
+            <form method="POST" action="/admin/finance/counterparty/save" class="counterparty-add">
+                <input type="hidden" name="operation_type" value="expense">
+                <input type="text" name="name" placeholder="Новое значение" required>
+                <button type="submit" class="btn btn-op btn-expense">Добавить</button>
+            </form>
+            <div class="counterparty-list" data-operation-type="expense">
+                {% for item in expense_counterparties %}
+                <div class="counterparty-item" draggable="true" data-id="{{ item.id }}">
+                    <div class="drag-handle">⋮⋮</div>
+                    <form method="POST" action="/admin/finance/counterparty/save" class="inline-form">
+                        <input type="hidden" name="counterparty_id" value="{{ item.id }}">
+                        <input type="hidden" name="operation_type" value="expense">
+                        <input type="text" name="name" value="{{ item.name }}">
+                    </form>
+                    <button type="button" class="btn save-counterparty">Сохранить</button>
+                    <form method="POST" action="/admin/finance/counterparty/delete">
+                        <input type="hidden" name="counterparty_id" value="{{ item.id }}">
+                        <button type="submit" class="btn btn-op btn-expense">Удалить</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="counterparty-column">
             <h3>Откуда (Доход)</h3>
             <form method="POST" action="/admin/finance/counterparty/save" class="counterparty-add">
                 <input type="hidden" name="operation_type" value="income">
@@ -404,31 +429,6 @@
                 {% endfor %}
             </div>
         </div>
-        <div class="counterparty-column">
-            <h3>Куда (Расход)</h3>
-            <form method="POST" action="/admin/finance/counterparty/save" class="counterparty-add">
-                <input type="hidden" name="operation_type" value="expense">
-                <input type="text" name="name" placeholder="Новое значение" required>
-                <button type="submit" class="btn btn-op btn-expense">Добавить</button>
-            </form>
-            <div class="counterparty-list" data-operation-type="expense">
-                {% for item in expense_counterparties %}
-                <div class="counterparty-item" draggable="true" data-id="{{ item.id }}">
-                    <div class="drag-handle">⋮⋮</div>
-                    <form method="POST" action="/admin/finance/counterparty/save" class="inline-form">
-                        <input type="hidden" name="counterparty_id" value="{{ item.id }}">
-                        <input type="hidden" name="operation_type" value="expense">
-                        <input type="text" name="name" value="{{ item.name }}">
-                    </form>
-                    <button type="button" class="btn save-counterparty">Сохранить</button>
-                    <form method="POST" action="/admin/finance/counterparty/delete">
-                        <input type="hidden" name="counterparty_id" value="{{ item.id }}">
-                        <button type="submit" class="btn btn-op btn-expense">Удалить</button>
-                    </form>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
     </div>
 </div>
 {% endif %}
@@ -440,7 +440,7 @@
             <input type="hidden" name="entry_id" id="edit_entry_id" value="">
             <input type="hidden" name="operation_type" id="edit_operation_type" value="">
             <div class="form-group">
-                <label for="edit_counterparty_income" id="edit_counterparty_label">Откуда/Куда</label>
+                <label for="edit_counterparty_income" id="edit_counterparty_label">Откуда/На что потрачено</label>
                 <select class="amount-input hide" id="edit_counterparty_income" name="counterparty_id">
                     <option value="">Не выбрано</option>
                     {% for item in income_counterparties %}
@@ -526,7 +526,7 @@
         editCounterpartyExpense.classList.toggle('hide', isIncome);
         editCounterpartyIncome.disabled = !isIncome;
         editCounterpartyExpense.disabled = isIncome;
-        editCounterpartyLabel.textContent = isIncome ? 'Откуда' : 'Куда';
+        editCounterpartyLabel.textContent = isIncome ? 'Откуда' : 'На что потрачено';
         if (isIncome) {
             editCounterpartyIncome.value = counterpartyId || '';
             editCounterpartyExpense.value = '';
