@@ -149,6 +149,7 @@ if errorlevel 1 (
 echo [OK] Files unpacked on server.
 
 call :remote_prepare_runtime
+if errorlevel 1 exit /b 1
 
 echo [2/3] Restart service...
 ssh %SSH_OPTS% !SERVER! "sudo -n systemctl restart !SERVICE!"
@@ -336,7 +337,7 @@ if /I "!DEPLOY_SKIP_PIP!"=="1" (
   exit /b 0
 )
 echo [INFO] Server: ./venv/bin/pip install -r requirements.txt
-ssh %SSH_OPTS% !SERVER! bash -lc "cd !REMOTE_PATH! && ./venv/bin/pip install -r requirements.txt"
+ssh %SSH_OPTS% !SERVER! bash -lc "cd !REMOTE_PATH! && if [ ! -x ./venv/bin/pip ]; then python3 -m venv venv; fi && ./venv/bin/pip install -r requirements.txt"
 if errorlevel 1 (
   echo [ERROR] pip install on server failed.
   exit /b 1
