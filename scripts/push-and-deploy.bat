@@ -336,8 +336,8 @@ if /I "!DEPLOY_SKIP_PIP!"=="1" (
   echo [SKIP] DEPLOY_SKIP_PIP=1 — pip install on server skipped.
   exit /b 0
 )
-echo [INFO] Server: python venv + pip install -r requirements.txt
-ssh %SSH_OPTS% !SERVER! bash -lc "cd !REMOTE_PATH! && if [ ! -x ./venv/bin/python ]; then python3 -m venv venv; fi && ./venv/bin/python -m pip install -r requirements.txt"
+echo [INFO] Server: pip install -r requirements.txt
+ssh %SSH_OPTS% !SERVER! bash -lc "cd !REMOTE_PATH! && if [ -x ./venv/bin/python ]; then ./venv/bin/python -m pip install -r requirements.txt; else python3 -m pip install -r requirements.txt; fi"
 if errorlevel 1 (
   echo [ERROR] pip install on server failed.
   exit /b 1
