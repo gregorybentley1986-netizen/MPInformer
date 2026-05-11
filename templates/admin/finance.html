@@ -31,6 +31,19 @@
         font-family: 'Russo One', sans-serif;
         font-size: 1rem;
     }
+    .entry-form {
+        max-width: 360px;
+        margin: 0 auto;
+        width: 100%;
+    }
+    .entry-form .form-group,
+    .entry-form .btn {
+        width: 100%;
+    }
+    .entry-form textarea {
+        min-height: 86px;
+        resize: vertical;
+    }
     .operation-row {
         display: grid;
         grid-template-columns: auto minmax(180px, 240px) auto;
@@ -246,40 +259,30 @@
 <div class="split-forms">
     <div class="card">
         <h3>Расход</h3>
-        <form method="POST" action="/admin/finance/entry/save" class="finance-form">
+        <form method="POST" action="/admin/finance/entry/save" class="finance-form entry-form">
             <input type="hidden" name="operation_type" value="expense">
             <div class="form-group">
-                <label for="expense_counterparty_id">На что потрачено</label>
-                <select class="amount-input" id="expense_counterparty_id" name="counterparty_id">
-                    <option value="">Не выбрано</option>
-                    {% for item in expense_counterparties %}
-                    <option value="{{ item.id }}">{{ item.name }}</option>
-                    {% endfor %}
-                </select>
+                <label for="expense_amount">Сумма</label>
+                <input type="number" id="expense_amount" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
             </div>
-            <input type="number" class="amount-input" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
-            <div class="form-group comment-wrap">
-                <textarea class="comment-input" name="comment" placeholder="Комментарий"></textarea>
+            <div class="form-group">
+                <label for="expense_comment">Комментарий</label>
+                <textarea id="expense_comment" name="comment" placeholder="Комментарий"></textarea>
             </div>
             <button type="submit" class="btn btn-op btn-expense">Добавить расход</button>
         </form>
     </div>
     <div class="card">
         <h3>Доход</h3>
-        <form method="POST" action="/admin/finance/entry/save" class="finance-form">
+        <form method="POST" action="/admin/finance/entry/save" class="finance-form entry-form">
             <input type="hidden" name="operation_type" value="income">
             <div class="form-group">
-                <label for="income_counterparty_id">Откуда</label>
-                <select class="amount-input" id="income_counterparty_id" name="counterparty_id">
-                    <option value="">Не выбрано</option>
-                    {% for item in income_counterparties %}
-                    <option value="{{ item.id }}">{{ item.name }}</option>
-                    {% endfor %}
-                </select>
+                <label for="income_amount">Сумма</label>
+                <input type="number" id="income_amount" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
             </div>
-            <input type="number" class="amount-input" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
-            <div class="form-group comment-wrap">
-                <textarea class="comment-input" name="comment" placeholder="Комментарий"></textarea>
+            <div class="form-group">
+                <label for="income_comment">Комментарий</label>
+                <textarea id="income_comment" name="comment" placeholder="Комментарий"></textarea>
             </div>
             <button type="submit" class="btn btn-op btn-income">Добавить доход</button>
         </form>
