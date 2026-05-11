@@ -434,3 +434,15 @@ class OzonSupply(Base):
     status_check_error = Column(String(512), nullable=True)  # ошибка при опросе статуса поставки (v3/supply-order/get)
     composition_mismatch_message = Column(String(512), nullable=True)  # предупреждение о расхождении заявленного состава с составом в Озон
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class FinanceEntry(Base):
+    """Лог финансовых операций: доходы и расходы."""
+    __tablename__ = "finance_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    operation_type = Column(String(16), nullable=False, index=True)  # income | expense
+    comment = Column(String(512), nullable=False, default="")
+    amount = Column(Float, nullable=False, default=0.0)

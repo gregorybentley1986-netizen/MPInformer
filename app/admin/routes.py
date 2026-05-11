@@ -68,6 +68,7 @@ from app.db.models import (
     SupplyDraftConfig,
     SlotsTrackerConfig,
     SupplyQueueScan,
+    FinanceEntry,
 )
 from app.modules.notifications.scheduler import scheduler, stop_scheduler, start_scheduler
 from app.telegram.bot import stop_bot
@@ -3465,3 +3466,90 @@ async def restart_app(username: str = Depends(verify_admin)):
     except Exception as e:
         logger.error(f"Ошибка при перезапуске приложения: {e}", exc_info=True)
         return RedirectResponse(url="/admin?error=restart", status_code=303)
+
+
+@router.get("/finance", response_class=HTMLResponse)
+async def admin_finance(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Раздел «Финансы» — вкладка «Доходы-Расходы»."""
+    tab = (request.query_params.get("tab") or "income-expense").strip()
+    if tab != "income-expense":
+        tab = "income-expense"
+    res = await db.execute(select(FinanceEntry).order_by(FinanceEntry.created_at.desc(), FinanceEntry.id.desc()))
+    entries = res.scalars().all()
+    return templates.TemplateResponse(
+        "admin/finance.html",
+        {
+            "request": request,
+            "tab": tab,
+            "entries": entries,
+        },
+    )
+
+
+@router.post("/finance/entry/save")
+async def admin_finance_entry_save(
+    request: Request,
+    operation_type: str = Form(...),
+    amount: str = Form(...),
+    comment: str = Form(""),
+    entry_id: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Создать/обновить запись дохода/расхода."""
+    op = (operation_type or "").strip().lower()
+    if op not in ("income", "expense"):
+        return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_operation", status_code=303)
+    amount_raw = (amount or "").strip().replace(" ", "").replace(",", ".")
+    try:
+        amount_value = float(amount_raw)
+    except (TypeError, ValueError):
+        return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_amount", status_code=303)
+    if amount_value <= 0:
+        return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_amount", status_code=303)
+    comment_value = (comment or "").strip()
+    if len(comment_value) > 512:
+        comment_value = comment_value[:512]
+
+    if (entry_id or "").strip():
+        try:
+            eid = int(entry_id)
+        except (TypeError, ValueError):
+            return RedirectResponse(url="/admin/finance?tab=income-expense&error=notfound", status_code=303)
+        row = await db.get(FinanceEntry, eid)
+        if not row:
+            return RedirectResponse(url="/admin/finance?tab=income-expense&error=notfound", status_code=303)
+        row.operation_type = op
+        row.amount = amount_value
+        row.comment = comment_value
+        await db.commit()
+        return RedirectResponse(url="/admin/finance?tab=income-expense&success=updated", status_code=303)
+
+    row = FinanceEntry(
+        operation_type=op,
+        amount=amount_value,
+        comment=comment_value,
+    )
+    db.add(row)
+    await db.commit()
+    return RedirectResponse(url="/admin/finance?tab=income-expense&success=created", status_code=303)
+
+
+@router.post("/finance/entry/delete")
+async def admin_finance_entry_delete(
+    request: Request,
+    entry_id: int = Form(...),
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Удалить запись дохода/расхода."""
+    row = await db.get(FinanceEntry, entry_id)
+    if not row:
+        return RedirectResponse(url="/admin/finance?tab=income-expense&error=notfound", status_code=303)
+    await db.delete(row)
+    await db.commit()
+    return RedirectResponse(url="/admin/finance?tab=income-expense&success=deleted", status_code=303)

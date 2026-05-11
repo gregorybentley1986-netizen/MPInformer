@@ -1,0 +1,172 @@
+{% extends "site/base.html" %}
+{% block title %}Финансы{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}
+<a href="/" class="btn-header">Сайт</a>
+{% endblock %}
+{% block sidebar %}
+{% include "admin/_sidebar.html" %}
+{% endblock %}
+{% block extra_css %}
+<style>
+    .alert { padding: 14px; margin-bottom: 16px; border: 1px solid transparent; border-radius: 8px; }
+    .alert-success { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+    .alert-error { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+    .tab-btn { padding: 8px 14px; border: 1px solid var(--border); background: #f0f0f0; border-radius: 8px; color: var(--main-text); text-decoration: none; }
+    .tab-btn.active { background: var(--accent); color: #232323; font-weight: 700; }
+    .finance-form { display: grid; gap: 10px; margin-bottom: 16px; }
+    .operation-row { display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 10px; align-items: center; }
+    .operation-row input[type="number"] { width: 100%; text-align: center; font-size: 1rem; }
+    .btn-op { width: 100%; border: none; border-radius: 8px; padding: 10px 12px; color: #fff; font-weight: 700; cursor: pointer; }
+    .btn-expense { background: #d32f2f; }
+    .btn-expense:hover { background: #b71c1c; }
+    .btn-income { background: #2e7d32; }
+    .btn-income:hover { background: #1b5e20; }
+    .form-group textarea { width: 100%; min-height: 72px; resize: vertical; }
+    .table-wrap { overflow-x: auto; }
+    .log-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    .log-table th, .log-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    .log-table th { background: #f0f0f0; font-family: 'Russo One', sans-serif; font-size: 0.84rem; letter-spacing: 0.02em; }
+    .op-badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
+    .op-income { background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }
+    .op-expense { background: #ffebee; color: #b71c1c; border: 1px solid #ffcdd2; }
+    .sum-income { color: #1b5e20; font-weight: 700; }
+    .sum-expense { color: #b71c1c; font-weight: 700; }
+    .actions-cell { display: flex; align-items: center; gap: 6px; }
+    .btn-icon { width: 30px; height: 30px; border: none; background: transparent; border-radius: 6px; cursor: pointer; color: #333; display: inline-flex; align-items: center; justify-content: center; }
+    .btn-icon:hover { background: #ececec; }
+    .btn-icon svg { width: 18px; height: 18px; fill: currentColor; }
+    .btn-icon.delete { color: #c62828; }
+    .btn-icon.delete:hover { background: #ffebee; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Финансы</h1>
+
+<div class="tabs">
+    <a href="/admin/finance?tab=income-expense" class="tab-btn {% if tab == 'income-expense' %}active{% endif %}">Доходы-Расходы</a>
+</div>
+
+{% if request.query_params.get("success") == "created" %}
+<div class="alert alert-success">Запись добавлена.</div>
+{% elif request.query_params.get("success") == "updated" %}
+<div class="alert alert-success">Запись обновлена.</div>
+{% elif request.query_params.get("success") == "deleted" %}
+<div class="alert alert-success">Запись удалена.</div>
+{% endif %}
+{% if request.query_params.get("error") == "invalid_amount" %}
+<div class="alert alert-error">Укажите корректную сумму больше нуля.</div>
+{% elif request.query_params.get("error") == "invalid_operation" %}
+<div class="alert alert-error">Некорректный тип операции.</div>
+{% elif request.query_params.get("error") == "notfound" %}
+<div class="alert alert-error">Запись не найдена.</div>
+{% elif request.query_params.get("error") %}
+<div class="alert alert-error">Ошибка операции.</div>
+{% endif %}
+
+<div class="card">
+    <form method="POST" action="/admin/finance/entry/save" id="finance-form" class="finance-form">
+        <input type="hidden" name="entry_id" id="entry_id" value="">
+        <div class="operation-row">
+            <button type="submit" class="btn-op btn-expense" name="operation_type" value="expense">Расход</button>
+            <input type="number" id="amount" name="amount" step="0.01" min="0.01" placeholder="Сумма" required>
+            <button type="submit" class="btn-op btn-income" name="operation_type" value="income">Доход</button>
+        </div>
+        <div class="form-group">
+            <textarea id="comment" name="comment" placeholder="Комментарий"></textarea>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th>Дата/время</th>
+                    <th>Операция</th>
+                    <th>Комментарий</th>
+                    <th>Сумма</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in entries %}
+                <tr
+                    data-id="{{ row.id }}"
+                    data-operation="{{ row.operation_type }}"
+                    data-amount="{{ '%.2f'|format(row.amount) }}"
+                    data-comment="{{ row.comment | e }}"
+                >
+                    <td>{{ row.created_at.strftime("%d.%m.%Y %H:%M") if row.created_at else "-" }}</td>
+                    <td>
+                        {% if row.operation_type == "income" %}
+                        <span class="op-badge op-income">Доход</span>
+                        {% else %}
+                        <span class="op-badge op-expense">Расход</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ row.comment or "-" }}</td>
+                    <td class="{% if row.operation_type == 'income' %}sum-income{% else %}sum-expense{% endif %}">
+                        {{ '%.2f'|format(row.amount) }}
+                    </td>
+                    <td class="actions-cell">
+                        <button type="button" class="btn-icon edit" title="Редактировать" aria-label="Редактировать">
+                            <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                        </button>
+                        <form method="POST" action="/admin/finance/entry/delete" class="delete-form" style="display:inline;">
+                            <input type="hidden" name="entry_id" value="{{ row.id }}">
+                            <button type="submit" class="btn-icon delete" title="Удалить" aria-label="Удалить">
+                                <svg viewBox="0 0 24 24"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zm13-15h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5">Записей пока нет.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+(function() {
+    var amountInput = document.getElementById('amount');
+    var commentInput = document.getElementById('comment');
+    var entryIdInput = document.getElementById('entry_id');
+    var rows = document.querySelectorAll('.log-table tbody tr[data-id]');
+    var editButtons = document.querySelectorAll('.btn-icon.edit');
+    var deleteForms = document.querySelectorAll('.delete-form');
+
+    editButtons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var tr = btn.closest('tr');
+            if (!tr) return;
+            entryIdInput.value = tr.dataset.id || '';
+            amountInput.value = tr.dataset.amount || '';
+            commentInput.value = tr.dataset.comment || '';
+            amountInput.focus();
+        });
+    });
+
+    rows.forEach(function(tr) {
+        tr.addEventListener('dblclick', function() {
+            var btn = tr.querySelector('.btn-icon.edit');
+            if (btn) btn.click();
+        });
+    });
+
+    deleteForms.forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            if (!confirm('Удалить запись?')) {
+                e.preventDefault();
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}
