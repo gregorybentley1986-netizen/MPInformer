@@ -195,7 +195,7 @@ sudo systemctl reload nginx
 
 ```powershell
 # если ключа ещё нет:
-ssh-keygen -t ed25519 -C "github-pc" -f $env:USERPROFILE\.ssh\id_ed25519_github
+ 
 Get-Content $env:USERPROFILE\.ssh\id_ed25519_github.pub
 ```
 
@@ -423,6 +423,82 @@ cd /opt/MPInformer && git status && git remote -v && git log -1 --oneline
 
 Убедитесь, что `WorkingDirectory` в unit-файле `mpinformer` совпадает с этим путём.
 
+## 12. Рабочий цикл: обновление кода с ПК на VPS
+
+После настройки ключей (раздел 11.0) обычный выпуск выглядит так.
+
+### 12.1 На ПК (разработка)
+
+```powershell
+cd "C:\Users\esox-\Documents\Cursor Project\MPInformer"
+git status
+git add -A
+git commit -m "кратко: что изменили"
+git push origin main
+```
+
+Убедитесь, что в коммит не попали секреты (`.env` в `.gitignore`).
+
+### 12.2 На VPS (вручную)
+
+Подставьте свой путь, если не `/opt/MPInformer`. Если для GitHub на сервере не настроен `~/.ssh/config`, используйте переменную `GIT_SSH_COMMAND` (путь к deploy key).
+
+```bash
+export GIT_SSH_COMMAND='ssh -i /root/.ssh/mpinformer_github_read -o IdentitiesOnly=yes'
+cd /opt/MPInformer
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+unset GIT_SSH_COMMAND
+```
+
+Зависимости (если менялся `requirements.txt`):
+
+```bash
+cd /opt/MPInformer
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+```
+
+Перезапуск приложения:
+
+```bash
+sudo systemctl restart mpinformer
+sudo systemctl status mpinformer --no-pager -l
+```
+
+Проверка с сервера (порт возьмите из unit-файла `mpinformer` или из `.env`; в логах выше был пример **8000**):
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/health
+```
+
+В **nginx** в `proxy_pass` должен быть тот же порт, на котором слушает uvicorn.
+
+### 12.3 С ПК одной командой (Windows)
+
+Скрипт [scripts/push-and-deploy.bat](./scripts/push-and-deploy.bat): пуш на GitHub + по SSH синхронизация репозитория на VPS + перезапуск `mpinformer` + ожидание `/health`.
+
+Перед первым запуском задайте хост (пример):
+
+```bat
+set MPINFORMER_SSH_TARGET=root@ВАШ_IP
+```
+
+Запуск из корня репозитория на ПК:
+
+```bat
+scripts\push-and-deploy.bat
+```
+
+При другом пути на сервере: `set DEPLOY_REMOTE_PATH=...`, при другом сервисе/health: `DEPLOY_SERVICE`, `DEPLOY_HEALTH_URL` (см. комментарии в начале `.bat`).
+
+### 12.4 После первого `git clone` на сервере
+
+- Файл **`.env`** на VPS не приезжает из Git — держите копию на сервере и при необходимости восстанавливайте после переустановки каталога.
+- Каталог **`uploads`**: в актуальных версиях приложение создаёт его при старте; если сервис падает с `Directory '.../uploads' does not exist`, выполните один раз: `mkdir -p /opt/MPInformer/uploads` и перезапустите сервис (или обновите код с ПК и снова `git pull`).
+
 ## Устранение неполадок
 
 **Ошибка в journalctl:** `Error loading ASGI app. Attribute "app" not found in module "app.main"`
@@ -439,3 +515,9 @@ cd /opt/MPInformer
 **Если команда выводит OK, а сервис всё равно падает с "app not found":** в unit-файле укажите полный путь к `main.py` в `ExecStart`:
 `ExecStart=/opt/MPInformer/venv/bin/python /opt/MPInformer/main.py`
 и проверьте, что задано `WorkingDirectory=/opt/MPInformer`. Затем выполните `sudo systemctl daemon-reload` и `sudo systemctl restart mpinformer`.
+
+**`RuntimeError: Directory '.../uploads' does not exist`:** на сервере `mkdir -p /opt/MPInformer/uploads` (или ваш корень проекта) и `sudo systemctl restart mpinformer`; в новых версиях кода каталог создаётся при старте (см. раздел 12.4).
+
+**Пустой репозиторий на GitHub после `git clone`:** с ПК нужен хотя бы один `git commit` и `git push origin main`, иначе на VPS не будет ветки `origin/main` и файлов.
+
+**`ssh-keygen ... option requires an argument -- N`:** для ключа без пароля указывайте `-N ""` (пустая строка в кавычках).

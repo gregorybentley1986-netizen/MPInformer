@@ -28,6 +28,7 @@ from app.site.routes import router as site_router
 _project_root = Path(__file__).resolve().parent.parent
 _uploads_dir = _project_root / (getattr(settings, "uploads_dir", "uploads") or "uploads")
 _static_dir = _project_root / "static"
+_uploads_dir.mkdir(parents=True, exist_ok=True)
 
 # Настройка логирования (в терминал — stderr, чтобы видеть логи при запуске python main.py)
 logger.remove()
