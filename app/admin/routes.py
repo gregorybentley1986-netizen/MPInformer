@@ -112,6 +112,14 @@ def _parse_finance_tag_ids_from_form(form) -> list[int]:
     return out
 
 
+def _form_checkbox_bool(form, key: str) -> bool:
+    v = form.get(key)
+    if v is None:
+        return False
+    s = str(v).strip().lower()
+    return s in ("on", "true", "1", "yes")
+
+
 async def _sync_finance_entry_tags(db: AsyncSession, entry_id: int, tag_ids: list[int]) -> None:
     """Перезаписать связи операции с тегами (явный SQL — стабильнее async/SQLite, чем row.tags = …)."""
     await db.execute(delete(finance_entry_tags).where(finance_entry_tags.c.finance_entry_id == entry_id))
@@ -3605,17 +3613,61 @@ async def admin_finance(
     db: AsyncSession = Depends(get_db),
     username: str = Depends(verify_admin),
 ):
-    """Раздел «Финансы»: операции и справочники направлений."""
+    """Раздел «Финансы»: операции, справочники и аналитика."""
     tab = (request.query_params.get("tab") or "income-expense").strip()
-    if tab not in ("income-expense", "counterparties"):
+    if tab not in ("income-expense", "counterparties", "analytics"):
         tab = "income-expense"
+    now_utc = datetime.now(timezone.utc)
+
+    income_dirs_res = await db.execute(
+        select(FinanceCounterparty)
+        .where(FinanceCounterparty.operation_type == "income")
+        .order_by(FinanceCounterparty.sort_order.asc(), FinanceCounterparty.id.asc())
+    )
+    expense_dirs_res = await db.execute(
+        select(FinanceCounterparty)
+        .where(FinanceCounterparty.operation_type == "expense")
+        .order_by(FinanceCounterparty.sort_order.asc(), FinanceCounterparty.id.asc())
+    )
+    finance_tags_res = await db.execute(
+        select(FinanceTag).order_by(FinanceTag.sort_order.asc(), FinanceTag.id.asc())
+    )
+    income_counterparties = income_dirs_res.scalars().all()
+    expense_counterparties = expense_dirs_res.scalars().all()
+    finance_tags = finance_tags_res.scalars().all()
+
+    if tab == "analytics":
+        today = now_utc.date()
+        return templates.TemplateResponse(
+            "admin/finance.html",
+            {
+                "request": request,
+                "tab": "analytics",
+                "entries": [],
+                "period": "all",
+                "period_label": "",
+                "start_date": "",
+                "end_date": "",
+                "income_total": 0.0,
+                "expense_total": 0.0,
+                "saldo_total": 0.0,
+                "income_counterparties": income_counterparties,
+                "expense_counterparties": expense_counterparties,
+                "selected_operation_filters": ["income", "expense"],
+                "selected_counterparty_filters": [],
+                "default_operation_date": today.isoformat(),
+                "finance_tags": finance_tags,
+                "default_from": date(today.year, 1, 1).isoformat(),
+                "default_to": today.isoformat(),
+            },
+        )
+
     period = (request.query_params.get("period") or "all").strip().lower()
     operation_filter_raw = request.query_params.getlist("operation_filter")
     counterparty_filter_raw = request.query_params.getlist("counterparty_filter")
     start_date_raw = (request.query_params.get("start_date") or "").strip()
     end_date_raw = (request.query_params.get("end_date") or "").strip()
 
-    now_utc = datetime.now(timezone.utc)
     start_dt = None
     end_dt = None
     start_date_value = ""
@@ -3667,22 +3719,6 @@ async def admin_finance(
         start_dt = None
         end_dt = None
 
-    income_dirs_res = await db.execute(
-        select(FinanceCounterparty)
-        .where(FinanceCounterparty.operation_type == "income")
-        .order_by(FinanceCounterparty.sort_order.asc(), FinanceCounterparty.id.asc())
-    )
-    expense_dirs_res = await db.execute(
-        select(FinanceCounterparty)
-        .where(FinanceCounterparty.operation_type == "expense")
-        .order_by(FinanceCounterparty.sort_order.asc(), FinanceCounterparty.id.asc())
-    )
-    income_counterparties = income_dirs_res.scalars().all()
-    expense_counterparties = expense_dirs_res.scalars().all()
-    finance_tags_res = await db.execute(
-        select(FinanceTag).order_by(FinanceTag.sort_order.asc(), FinanceTag.id.asc())
-    )
-    finance_tags = finance_tags_res.scalars().all()
     selected_operation_filters = []
     for value in operation_filter_raw:
         op_value = (value or "").strip().lower()
@@ -3742,6 +3778,8 @@ async def admin_finance(
             "selected_counterparty_filters": selected_counterparty_filters,
             "default_operation_date": now_utc.date().isoformat(),
             "finance_tags": finance_tags,
+            "default_from": date(now_utc.date().year, 1, 1).isoformat(),
+            "default_to": now_utc.date().isoformat(),
         },
     )
 
@@ -3797,9 +3835,15 @@ async def admin_finance_entry_save(
 
     if tag_ids:
         tr = await db.execute(select(FinanceTag).where(FinanceTag.id.in_(tag_ids)))
-        found_ids = {t.id for t in tr.scalars().all()}
+        tag_rows = list(tr.scalars().all())
+        found_ids = {t.id for t in tag_rows}
         if found_ids != set(tag_ids):
             return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_tag", status_code=303)
+        for t in tag_rows:
+            if op == "income" and not t.applies_to_income:
+                return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_tag_op", status_code=303)
+            if op == "expense" and not t.applies_to_expense:
+                return RedirectResponse(url="/admin/finance?tab=income-expense&error=invalid_tag_op", status_code=303)
 
     success_kind = "created"
     if entry_id:
@@ -3858,38 +3902,10 @@ async def admin_finance_entry_delete(
     return RedirectResponse(url="/admin/finance?tab=income-expense&success=deleted", status_code=303)
 
 
-@router.get("/finance/analytics", response_class=HTMLResponse)
-async def admin_finance_analytics(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    username: str = Depends(verify_admin),
-):
-    """Страница BI-диаграмм по финансам (Apache ECharts на клиенте)."""
-    today = datetime.now(timezone.utc).date()
-    income_dirs_res = await db.execute(
-        select(FinanceCounterparty)
-        .where(FinanceCounterparty.operation_type == "income")
-        .order_by(FinanceCounterparty.sort_order.asc(), FinanceCounterparty.id.asc())
-    )
-    expense_dirs_res = await db.execute(
-        select(FinanceCounterparty)
-        .where(FinanceCounterparty.operation_type == "expense")
-        .order_by(FinanceCounterparty.sort_order.asc(), FinanceCounterparty.id.asc())
-    )
-    finance_tags_res = await db.execute(
-        select(FinanceTag).order_by(FinanceTag.sort_order.asc(), FinanceTag.id.asc())
-    )
-    return templates.TemplateResponse(
-        "admin/finance_analytics.html",
-        {
-            "request": request,
-            "default_from": date(today.year, 1, 1).isoformat(),
-            "default_to": today.isoformat(),
-            "income_counterparties": income_dirs_res.scalars().all(),
-            "expense_counterparties": expense_dirs_res.scalars().all(),
-            "finance_tags": finance_tags_res.scalars().all(),
-        },
-    )
+@router.get("/finance/analytics")
+async def admin_finance_analytics_redirect(username: str = Depends(verify_admin)):
+    """Старая ссылка: аналитика теперь во вкладке «Финансы»."""
+    return RedirectResponse(url="/admin/finance?tab=analytics", status_code=303)
 
 
 @router.get("/api/finance/charts/monthly-line")
@@ -4025,21 +4041,26 @@ async def admin_finance_counterparty_delete(
 
 @router.post("/finance/tag/save")
 async def admin_finance_tag_save(
-    name: str = Form(...),
-    color_hex: str = Form(""),
-    tag_id: str = Form(""),
+    request: Request,
     db: AsyncSession = Depends(get_db),
     username: str = Depends(verify_admin),
 ):
     """Добавить или изменить тег (справочник)."""
-    value = (name or "").strip()
+    form = await request.form()
+    apply_income = _form_checkbox_bool(form, "apply_income")
+    apply_expense = _form_checkbox_bool(form, "apply_expense")
+    value = (str(form.get("name") or "")).strip()
+    color_hex = str(form.get("color_hex") or "")
+    tag_id = str(form.get("tag_id") or "")
     if not value:
         return RedirectResponse(url="/admin/finance?tab=counterparties&error=empty_tag_name", status_code=303)
     if len(value) > 128:
         value = value[:128]
     hex_norm = _normalize_finance_tag_hex(color_hex)
+    if not apply_income and not apply_expense:
+        return RedirectResponse(url="/admin/finance?tab=counterparties&error=tag_no_operation_type", status_code=303)
 
-    if (tag_id or "").strip():
+    if tag_id.strip():
         try:
             tid = int(tag_id)
         except (TypeError, ValueError):
@@ -4049,6 +4070,8 @@ async def admin_finance_tag_save(
             return RedirectResponse(url="/admin/finance?tab=counterparties&error=notfound", status_code=303)
         row.name = value
         row.hex = hex_norm
+        row.applies_to_income = apply_income
+        row.applies_to_expense = apply_expense
         try:
             await db.commit()
         except IntegrityError:
@@ -4058,7 +4081,15 @@ async def admin_finance_tag_save(
 
     max_order_q = await db.execute(select(func.coalesce(func.max(FinanceTag.sort_order), 0)))
     max_order = int(max_order_q.scalar_one() or 0)
-    db.add(FinanceTag(name=value, hex=hex_norm, sort_order=max_order + 1))
+    db.add(
+        FinanceTag(
+            name=value,
+            hex=hex_norm,
+            sort_order=max_order + 1,
+            applies_to_income=apply_income,
+            applies_to_expense=apply_expense,
+        )
+    )
     try:
         await db.commit()
     except IntegrityError:

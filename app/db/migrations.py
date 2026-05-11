@@ -481,7 +481,9 @@ def ensure_finance_schema(conn):
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             name VARCHAR(128) NOT NULL,
             hex VARCHAR(7) NOT NULL DEFAULT '#607d8b',
-            sort_order INTEGER NOT NULL DEFAULT 0
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            applies_to_income INTEGER NOT NULL DEFAULT 1,
+            applies_to_expense INTEGER NOT NULL DEFAULT 1
         )
     """))
     try:
@@ -503,3 +505,15 @@ def ensure_finance_schema(conn):
             PRIMARY KEY (finance_entry_id, finance_tag_id)
         )
     """))
+    try:
+        conn.execute(text(
+            "ALTER TABLE finance_tags ADD COLUMN applies_to_income INTEGER NOT NULL DEFAULT 1"
+        ))
+    except Exception:
+        pass
+    try:
+        conn.execute(text(
+            "ALTER TABLE finance_tags ADD COLUMN applies_to_expense INTEGER NOT NULL DEFAULT 1"
+        ))
+    except Exception:
+        pass

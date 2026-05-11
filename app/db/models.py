@@ -1,7 +1,7 @@
 """
 Модели базы данных
 """
-from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, UniqueConstraint, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, UniqueConstraint, ForeignKey, Table, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -499,6 +499,8 @@ class FinanceTag(Base):
     name = Column(String(128), nullable=False)
     hex = Column(String(7), nullable=False, default="#607d8b")
     sort_order = Column(Integer, nullable=False, default=0, index=True)
+    applies_to_income = Column(Boolean, nullable=False, default=True)
+    applies_to_expense = Column(Boolean, nullable=False, default=True)
 
     entries = relationship(
         "FinanceEntry",

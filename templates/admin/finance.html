@@ -516,6 +516,126 @@
         border-radius: 8px;
         cursor: pointer;
     }
+    .finance-tags-ref-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px 14px;
+        margin-top: 4px;
+    }
+    .finance-tag-ref-card {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+    }
+    .finance-tag-ref-card form.tag-save-form {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+    }
+    .finance-tag-ref-card .tag-name-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .finance-tag-ref-card .tag-name-row input[type="text"] {
+        flex: 1;
+        min-width: 120px;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+    .finance-tag-color-swatch {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: none;
+        padding: 0;
+        overflow: hidden;
+        cursor: pointer;
+        flex-shrink: 0;
+        box-shadow: none;
+        outline: none;
+        background: #607d8b;
+    }
+    .finance-tag-color-swatch:focus-visible {
+        box-shadow: 0 0 0 2px var(--accent);
+    }
+    .finance-tag-color-input {
+        opacity: 0;
+        width: 32px;
+        height: 32px;
+        margin: -2px;
+        padding: 0;
+        border: none;
+        cursor: pointer;
+    }
+    .finance-tag-op-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 16px;
+        font-size: 0.84rem;
+        color: #444;
+    }
+    .finance-tag-op-row label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        user-select: none;
+    }
+    .finance-tag-ref-card .tag-card-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .finance-tags-ref-add .finance-tag-color-swatch { align-self: flex-end; }
+    .finance-tags-ref-add .tag-op-row-add { margin-bottom: 0; }
+    .bi-intro { font-size: 0.92rem; color: #666; margin-bottom: 18px; max-width: 720px; }
+    .chart-card { margin-bottom: 22px; }
+    .chart-card h2 { font-family: 'Russo One', sans-serif; font-size: 1.05rem; margin-bottom: 10px; }
+    .chart-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 14px;
+        align-items: flex-end;
+        margin-bottom: 12px;
+        padding: 12px;
+        background: #fafafa;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+    .chart-filters label { font-size: 0.8rem; color: #555; display: flex; flex-direction: column; gap: 4px; }
+    .chart-filters input[type="date"] {
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        min-width: 150px;
+    }
+    .chart-filters select[multiple] {
+        min-width: 200px;
+        max-width: 280px;
+        min-height: 88px;
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 0.85rem;
+    }
+    .chart-wrap { width: 100%; height: 420px; min-height: 320px; }
+    @media (max-width: 960px) {
+        .finance-tags-ref-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 560px) {
+        .finance-tags-ref-grid { grid-template-columns: 1fr; }
+    }
     @media (max-width: 940px) {
         .split-forms, .counterparty-layout { grid-template-columns: 1fr; }
     }
@@ -527,6 +647,7 @@
 <div class="tabs">
     <a href="/admin/finance?tab=income-expense" class="tab-btn {% if tab == 'income-expense' %}active{% endif %}">Доходы-Расходы</a>
     <a href="/admin/finance?tab=counterparties" class="tab-btn {% if tab == 'counterparties' %}active{% endif %}">Справочники</a>
+    <a href="/admin/finance?tab=analytics" class="tab-btn {% if tab == 'analytics' %}active{% endif %}">Аналитика</a>
 </div>
 
 {% if request.query_params.get("success") == "created" %}
@@ -556,6 +677,10 @@
 <div class="alert alert-error">Введите название тега.</div>
 {% elif request.query_params.get("error") == "duplicate_tag_name" %}
 <div class="alert alert-error">Тег с таким названием уже есть.</div>
+{% elif request.query_params.get("error") == "tag_no_operation_type" %}
+<div class="alert alert-error">Отметьте хотя бы один тип операции для тега: Доход или Расход.</div>
+{% elif request.query_params.get("error") == "invalid_tag_op" %}
+<div class="alert alert-error">Выбранный тег не предназначен для этого типа операции.</div>
 {% elif request.query_params.get("error") == "save_failed" %}
 <div class="alert alert-error">Не удалось сохранить операцию (БД или связь тегов). Перезапустите приложение после деплоя и проверьте логи сервера.</div>
 {% elif request.query_params.get("error") == "empty_name" %}
@@ -598,10 +723,12 @@
                 <label>Теги</label>
                 <div class="finance-tags-checkboxes">
                     {% for tag in finance_tags %}
+                    {% if tag.applies_to_expense %}
                     <label class="finance-tag-option">
                         <input type="checkbox" name="tag_ids" value="{{ tag.id }}">
                         <span class="finance-tag-pill" style="background: {{ tag.hex }}">{{ tag.name }}</span>
                     </label>
+                    {% endif %}
                     {% endfor %}
                 </div>
             </div>
@@ -639,10 +766,12 @@
                 <label>Теги</label>
                 <div class="finance-tags-checkboxes">
                     {% for tag in finance_tags %}
+                    {% if tag.applies_to_income %}
                     <label class="finance-tag-option">
                         <input type="checkbox" name="tag_ids" value="{{ tag.id }}">
                         <span class="finance-tag-pill" style="background: {{ tag.hex }}">{{ tag.name }}</span>
                     </label>
+                    {% endif %}
                     {% endfor %}
                 </div>
             </div>
@@ -877,31 +1006,238 @@
 </div>
 <div class="card" style="margin-top:14px;">
     <h3 style="font-family:'Russo One',sans-serif;font-size:1rem;margin-bottom:12px;">Теги операций</h3>
-    <p style="font-size:0.86rem;color:#666;margin:0 0 12px;">Теги выбираются при добавлении дохода/расхода и отображаются в журнале.</p>
+    <p style="font-size:0.86rem;color:#666;margin:0 0 12px;">Отметьте, к каким операциям относится тег. Теги выбираются при добавлении дохода/расхода и отображаются в журнале.</p>
     <form method="POST" action="/admin/finance/tag/save" class="finance-tags-ref-add">
         <input type="text" name="name" placeholder="Название тега" required maxlength="128" autocomplete="off">
-        <input type="color" name="color_hex" value="#607d8b" title="Цвет тега">
+        <label class="finance-tag-color-swatch" title="Цвет тега" style="background:#607d8b;">
+            <input type="color" name="color_hex" class="finance-tag-color-input" value="#607d8b">
+        </label>
+        <div class="finance-tag-op-row tag-op-row-add">
+            <label><input type="checkbox" name="apply_income" checked> Доход</label>
+            <label><input type="checkbox" name="apply_expense" checked> Расход</label>
+        </div>
         <button type="submit" class="btn btn-op btn-income">Добавить тег</button>
     </form>
-    {% for item in finance_tags %}
-    <div class="finance-tag-ref-row">
-        <form method="POST" action="/admin/finance/tag/save" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1;min-width:200px;">
-            <input type="hidden" name="tag_id" value="{{ item.id }}">
-            <input type="color" name="color_hex" value="{{ item.hex }}" title="Цвет">
-            <input type="text" name="name" value="{{ item.name }}" required maxlength="128" autocomplete="off">
-            <button type="submit" class="btn">Сохранить</button>
-        </form>
-        <form method="POST" action="/admin/finance/tag/delete">
-            <input type="hidden" name="tag_id" value="{{ item.id }}">
-            <button type="submit" class="btn btn-op btn-expense">Удалить</button>
-        </form>
+    {% if finance_tags %}
+    <div class="finance-tags-ref-grid">
+        {% for item in finance_tags %}
+        <div class="finance-tag-ref-card">
+            <form method="POST" action="/admin/finance/tag/save" class="tag-save-form">
+                <input type="hidden" name="tag_id" value="{{ item.id }}">
+                <div class="tag-name-row">
+                    <label class="finance-tag-color-swatch" title="Цвет" style="background: {{ item.hex }};">
+                        <input type="color" name="color_hex" class="finance-tag-color-input" value="{{ item.hex }}">
+                    </label>
+                    <input type="text" name="name" value="{{ item.name }}" required maxlength="128" autocomplete="off">
+                </div>
+                <div class="finance-tag-op-row">
+                    <label><input type="checkbox" name="apply_income" {% if item.applies_to_income %}checked{% endif %}> Доход</label>
+                    <label><input type="checkbox" name="apply_expense" {% if item.applies_to_expense %}checked{% endif %}> Расход</label>
+                </div>
+                <div class="tag-card-actions">
+                    <button type="submit" class="btn">Сохранить</button>
+                </div>
+            </form>
+            <form method="POST" action="/admin/finance/tag/delete">
+                <input type="hidden" name="tag_id" value="{{ item.id }}">
+                <button type="submit" class="btn btn-op btn-expense">Удалить</button>
+            </form>
+        </div>
+        {% endfor %}
     </div>
     {% else %}
-    <p style="color:#666;font-size:0.9rem;margin:0;">Тегов пока нет — добавьте первый выше.</p>
-    {% endfor %}
+    <p style="color:#666;font-size:0.9rem;margin:12px 0 0;">Тегов пока нет — добавьте первый выше.</p>
+    {% endif %}
 </div>
 {% endif %}
 
+{% if tab == "analytics" %}
+<p class="bi-intro">
+    Диаграммы строятся в браузере с помощью <strong>Apache ECharts</strong> (данные с сервера в JSON).
+    Для каждого графика задайте свой период, категории (Откуда / На что) и теги; пустой мультивыбор = без ограничения.
+</p>
+
+<div class="card chart-card">
+    <h2>Доходы и расходы по месяцам</h2>
+    <div class="chart-filters" id="line-filters">
+        <label>С даты
+            <input type="date" id="line-from" value="{{ default_from }}">
+        </label>
+        <label>По дату
+            <input type="date" id="line-to" value="{{ default_to }}">
+        </label>
+        <label>Категории (Откуда / На что)
+            <select id="line-cp" multiple aria-label="Категории для линейного графика">
+                {% if expense_counterparties %}
+                <optgroup label="На что (расход)">
+                    {% for item in expense_counterparties %}
+                    <option value="{{ item.id }}">{{ item.name }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endif %}
+                {% if income_counterparties %}
+                <optgroup label="Откуда (доход)">
+                    {% for item in income_counterparties %}
+                    <option value="{{ item.id }}">{{ item.name }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endif %}
+            </select>
+        </label>
+        <label>Теги
+            <select id="line-tags" multiple aria-label="Теги для линейного графика">
+                {% for tag in finance_tags %}
+                <option value="{{ tag.id }}">{{ tag.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="button" class="btn" id="line-apply">Обновить график</button>
+    </div>
+    <div class="chart-wrap" id="chart-line"></div>
+</div>
+
+<div class="card chart-card">
+    <h2>Расходы по категориям</h2>
+    <div class="chart-filters" id="pie-filters">
+        <label>С даты
+            <input type="date" id="pie-from" value="{{ default_from }}">
+        </label>
+        <label>По дату
+            <input type="date" id="pie-to" value="{{ default_to }}">
+        </label>
+        <label>Категории (На что)
+            <select id="pie-cp" multiple aria-label="Категории для круговой диаграммы">
+                {% for item in expense_counterparties %}
+                <option value="{{ item.id }}">{{ item.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Теги
+            <select id="pie-tags" multiple aria-label="Теги для круговой диаграммы">
+                {% for tag in finance_tags %}
+                <option value="{{ tag.id }}">{{ tag.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="button" class="btn" id="pie-apply">Обновить график</button>
+    </div>
+    <div class="chart-wrap" id="chart-pie"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js" crossorigin="anonymous"></script>
+<script>
+(function() {
+    function selectedValues(sel) {
+        if (!sel) return [];
+        return Array.prototype.map.call(sel.selectedOptions || [], function(o) { return o.value; });
+    }
+    function buildQuery(fromEl, toEl, cpEl, tagEl) {
+        var p = new URLSearchParams();
+        p.set('from_date', fromEl.value || '');
+        p.set('to_date', toEl.value || '');
+        selectedValues(cpEl).forEach(function(v) { p.append('counterparty_id', v); });
+        selectedValues(tagEl).forEach(function(v) { p.append('tag_id', v); });
+        return p.toString();
+    }
+    var lineEl = document.getElementById('chart-line');
+    var pieEl = document.getElementById('chart-pie');
+    if (typeof echarts === 'undefined' || !lineEl || !pieEl) return;
+
+    var chartLine = echarts.init(lineEl);
+    var chartPie = echarts.init(pieEl);
+
+    function resizeCharts() {
+        chartLine.resize();
+        chartPie.resize();
+    }
+    window.addEventListener('resize', resizeCharts);
+
+    function loadLine() {
+        var q = buildQuery(
+            document.getElementById('line-from'),
+            document.getElementById('line-to'),
+            document.getElementById('line-cp'),
+            document.getElementById('line-tags')
+        );
+        fetch('/admin/api/finance/charts/monthly-line?' + q, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                chartLine.setOption({
+                    color: ['#2e7d32', '#c62828'],
+                    tooltip: { trigger: 'axis' },
+                    legend: { data: ['Доходы', 'Расходы'], bottom: 0 },
+                    grid: { left: '3%', right: '4%', bottom: '12%', top: '8%', containLabel: true },
+                    xAxis: { type: 'category', boundaryGap: false, data: data.month_labels || [] },
+                    yAxis: { type: 'value', scale: true, axisLabel: { formatter: function(v) { return v.toLocaleString('ru-RU'); } } },
+                    series: [
+                        {
+                            name: 'Доходы',
+                            type: 'line',
+                            smooth: false,
+                            symbol: 'circle',
+                            symbolSize: 9,
+                            lineStyle: { width: 2 },
+                            data: data.income || []
+                        },
+                        {
+                            name: 'Расходы',
+                            type: 'line',
+                            smooth: false,
+                            symbol: 'circle',
+                            symbolSize: 9,
+                            lineStyle: { width: 2 },
+                            data: data.expense || []
+                        }
+                    ]
+                }, true);
+            })
+            .catch(function() {
+                chartLine.setOption({ title: { text: 'Не удалось загрузить данные', left: 'center', top: 'middle', textStyle: { fontSize: 14, color: '#999' } } }, true);
+            });
+    }
+
+    function loadPie() {
+        var q = buildQuery(
+            document.getElementById('pie-from'),
+            document.getElementById('pie-to'),
+            document.getElementById('pie-cp'),
+            document.getElementById('pie-tags')
+        );
+        fetch('/admin/api/finance/charts/expenses-pie?' + q, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                var rows = res.data || [];
+                chartPie.setOption({
+                    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                    legend: { type: 'scroll', orient: 'vertical', right: 8, top: 'middle', textStyle: { fontSize: 11 } },
+                    series: [{
+                        name: 'Расходы',
+                        type: 'pie',
+                        radius: ['38%', '68%'],
+                        center: ['40%', '50%'],
+                        avoidLabelOverlap: true,
+                        itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+                        label: { formatter: '{b}\n{d}%' },
+                        data: rows
+                    }]
+                }, true);
+            })
+            .catch(function() {
+                chartPie.setOption({ title: { text: 'Не удалось загрузить данные', left: 'center', top: 'middle', textStyle: { fontSize: 14, color: '#999' } } }, true);
+            });
+    }
+
+    document.getElementById('line-apply').addEventListener('click', loadLine);
+    document.getElementById('pie-apply').addEventListener('click', loadPie);
+
+    loadLine();
+    loadPie();
+    setTimeout(resizeCharts, 100);
+})();
+</script>
+{% endif %}
+
+{% if tab == 'income-expense' %}
 <div class="edit-modal" id="edit-modal" aria-hidden="true">
     <div class="edit-dialog">
         <h3>Режим редактирования</h3>
@@ -940,7 +1276,7 @@
                 <label>Теги</label>
                 <div class="finance-tags-checkboxes">
                     {% for tag in finance_tags %}
-                    <label class="finance-tag-option">
+                    <label class="finance-tag-option edit-tag-wrap {% if tag.applies_to_income %}tag-applies-income{% endif %} {% if tag.applies_to_expense %}tag-applies-expense{% endif %}">
                         <input type="checkbox" class="edit-tag-cb" name="tag_ids" value="{{ tag.id }}">
                         <span class="finance-tag-pill" style="background: {{ tag.hex }}">{{ tag.name }}</span>
                     </label>
@@ -1033,6 +1369,12 @@
             editCounterpartyExpense.value = counterpartyId || '';
             editCounterpartyIncome.value = '';
         }
+        document.querySelectorAll('#edit-form .edit-tag-wrap').forEach(function(lab) {
+            var show = isIncome ? lab.classList.contains('tag-applies-income') : lab.classList.contains('tag-applies-expense');
+            lab.classList.toggle('hide', !show);
+            var cb = lab.querySelector('.edit-tag-cb');
+            if (cb && !show) cb.checked = false;
+        });
     }
 
     editButtons.forEach(function(btn) {
@@ -1170,6 +1512,13 @@
         });
     });
 
+    document.querySelectorAll('.finance-tag-color-input').forEach(function(inp) {
+        inp.addEventListener('input', function() {
+            var sw = inp.closest('.finance-tag-color-swatch');
+            if (sw) sw.style.background = inp.value;
+        });
+    });
+
     tableFilterInputs.forEach(function(input) {
         input.addEventListener('change', function() {
             if (!tableFilterMeta) return;
@@ -1189,4 +1538,5 @@
     });
 })();
 </script>
+{% endif %}
 {% endblock %}
