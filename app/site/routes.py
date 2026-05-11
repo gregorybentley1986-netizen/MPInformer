@@ -1990,12 +1990,14 @@ def _supply_queue_shipment_date_range_msk(
 ) -> tuple[date, date]:
     """
     Границы фильтра по дате отгрузки (таймслот, дата в МСК).
-    По умолчанию: сегодня ± 30 дней.
+    По умолчанию: три календарных месяца (с 1-го числа месяца, который на два месяца раньше текущего)
+    по сегодня + 30 дней вперёд (запланированные отгрузки).
     Свой диапазон применяется только если в запросе заданы обе даты (иначе — снова дефолт).
     Так не «липнет» одна граница из старого URL/bookmark к новым дефолтам.
     """
     today = datetime.now(MSK).date()
-    default_from = today - timedelta(days=30)
+    month_start = today.replace(day=1)
+    default_from = month_start - relativedelta(months=2)
     default_to = today + timedelta(days=30)
 
     has_from = bool(date_from_q and str(date_from_q).strip())
