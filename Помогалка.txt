@@ -2,10 +2,6 @@ cd "C:\Users\esox-\Documents\Cursor Project\MPInformer"
 .\venv\Scripts\python.exe main.py
 
 
-
-
-
-
 ssh root@2.56.240.226
 vlgwRI9j1%*o
    
@@ -26,3 +22,7 @@ sudo journalctl -u mpinformer -f -n 200 --no-pager | grep -E "supply_queue:|POST
 
 Точка отгрузки: 1020005000295764  (МОНЧЕГОРСК_34)
 Склад продавца (МОЙ): 1020005008005660
+
+git@github.com:gregorybentley1986-netizen/MPInformer.git
+
+git remote set-url origin git@github.com:gregorybentley1986-netizen/MPInformer.git
