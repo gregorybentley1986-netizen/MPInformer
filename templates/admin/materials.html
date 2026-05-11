@@ -1,0 +1,219 @@
+{% extends "site/base.html" %}
+{% block title %}Справочник материалов{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}
+<a href="/" class="btn-header">Сайт</a>
+{% endblock %}
+{% block sidebar %}
+<a href="/admin" class="btn">Главная</a>
+<span class="sidebar-section">Справочники</span>
+<a href="/admin/reference/materials" class="btn">Материалы</a>
+<a href="/admin/users" class="btn">Пользователи</a>
+<a href="/admin/settings" class="btn">Настройки</a>
+<a href="/admin/logs" class="btn">Логи</a>
+<a href="/admin/logout" class="btn">Выход</a>
+{% endblock %}
+{% block extra_css %}
+<style>
+    .alert { padding: 16px; margin-bottom: 20px; border: 1px solid transparent; }
+    .alert-success { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+    .alert-error { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+    .ref-layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start; }
+    @media (max-width: 900px) { .ref-layout { grid-template-columns: 1fr; } }
+    .ref-form { background: #f9f9f9; border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+    .ref-form .form-group { margin-bottom: 16px; }
+    .ref-form label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
+    .ref-form input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px; box-sizing: border-box; }
+    .ref-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .ref-buttons .btn { font-size: 0.85rem; }
+    .ref-buttons .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ref-table-wrap { overflow-x: auto; }
+    .ref-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .ref-table th, .ref-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    .ref-table th { font-family: 'Russo One', sans-serif; background: #f0f0f0; }
+    .ref-table tbody tr { cursor: pointer; }
+    .ref-table tbody tr:hover { background: #f0f0f0; }
+    .ref-table tbody tr.selected { background: #e0e8ff; }
+    .ref-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .ref-dialog-overlay { position: fixed; left: 0; top: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); z-index: 10000; display: none; align-items: center; justify-content: center; }
+    .ref-dialog-overlay.visible { display: flex; }
+    .ref-dialog { background: var(--main-bg); color: var(--main-text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); padding: 24px; max-width: 420px; width: 90%; font-family: 'Play', sans-serif; }
+    .ref-dialog-title { font-family: 'Russo One', sans-serif; font-size: 1.2rem; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid var(--accent); }
+    .ref-dialog-message { margin-bottom: 16px; font-size: 0.95rem; }
+    .ref-dialog-actions { display: flex; gap: 12px; justify-content: flex-end; }
+    .ref-dialog-actions .btn-ref-delete { background: #c62828; color: #fff; }
+    .ref-dialog-actions .btn-ref-delete:hover { background: #b71c1c; }
+</style>
+{% endblock %}
+{% block content %}
+<div id="ref-delete-confirm-dialog" class="ref-dialog-overlay" aria-hidden="true" role="dialog">
+    <div class="ref-dialog">
+        <div class="ref-dialog-title">Подтверждение</div>
+        <div class="ref-dialog-message" id="ref-delete-dialog-message"></div>
+        <div class="ref-dialog-actions">
+            <button type="button" class="btn" id="ref-delete-dialog-cancel">Отмена</button>
+            <button type="button" class="btn btn-ref-delete" id="ref-delete-dialog-confirm">Удалить</button>
+        </div>
+    </div>
+</div>
+<h1>Справочник материалов</h1>
+
+{% if request.query_params.get("success") == "created" %}
+<div class="alert alert-success">Материал создан.</div>
+{% elif request.query_params.get("success") == "updated" %}
+<div class="alert alert-success">Материал сохранён.</div>
+{% elif request.query_params.get("success") == "deleted" %}
+<div class="alert alert-success">Материал удалён.</div>
+{% endif %}
+{% if request.query_params.get("error") == "empty" %}
+<div class="alert alert-error">Заполните наименование.</div>
+{% elif request.query_params.get("error") == "exists" %}
+<div class="alert alert-error">Материал с такими наименованием, цветом и производителем уже есть.</div>
+{% elif request.query_params.get("error") == "notfound" %}
+<div class="alert alert-error">Материал не найден.</div>
+{% elif request.query_params.get("error") %}
+<div class="alert alert-error">Ошибка операции.</div>
+{% endif %}
+
+<div class="ref-layout">
+    <div class="ref-form">
+        <form method="POST" action="/admin/reference/materials/save" id="material-form">
+            <input type="hidden" name="material_id" id="material_id" value="">
+            <div class="form-group">
+                <label for="name">Наименование материала</label>
+                <input type="text" id="name" name="name" value="" required>
+            </div>
+            <div class="form-group">
+                <label for="color">Цвет</label>
+                <input type="text" id="color" name="color" value="">
+            </div>
+            <div class="form-group">
+                <label for="weight_grams">Вес (г)</label>
+                <input type="number" id="weight_grams" name="weight_grams" value="1000" min="1" step="1">
+            </div>
+            <div class="ref-buttons">
+                <button type="button" class="btn" id="btn-new">Создать новый</button>
+                <button type="button" class="btn" id="btn-copy" disabled>Создать копию</button>
+                <button type="submit" class="btn">Сохранить</button>
+                <button type="button" class="btn" id="btn-edit" disabled>Изменить</button>
+                <button type="button" class="btn" id="btn-delete" disabled>Удалить</button>
+            </div>
+        </form>
+        <form method="POST" action="/admin/reference/materials/delete" id="delete-form" style="display:none;">
+            <input type="hidden" name="material_id" id="delete_material_id" value="">
+        </form>
+    </div>
+    <div class="ref-table-wrap">
+        <table class="ref-table">
+            <thead>
+                <tr>
+                    <th>Наименование</th>
+                    <th>Цвет</th>
+                    <th class="num">Вес (г)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in materials %}
+                <tr data-id="{{ m.id }}" data-name="{{ m.name | e }}" data-color="{{ m.color | e }}" data-weight="{{ m.weight_grams }}">
+                    <td>{{ m.name }}</td>
+                    <td>{{ m.color }}</td>
+                    <td class="num">{{ m.weight_grams }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3">Нет материалов. Создайте первый.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+(function() {
+    var form = document.getElementById('material-form');
+    var materialId = document.getElementById('material_id');
+    var name = document.getElementById('name');
+    var color = document.getElementById('color');
+    var weightGrams = document.getElementById('weight_grams');
+    var btnNew = document.getElementById('btn-new');
+    var btnCopy = document.getElementById('btn-copy');
+    var btnEdit = document.getElementById('btn-edit');
+    var btnDelete = document.getElementById('btn-delete');
+    var deleteForm = document.getElementById('delete-form');
+    var deleteMaterialId = document.getElementById('delete_material_id');
+    var rows = document.querySelectorAll('.ref-table tbody tr[data-id]');
+    var selectedRow = null;
+
+    function clearForm(keepWeight) {
+        materialId.value = '';
+        name.value = '';
+        color.value = '';
+        weightGrams.value = keepWeight !== false ? '1000' : '';
+    }
+    function setForm(id, n, c, w) {
+        materialId.value = id || '';
+        name.value = n || '';
+        color.value = c || '';
+        weightGrams.value = w !== undefined && w !== '' ? String(w) : '1000';
+    }
+    function setButtons(hasSelection) {
+        btnCopy.disabled = !hasSelection;
+        btnEdit.disabled = !hasSelection;
+        btnDelete.disabled = !hasSelection;
+    }
+    function selectRow(tr) {
+        if (!tr || !tr.dataset.id) return;
+        rows.forEach(function(r) { r.classList.remove('selected'); });
+        tr.classList.add('selected');
+        selectedRow = tr;
+        setForm(tr.dataset.id, tr.dataset.name, tr.dataset.color, tr.dataset.weight);
+        setButtons(true);
+    }
+    btnNew.addEventListener('click', function() {
+        clearForm(true);
+        rows.forEach(function(r) { r.classList.remove('selected'); });
+        selectedRow = null;
+        setButtons(false);
+        name.focus();
+    });
+    btnCopy.addEventListener('click', function() {
+        if (!selectedRow) return;
+        setForm('', selectedRow.dataset.name, selectedRow.dataset.color, selectedRow.dataset.weight);
+        materialId.value = '';
+        name.focus();
+    });
+    btnEdit.addEventListener('click', function() {
+        if (!selectedRow) return;
+        setForm(selectedRow.dataset.id, selectedRow.dataset.name, selectedRow.dataset.color, selectedRow.dataset.manufacturer, selectedRow.dataset.weight);
+        name.focus();
+    });
+    btnDelete.addEventListener('click', function() {
+        if (!selectedRow) return;
+        var overlay = document.getElementById('ref-delete-confirm-dialog');
+        var msgEl = document.getElementById('ref-delete-dialog-message');
+        var cancelBtn = document.getElementById('ref-delete-dialog-cancel');
+        var confirmBtn = document.getElementById('ref-delete-dialog-confirm');
+        if (overlay && msgEl) {
+            msgEl.textContent = 'Удалить этот материал?';
+            overlay.classList.add('visible');
+            overlay.setAttribute('aria-hidden', 'false');
+            var hide = function() { overlay.classList.remove('visible'); overlay.setAttribute('aria-hidden', 'true'); };
+            var doSubmit = function() { deleteMaterialId.value = selectedRow.dataset.id; deleteForm.submit(); };
+            var onCancel = function() { hide(); cancelBtn.removeEventListener('click', onCancel); confirmBtn.removeEventListener('click', onConfirm); overlay.removeEventListener('click', onOverlay); };
+            var onConfirm = function() { doSubmit(); hide(); cancelBtn.removeEventListener('click', onCancel); confirmBtn.removeEventListener('click', onConfirm); overlay.removeEventListener('click', onOverlay); };
+            var onOverlay = function(e) { if (e.target === overlay) onCancel(); };
+            cancelBtn.addEventListener('click', onCancel);
+            confirmBtn.addEventListener('click', onConfirm);
+            overlay.addEventListener('click', onOverlay);
+        } else {
+            if (!confirm('Удалить этот материал?')) return;
+            deleteMaterialId.value = selectedRow.dataset.id;
+            deleteForm.submit();
+        }
+    });
+    rows.forEach(function(tr) {
+        tr.addEventListener('click', function() { selectRow(tr); });
+    });
+    setButtons(false);
+})();
+</script>
+{% endblock %}

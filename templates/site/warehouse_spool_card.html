@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+{% block title %}Катушка {{ spool.id }}{% endblock %}
+{% block extra_css %}
+<style>
+    .spool-card-page { padding: 0 0 24px 0; max-width: 560px; margin: 0 auto; }
+    .spool-card-page h1 { font-family: 'Russo One', sans-serif; font-weight: normal; margin-bottom: 20px; font-size: 1.4rem; }
+    .spool-card-back { display: inline-block; margin-bottom: 20px; color: var(--accent-dark); text-decoration: none; font-weight: 600; }
+    .spool-card-back:hover { text-decoration: underline; }
+    .spool-scan-box {
+        border: 2px dashed var(--border);
+        border-radius: 12px;
+        background: #f5f5f5;
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+    }
+    .spool-scan-box.active { border-color: var(--accent); background: #000; }
+    .spool-scan-box .scan-placeholder { padding: 24px; text-align: center; color: var(--text-muted); }
+    .spool-scan-box .scan-placeholder strong { display: block; margin-bottom: 8px; color: var(--main-text); }
+    .spool-scan-box video { width: 100%; max-height: 280px; display: none; }
+    .spool-scan-box.active video { display: block; }
+    .spool-scan-box canvas { position: absolute; left: -9999px; }
+    .spool-scan-controls {
+        display: none; margin-top: 12px; padding: 12px 16px;
+        background: #f5f5f5; border: 1px solid var(--border); border-radius: 10px;
+        flex-wrap: wrap; gap: 12px; align-items: center; font-size: 0.9rem;
+    }
+    .spool-scan-controls.visible { display: flex; }
+    .spool-scan-controls label { margin: 0; display: flex; align-items: center; gap: 8px; }
+    .spool-scan-controls select {
+        padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border);
+        background: #fff; min-width: 160px;
+    }
+    .spool-scan-controls .torch-btn {
+        padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+        background: #fff; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .spool-scan-controls .torch-btn:hover { background: #eee; }
+    .spool-scan-controls .torch-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .spool-scan-controls .torch-btn.on:hover { filter: brightness(1.05); }
+    .spool-scan-controls .torch-btn.hidden { display: none; }
+    .spool-printer-actions { margin-top: 16px; padding: 16px; background: #f0f8f0; border: 1px solid var(--accent); border-radius: 8px; display: none; }
+    .spool-printer-actions.visible { display: block; }
+    .spool-printer-actions h3 { font-size: 1rem; margin-bottom: 12px; }
+    .spool-printer-actions .btn { margin-right: 8px; margin-bottom: 8px; }
+    .spool-remaining-group { margin-top: 12px; }
+    .spool-remaining-group label { margin-right: 12px; font-weight: normal; }
+    .spool-data { margin-top: 28px; padding: 20px; background: #fafafa; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+    .spool-data-image { flex-shrink: 0; width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; }
+    .spool-data-image img { width: 200px; height: 200px; object-fit: contain; object-position: center; display: block; }
+    .spool-data-content { flex: 1; min-width: 200px; }
+    .spool-data h3 { font-size: 1rem; margin-bottom: 12px; font-family: 'Russo One', sans-serif; }
+    .spool-data dl { margin: 0; display: grid; gap: 8px 16px; }
+    .spool-data dt { font-weight: 600; color: var(--text-muted); font-size: 0.85rem; }
+    .spool-data dd { margin: 0; }
+    .spool-toast { padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; }
+    .spool-toast.success { background: #d4edda; color: #155724; }
+    .spool-toast.error { background: #f8d7da; color: #721c24; }
+    .spool-unbind-form { display: inline-block; margin-left: 12px; vertical-align: middle; }
+    .spool-unbind-form .btn { font-size: 0.85rem; padding: 6px 12px; }
+</style>
+{% endblock %}
+
+{% block sidebar %}
+<a href="/" class="btn">Главная</a>
+<a href="/print-queue" class="btn">Очередь печати</a>
+<a href="/supply-queue" class="btn">Очередь поставок</a>
+<a href="/warehouse" class="btn">Склад</a>
+{% endblock %}
+
+{% block content %}
+<div class="spool-card-page">
+    <a href="/warehouse?tab=materials" class="spool-card-back">← К списку катушек</a>
+    <h1>Катушка {{ spool.id }}</h1>
+
+    {% if request.query_params.get('success') == 'installed' %}
+    <div class="spool-toast success">Филамент установлен на принтер.</div>
+    {% endif %}
+    {% if request.query_params.get('success') == 'removed' %}
+    <div class="spool-toast success">Филамент снят с принтера. Остаток обновлён.</div>
+    {% endif %}
+    {% if request.query_params.get('error') %}
+    <div class="spool-toast error">
+        {% if request.query_params.get('error') == 'printer_notfound' %}Принтер не найден.{% endif %}
+        {% if request.query_params.get('error') == 'spool_on_other' %}Эта катушка уже на другом принтере.{% endif %}
+    </div>
+    {% endif %}
+
+    <p style="color: var(--text-muted); margin-bottom: 12px; font-size: 0.9rem;">Нажмите на область ниже и наведите камеру на QR-код принтера.</p>
+    <div class="spool-scan-box" id="spool-scan-box" tabindex="0" role="button" aria-label="Включить камеру для сканирования QR-кода принтера">
+        <div class="scan-placeholder" id="scan-placeholder">
+            <strong>Сканирование QR-кода принтера</strong>
+            Нажмите, чтобы включить камеру
+        </div>
+        <video id="spool-scan-video" playsinline muted></video>
+        <canvas id="spool-scan-canvas"></canvas>
+    </div>
+    <div class="spool-scan-controls" id="spool-scan-controls">
+        <label>Камера: <select id="spool-camera-select" aria-label="Выбор камеры"></select></label>
+        <button type="button" class="torch-btn" id="spool-torch-btn" aria-pressed="false" title="Включить фонарик">🔦 Фонарик</button>
+    </div>
+
+    <div class="spool-printer-actions" id="spool-printer-actions" data-current-printer-id="{{ current_printer.id if current_printer else '' }}">
+        <h3 id="spool-printer-name">Принтер <span id="spool-printer-id"></span></h3>
+        <div id="spool-action-install-wrap">
+            <form method="post" action="/warehouse/spool/{{ spool.id }}/install-on-printer" id="form-install" style="display:inline;">
+                <input type="hidden" name="printer_id" id="form-install-printer-id" value="">
+                <button type="submit" class="btn">Установить филамент на принтер</button>
+            </form>
+        </div>
+        <div id="spool-action-remove-wrap" class="spool-remaining-group">
+            <p style="margin: 12px 0 8px 0; font-size: 0.9rem;">Снять филамент с принтера (остаток на катушке не меняется):</p>
+            <form method="post" action="/warehouse/spool/{{ spool.id }}/remove-from-printer" id="form-remove" style="display:inline;">
+                <input type="hidden" name="printer_id" id="form-remove-printer-id" value="">
+                <button type="submit" class="btn">Снять филамент</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="spool-data">
+        {% if spool_dataurl %}
+        <div class="spool-data-image">
+            <img src="{{ spool_dataurl }}" alt="Катушка" width="200" height="200">
+        </div>
+        {% endif %}
+        <div class="spool-data-content">
+            <h3>Данные катушки</h3>
+            <dl>
+                <dt>ID</dt>
+                <dd>{{ spool.id }}</dd>
+                <dt>Материал</dt>
+                <dd>{% if material %}{{ material.name }}{% if material.color %} ({{ material.color }}){% endif %}{% else %}—{% endif %}</dd>
+                <dt>Остаток (м)</dt>
+                <dd>{{ "%.1f"|format(spool.remaining_length_m) }}</dd>
+                <dt>Принтер</dt>
+                <dd>{% if current_printer %}{{ current_printer.number or current_printer.name or ('#' ~ current_printer.id) }} 
+                    <form method="post" action="/warehouse/spool/{{ spool.id }}/remove-from-printer" class="spool-unbind-form" onsubmit="return confirm('Отвязать катушку от принтера?');">
+                        <input type="hidden" name="printer_id" value="{{ current_printer.id }}">
+                        <button type="submit" class="btn">Отвязать катушку от принтера</button>
+                    </form>
+                    {% else %}—{% endif %}</dd>
+                <dt>Списание</dt>
+                <dd>
+                    <form method="post" action="/warehouse/spool/{{ spool.id }}/write-off" style="display:inline;" onsubmit="return confirm('Списать катушку (закончен филамент)? Запись попадёт в «Списанные материалы».');">
+                        <button type="submit" class="btn">Списать катушку</button>
+                    </form>
+                </dd>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" crossorigin="anonymous"></script>
+<script>
+(function() {
+    var box = document.getElementById('spool-scan-box');
+    var placeholder = document.getElementById('scan-placeholder');
+    var video = document.getElementById('spool-scan-video');
+    var canvas = document.getElementById('spool-scan-canvas');
+    var ctx = canvas.getContext('2d');
+    var actionsPanel = document.getElementById('spool-printer-actions');
+    var printerIdSpan = document.getElementById('spool-printer-id');
+    var formInstall = document.getElementById('form-install');
+    var formInstallPrinterId = document.getElementById('form-install-printer-id');
+    var formRemove = document.getElementById('form-remove');
+    var stream = null;
+    var animationId = null;
+    var torchOn = false;
+    var cameraSelect = document.getElementById('spool-camera-select');
+    var torchBtn = document.getElementById('spool-torch-btn');
+    var controlsEl = document.getElementById('spool-scan-controls');
+
+    function getGetUserMedia() {
+        if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function')
+            return navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        var legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+        return legacy ? function(opts) { return new Promise(function(res, rej) { legacy.call(navigator, opts, res, rej); }); } : null;
+    }
+
+    function releaseStream() {
+        if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
+        if (stream) {
+            stream.getTracks().forEach(function(t) { t.stop(); });
+            stream = null;
+        }
+        if (video && video.srcObject) {
+            video.srcObject = null;
+        }
+    }
+
+    function setTorch(on) {
+        if (!stream) return;
+        var track = stream.getVideoTracks()[0];
+        if (!track || !track.getCapabilities) return;
+        var caps = track.getCapabilities();
+        if (typeof caps.torch !== 'boolean' || !caps.torch) return;
+        torchOn = on;
+        if (torchBtn) {
+            torchBtn.classList.toggle('on', torchOn);
+            torchBtn.setAttribute('aria-pressed', torchOn ? 'true' : 'false');
+            torchBtn.textContent = torchOn ? '🔦 Фонарик вкл' : '🔦 Фонарик';
+        }
+        track.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(function() {});
+    }
+
+    function stopScan() {
+        torchOn = false;
+        if (torchBtn) { torchBtn.classList.remove('on'); torchBtn.setAttribute('aria-pressed', 'false'); torchBtn.textContent = '🔦 Фонарик'; }
+        if (controlsEl) controlsEl.classList.remove('visible');
+        releaseStream();
+        if (video && video.srcObject) video.srcObject = null;
+        box.classList.remove('active');
+        if (placeholder) placeholder.style.display = '';
+    }
+
+    function playBeepSuccess() {
+        try {
+            var C = window.AudioContext || window.webkitAudioContext;
+            if (!C) return;
+            var ctx = new C();
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = 880;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.25, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.12);
+        } catch (e) {}
+    }
+    function playBeepFail() {
+        try {
+            var C = window.AudioContext || window.webkitAudioContext;
+            if (!C) return;
+            var ctx = new C();
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = 220;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.25, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.15);
+        } catch (e) {}
+    }
+
+    function showPrinterActions(printerId) {
+        if (!printerId) return;
+        var currentPrinterId = (actionsPanel && actionsPanel.getAttribute('data-current-printer-id')) || '';
+        printerIdSpan.textContent = printerId;
+        formInstallPrinterId.value = printerId;
+        var removePrinterIdEl = document.getElementById('form-remove-printer-id');
+        if (removePrinterIdEl) removePrinterIdEl.value = printerId;
+        var installWrap = document.getElementById('spool-action-install-wrap');
+        var removeWrap = document.getElementById('spool-action-remove-wrap');
+        if (String(printerId) === String(currentPrinterId)) {
+            if (installWrap) installWrap.style.display = 'none';
+            if (removeWrap) removeWrap.style.display = 'block';
+        } else {
+            if (installWrap) installWrap.style.display = 'block';
+            if (removeWrap) removeWrap.style.display = 'none';
+        }
+        actionsPanel.classList.add('visible');
+    }
+
+    var lastFailBeepTime = 0;
+    function tickScan() {
+        if (!video || !ctx || video.readyState !== video.HAVE_ENOUGH_DATA) {
+            animationId = requestAnimationFrame(tickScan);
+            return;
+        }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        if (typeof jsQR === 'function') {
+            var code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (code && code.data) {
+                var m = code.data.match(/^PRINTER:(\d+)$/);
+                if (m && m[1]) {
+                    playBeepSuccess();
+                    stopScan();
+                    showPrinterActions(m[1]);
+                    return;
+                }
+                var now = Date.now();
+                if (now - lastFailBeepTime > 1500) {
+                    lastFailBeepTime = now;
+                    playBeepFail();
+                }
+            }
+        }
+        animationId = requestAnimationFrame(tickScan);
+    }
+
+    function updateTorchButtonVisibility() {
+        if (!stream || !torchBtn) return;
+        var track = stream.getVideoTracks()[0];
+        if (!track || !track.getCapabilities) { torchBtn.classList.add('hidden'); return; }
+        var caps = track.getCapabilities();
+        if (typeof caps.torch === 'boolean' && caps.torch) {
+            torchBtn.classList.remove('hidden');
+            torchBtn.classList.toggle('on', torchOn);
+            torchBtn.textContent = torchOn ? '🔦 Фонарик вкл' : '🔦 Фонарик';
+        } else {
+            torchBtn.classList.add('hidden');
+        }
+    }
+
+    function fillCameraSelect(selectedId) {
+        if (!cameraSelect || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        navigator.mediaDevices.enumerateDevices().then(function(devices) {
+            var videoInputs = devices.filter(function(d) { return d.kind === 'videoinput'; });
+            cameraSelect.innerHTML = '';
+            videoInputs.forEach(function(device, i) {
+                var opt = document.createElement('option');
+                opt.value = device.deviceId;
+                opt.textContent = device.label || ('Камера ' + (i + 1));
+                if (device.deviceId === selectedId) opt.selected = true;
+                cameraSelect.appendChild(opt);
+            });
+            var labelWrap = cameraSelect.closest('label');
+            if (videoInputs.length <= 1 && labelWrap) labelWrap.style.display = 'none';
+            else if (labelWrap) labelWrap.style.display = 'flex';
+        }).catch(function() {});
+    }
+
+    var STORAGE_CAMERA_KEY = 'mpinformer_spool_camera_id';
+
+    function startStream(constraints) {
+        var getUserMediaFn = getGetUserMedia();
+        if (!getUserMediaFn) return Promise.reject(new Error('Камера недоступна'));
+        releaseStream();
+        return getUserMediaFn(constraints).then(function(s) {
+            stream = s;
+            video.srcObject = s;
+            video.setAttribute('playsinline', true);
+            video.play();
+            if (controlsEl) controlsEl.classList.add('visible');
+            var track = stream.getVideoTracks()[0];
+            var deviceId = track && track.getSettings ? (track.getSettings().deviceId || '') : '';
+            fillCameraSelect(deviceId);
+            updateTorchButtonVisibility();
+            if (torchOn) setTorch(true);
+            video.onloadedmetadata = function() { tickScan(); };
+            return stream;
+        });
+    }
+
+    function startScan() {
+        var getUserMediaFn = getGetUserMedia();
+        if (!getUserMediaFn) {
+            alert('Камера недоступна.');
+            return;
+        }
+        if (placeholder) placeholder.style.display = 'none';
+        box.classList.add('active');
+        var savedId = null;
+        try { savedId = localStorage.getItem(STORAGE_CAMERA_KEY) || ''; } catch (e) {}
+        var constraints = savedId
+            ? { video: { deviceId: { exact: savedId } } }
+            : { video: { facingMode: 'environment' } };
+        startStream(constraints).catch(function(err) {
+            var fallback = savedId ? { video: { facingMode: 'environment' } } : { video: true };
+            startStream(fallback).catch(function(err2) {
+                startStream({ video: true }).catch(function(err3) {
+                    if (placeholder) placeholder.style.display = '';
+                    box.classList.remove('active');
+                    alert('Не удалось включить камеру: ' + (err.message || err2.message || err3.message || err));
+                });
+            });
+        });
+    }
+
+    if (box) {
+        box.addEventListener('click', function() {
+            if (box.classList.contains('active')) return;
+            startScan();
+        });
+        box.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); box.click(); }
+        });
+    }
+
+    if (cameraSelect) {
+        cameraSelect.addEventListener('change', function() {
+            var deviceId = cameraSelect.value;
+            if (!deviceId) return;
+            var wasTorch = torchOn;
+            releaseStream();
+            video.srcObject = null;
+            setTimeout(function() {
+                startStream({ video: { deviceId: { exact: deviceId } } }).then(function() {
+                    fillCameraSelect(deviceId);
+                    updateTorchButtonVisibility();
+                    if (wasTorch) setTorch(true);
+                    try { localStorage.setItem(STORAGE_CAMERA_KEY, deviceId); } catch (e) {}
+                }).catch(function(err) {
+                    startStream({ video: { deviceId: deviceId } }).then(function() {
+                        fillCameraSelect(deviceId);
+                        updateTorchButtonVisibility();
+                        if (wasTorch) setTorch(true);
+                        try { localStorage.setItem(STORAGE_CAMERA_KEY, deviceId); } catch (e) {}
+                    }).catch(function(err2) {
+                        alert('Не удалось переключить камеру: ' + (err.message || err2.message || err));
+                    });
+                });
+            }, 250);
+        });
+    }
+
+    if (torchBtn) {
+        torchBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!stream) return;
+            setTorch(!torchOn);
+        });
+    }
+    if (controlsEl) {
+        controlsEl.addEventListener('click', function(e) { e.stopPropagation(); });
+    }
+
+    })();
+</script>
+{% endblock %}

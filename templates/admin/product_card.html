@@ -1,0 +1,217 @@
+{% extends "site/base.html" %}
+{% block title %}Карточка изделия{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}
+<a href="/" class="btn-header">Сайт</a>
+{% endblock %}
+{% block sidebar %}
+<a href="/admin" class="btn">Главная</a>
+<a href="/admin/reference" class="btn">Справочники</a>
+<a href="/admin/users" class="btn">Пользователи</a>
+<a href="/admin/settings" class="btn">Настройки</a>
+<a href="/admin/logs" class="btn">Логи</a>
+<a href="/admin/logout" class="btn">Выход</a>
+{% endblock %}
+{% block extra_css %}
+<style>
+    .product-card-wrap { max-width: 100%; width: 100%; padding: 24px 0; box-sizing: border-box; }
+    .product-card-title { font-size: 1.5rem; margin-bottom: 20px; }
+    .product-photo-wrap { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .product-photo { width: 120px; height: 120px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); flex-shrink: 0; }
+    .product-packaging-tags { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .product-packaging-tag { display: inline-block; padding: 6px 12px; background: #e8f4fc; border: 1px solid #b8d9f0; border-radius: 6px; font-size: 0.875rem; color: #1a5a7a; }
+    .composition-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    .composition-table th, .composition-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .composition-table th { font-weight: 600; background: #f5f5f5; }
+    .composition-table .col-preview { width: 56px; text-align: center; }
+    .composition-table .col-color { width: 44px; text-align: center; }
+    .composition-table .col-material { max-width: 180px; }
+    .composition-table .col-qty { width: 72px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .composition-preview-img { width: 48px; height: 48px; object-fit: contain; border-radius: 6px; border: 1px solid var(--border); display: block; margin: 0 auto; }
+    .composition-preview-empty { width: 48px; height: 48px; margin: 0 auto; background: #eee; border-radius: 6px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; color: var(--text-muted); }
+    .material-color-sq { width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.2); display: inline-block; vertical-align: middle; }
+    .composition-section-title { font-size: 1.1rem; margin: 16px 0 8px; }
+    .btn-back { display: inline-block; margin-bottom: 16px; }
+    .barcode-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+    .barcode-section h2 { font-size: 1.1rem; margin-bottom: 12px; }
+    .barcode-columns { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 24px; }
+    .barcode-block { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; min-height: 380px; }
+    .barcode-block .barcode-current { margin-bottom: 14px; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; }
+    .barcode-block .barcode-current a { color: var(--accent-dark); }
+    .barcode-preview-wrap { margin-top: 8px; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; position: relative; width: 100%; max-height: 420px; }
+    .barcode-preview-img { display: block; max-width: 200px; width: 100%; height: auto; object-fit: contain; border: 1px solid var(--border); border-radius: 6px; }
+    .barcode-preview-pdf { max-width: 200px; width: 100%; height: 360px; border: 1px solid var(--border); border-radius: 6px; }
+    .barcode-actions { display: flex; flex-direction: column; gap: 10px; margin-top: auto; padding-top: 12px; flex-shrink: 0; max-width: 200px; width: 100%; }
+    .barcode-actions .btn,
+    .barcode-actions .barcode-file-label { width: 100%; box-sizing: border-box; padding: 10px 20px; font-size: 0.9rem; text-align: center; cursor: pointer; border: none; font-family: inherit; background: var(--accent); color: #2a2a2a; transition: background 0.2s; clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+    .barcode-actions .btn:hover,
+    .barcode-actions .barcode-file-label:hover { background: var(--accent-dark); }
+    .barcode-actions .btn-danger { background: #c62828; color: #fff; }
+    .barcode-actions .btn-danger:hover { background: #b71c1c; }
+    .barcode-actions input[type="file"] { position: absolute; width: 0; height: 0; opacity: 0; }
+    .barcode-actions form { display: flex; flex-direction: column; gap: 10px; }
+    .barcode-open-icon { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; color: #555; background: rgba(255,255,255,0.9); border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+    .barcode-open-icon:hover { color: #333; background: #fff; }
+    .barcode-open-icon svg { width: 20px; height: 20px; }
+    .barcode-toast { padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 0.9rem; }
+    .barcode-toast.ok { background: #d4edda; color: #155724; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="product-card-wrap">
+    <a href="/admin/reference?ref=products&tab=products" class="btn btn-back">← К списку изделий</a>
+    <h1 class="product-card-title">{{ product.name }}</h1>
+    <div class="product-photo-wrap">
+        {% if product.photo_filename %}
+        <img src="/uploads/products/photos/{{ product.photo_filename }}" alt="" class="product-photo">
+        {% endif %}
+        {% if product_packaging %}
+        <div class="product-packaging-tags">
+            {% for qty, name in product_packaging %}
+            <span class="product-packaging-tag">{{ name }}{% if qty != 1 %} × {{ qty }}{% endif %}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <section class="barcode-section" aria-labelledby="barcode-title">
+        <h2 id="barcode-title" class="composition-section-title">Штрихкоды для маркетплейсов</h2>
+        {% if request.query_params.get('barcode') == 'ozon_ok' %}
+        <p class="barcode-toast ok">Штрихкод Озон загружен.</p>
+        {% elif request.query_params.get('barcode') == 'ozon_deleted' %}
+        <p class="barcode-toast ok">Штрихкод Озон удалён.</p>
+        {% elif request.query_params.get('barcode') == 'wb_ok' %}
+        <p class="barcode-toast ok">Штрихкод Wildberries загружен.</p>
+        {% elif request.query_params.get('barcode') == 'wb_deleted' %}
+        <p class="barcode-toast ok">Штрихкод Wildberries удалён.</p>
+        {% elif request.query_params.get('barcode_error') == 'invalid' %}
+        <p class="barcode-toast" style="background:#f8d7da;color:#721c24;">Неверный формат файла. Допустимы: PDF, PNG, JPG, GIF, WebP, BMP, TIFF.</p>
+        {% endif %}
+
+        <div class="barcode-columns">
+        <div class="barcode-block">
+            <h3 style="font-size:1rem; margin-bottom:8px;">Озон</h3>
+            {% if product.ozon_barcode_filename|default('') %}
+            {% set ozon_fn = product.ozon_barcode_filename|default('') %}
+            {% set ozon_is_pdf = (ozon_fn|lower).endswith('.pdf') %}
+            <div class="barcode-current">
+                <div class="barcode-preview-wrap">
+                    <a href="/uploads/products/barcodes/ozon/{{ product.ozon_barcode_filename }}" target="_blank" rel="noopener" class="barcode-open-icon" title="Открыть в новой вкладке"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></a>
+                    {% if ozon_is_pdf %}
+                    <iframe src="/uploads/products/barcodes/ozon/{{ product.ozon_barcode_filename }}#toolbar=0" class="barcode-preview-pdf" title="Штрихкод Озон"></iframe>
+                    {% else %}
+                    <img src="/uploads/products/barcodes/ozon/{{ product.ozon_barcode_filename }}" alt="Штрихкод Озон" class="barcode-preview-img">
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            <div class="barcode-actions">
+                <form method="post" action="/admin/reference/product/{{ product.id }}/barcode/ozon" enctype="multipart/form-data">
+                    <label for="barcode-file-ozon" class="barcode-file-label">Выбрать файл</label>
+                    <input type="file" id="barcode-file-ozon" name="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.tif" required>
+                    <button type="submit" class="btn">Загрузить</button>
+                </form>
+                {% if product.ozon_barcode_filename|default('') %}
+                <form method="post" action="/admin/reference/product/{{ product.id }}/barcode/ozon/delete">
+                    <button type="submit" class="btn btn-danger">Удалить</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="barcode-block">
+            <h3 style="font-size:1rem; margin-bottom:8px;">Wildberries</h3>
+            {% if product.wildberries_barcode_filename|default('') %}
+            {% set wb_fn = product.wildberries_barcode_filename|default('') %}
+            {% set wb_is_pdf = (wb_fn|lower).endswith('.pdf') %}
+            <div class="barcode-current">
+                <div class="barcode-preview-wrap">
+                    <a href="/uploads/products/barcodes/wildberries/{{ product.wildberries_barcode_filename }}" target="_blank" rel="noopener" class="barcode-open-icon" title="Открыть в новой вкладке"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></a>
+                    {% if wb_is_pdf %}
+                    <iframe src="/uploads/products/barcodes/wildberries/{{ product.wildberries_barcode_filename }}#toolbar=0" class="barcode-preview-pdf" title="Штрихкод Wildberries"></iframe>
+                    {% else %}
+                    <img src="/uploads/products/barcodes/wildberries/{{ product.wildberries_barcode_filename }}" alt="Штрихкод Wildberries" class="barcode-preview-img">
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            <div class="barcode-actions">
+                <form method="post" action="/admin/reference/product/{{ product.id }}/barcode/wildberries" enctype="multipart/form-data">
+                    <label for="barcode-file-wb" class="barcode-file-label">Выбрать файл</label>
+                    <input type="file" id="barcode-file-wb" name="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.tif" required>
+                    <button type="submit" class="btn">Загрузить</button>
+                </form>
+                {% if product.wildberries_barcode_filename|default('') %}
+                <form method="post" action="/admin/reference/product/{{ product.id }}/barcode/wildberries/delete">
+                    <button type="submit" class="btn btn-danger">Удалить</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        </div>
+    </section>
+
+    <h2 class="composition-section-title">Состав</h2>
+    <table class="composition-table">
+        <thead>
+            <tr>
+                <th class="col-preview">Фото</th>
+                <th class="col-color">Цвет</th>
+                <th class="col-name">Наименование детали</th>
+                <th class="col-material">Материал</th>
+                <th class="col-qty">Кол-во</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for qty, part, material in composition %}
+            <tr>
+                <td class="col-preview">
+                    {% if part.stl_thumb_filename %}
+                    <img src="/uploads/parts/thumbs/{{ part.stl_thumb_filename }}" alt="" class="composition-preview-img" title="{{ part.name }}">
+                    {% else %}
+                    <span class="composition-preview-empty">—</span>
+                    {% endif %}
+                </td>
+                <td class="col-color">
+                    {% if material %}
+                    <span class="material-color-sq" data-bgcolor="{{ color_hex_map.get(material.color, '#888') }}" title="{{ material.name }} ({{ material.color }})"></span>
+                    {% else %}
+                    —
+                    {% endif %}
+                </td>
+                <td class="col-name">{{ part.name }}</td>
+                <td class="col-material">{% if material %}{{ material.name }}{% else %}—{% endif %}</td>
+                <td class="col-qty">{{ qty }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="col-name">Нет деталей</td></tr>
+            {% endfor %}
+            {% if composition_extras %}
+            <tr><td colspan="5" class="col-name" style="font-weight:600; padding-top:16px;">Дополнительные материалы</td></tr>
+            {% for qty, em in composition_extras %}
+            <tr>
+                <td class="col-preview">
+                    {% if em.photo_filename %}
+                    <img src="/uploads/extra_materials/{{ em.photo_filename }}" alt="" class="composition-preview-img" title="{{ em.name }}">
+                    {% else %}
+                    <span class="composition-preview-empty">—</span>
+                    {% endif %}
+                </td>
+                <td class="col-color">—</td>
+                <td class="col-name">{{ em.name }}</td>
+                <td class="col-material">—</td>
+                <td class="col-qty">{{ qty }}</td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+<script>
+(function () {
+    document.querySelectorAll('.material-color-sq[data-bgcolor]').forEach(function (el) {
+        el.style.backgroundColor = el.getAttribute('data-bgcolor');
+    });
+})();
+</script>
+{% endblock %}

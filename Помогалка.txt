@@ -1,0 +1,28 @@
+cd "C:\Users\esox-\Documents\Cursor Project\MPInformer"
+.\venv\Scripts\python.exe main.py
+
+
+
+
+
+
+ssh root@2.56.240.226
+vlgwRI9j1%*o
+   
+   
+Перезапуск программы на сервере: 
+   sudo systemctl restart mpinformer
+   
+Статус программы   
+   sudo systemctl status mpinformer
+   
+Журнал
+sudo journalctl -u mpinformer -n 50 --no-pager
+
+Live-log
+sudo journalctl -u mpinformer -f -n 200 --no-pager | grep -E "supply_queue:|POST /api/supplies/(draft|confirm)|Task-47|OzonRequest trace"
+
+
+
+Точка отгрузки: 1020005000295764  (МОНЧЕГОРСК_34)
+Склад продавца (МОЙ): 1020005008005660

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Брак{% endblock %}
+
+{% block extra_css %}
+<style>
+    .def-page h1 { margin-bottom: 18px; font-family: 'Russo One', sans-serif; font-weight: normal; }
+    .def-back { margin-bottom: 14px; }
+    .def-section { margin-bottom: 22px; }
+    .def-section h2 { margin-bottom: 10px; font-family: 'Russo One', sans-serif; font-size: 1.1rem; font-weight: normal; }
+    .def-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+    .def-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .def-table th, .def-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .def-table th { background: var(--header-bg, #e5e5e5); font-family: 'Russo One', sans-serif; font-weight: normal; }
+    .def-table .num { text-align: right; }
+    .def-color-sq { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.2); margin-right: 6px; vertical-align: -2px; }
+    .def-return-inline { display: inline-flex; align-items: center; gap: 6px; }
+    .def-return-inline input[type="number"] { width: 78px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; }
+</style>
+{% endblock %}
+
+{% block sidebar %}
+<a href="/" class="btn">Главная</a>
+<a href="/print-queue" class="btn">Очередь печати</a>
+<a href="/supply-queue" class="btn">Очередь поставок</a>
+<a href="/warehouse" class="btn">Склад</a>
+{% endblock %}
+
+{% block content %}
+<div class="def-page">
+    <h1>Брак</h1>
+    <div class="def-back"><a class="btn" href="/warehouse?tab=printed">К напечатанным деталям</a></div>
+
+    <section class="def-section">
+        <h2>Детали</h2>
+        <div class="def-table-wrap">
+            <table class="def-table">
+                <thead>
+                    <tr>
+                        <th>Наименование</th>
+                        <th>Материал</th>
+                        <th class="num">Количество</th>
+                        <th>Дата и время добавления</th>
+                        <th>Действие</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rec in part_rows %}
+                    <tr>
+                        <td>{{ rec.display_name or "—" }}</td>
+                        <td><span class="def-color-sq def-color-from-data" data-color="{{ rec._material_hex }}"></span>{{ rec._material_name }}</td>
+                        <td class="num">{{ rec.quantity }}</td>
+                        <td>{{ rec._created_at_msk }}</td>
+                        <td>
+                            <form method="post" action="/warehouse/defects/return" onsubmit="return confirm('Вернуть из брака?');" class="def-return-inline">
+                                <input type="hidden" name="defect_id" value="{{ rec.id }}">
+                                <input type="number" name="return_qty" min="1" max="{{ rec.quantity }}" value="1" required>
+                                <button type="submit" class="btn">Вернуть из брака</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5">Записей по браку деталей нет.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="def-section">
+        <h2>Изделия</h2>
+        <div class="def-table-wrap">
+            <table class="def-table">
+                <thead>
+                    <tr>
+                        <th>Наименование</th>
+                        <th>Материал</th>
+                        <th class="num">Количество</th>
+                        <th>Дата и время добавления</th>
+                        <th>Действие</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rec in product_rows %}
+                    <tr>
+                        <td>{{ rec.display_name or "—" }}</td>
+                        <td><span class="def-color-sq def-color-from-data" data-color="{{ rec._material_hex }}"></span>{{ rec._material_name }}</td>
+                        <td class="num">{{ rec.quantity }}</td>
+                        <td>{{ rec._created_at_msk }}</td>
+                        <td>
+                            <form method="post" action="/warehouse/defects/return" onsubmit="return confirm('Вернуть из брака?');" class="def-return-inline">
+                                <input type="hidden" name="defect_id" value="{{ rec.id }}">
+                                <input type="number" name="return_qty" min="1" max="{{ rec.quantity }}" value="1" required>
+                                <button type="submit" class="btn">Вернуть из брака</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5">Записей по браку изделий нет.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+<script>
+(function() {
+    document.querySelectorAll('.def-color-from-data').forEach(function(el) {
+        var color = el.getAttribute('data-color') || '#888888';
+        el.style.backgroundColor = color;
+    });
+})();
+</script>
+{% endblock %}

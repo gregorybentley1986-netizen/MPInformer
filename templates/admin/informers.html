@@ -1,0 +1,717 @@
+{% extends "site/base.html" %}
+{% block title %}Информеры — Админка{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}
+<a href="/" class="btn-header">Сайт</a>
+{% endblock %}
+{% block sidebar %}
+{% include "admin/_sidebar.html" %}
+{% endblock %}
+{% block extra_css %}
+<style>
+    .inf-page { display: grid; grid-template-columns: 220px 1fr; gap: 24px; align-items: flex-start; }
+    @media (max-width: 768px) { .inf-page { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); } }
+    .inf-tabs { display: flex; flex-direction: column; gap: 6px; }
+    .inf-tabs a { display: block; padding: 12px 16px; text-decoration: none; color: var(--main-text); background: #f0f0f0; border: 1px solid var(--border); border-radius: 4px; font-weight: 600; }
+    .inf-tabs a:hover { background: #e8e8e8; }
+    .inf-tabs a.active { background: var(--accent); color: #2a2a2a; border-color: var(--accent); }
+    .inf-content { min-width: 0; }
+    .inf-tab-pane { display: none; }
+    .inf-tab-pane.active { display: block; }
+    .tracker-field { margin-bottom: 16px; }
+    .tracker-field label { display: block; font-size: 0.9rem; color: var(--main-text); margin-bottom: 6px; }
+    .tracker-field .tracker-hint { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; }
+    .tracker-field select,
+    .tracker-field input[type="number"],
+    .tracker-field input[type="text"] {
+        font-family: 'Play', sans-serif;
+        font-size: 0.95rem;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        background: var(--main-bg);
+        color: var(--main-text);
+        min-width: 140px;
+    }
+    .tracker-field select { cursor: pointer; }
+    .tracker-cluster-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .tracker-cluster-row select { min-width: 260px; }
+    .tracker-tags { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .tracker-tag {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 10px; background: var(--accent); color: #2a2a2a;
+        font-size: 0.85rem; border: none; clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+    }
+    .tracker-tag .tracker-tag-remove { cursor: pointer; padding: 0 2px; font-weight: bold; line-height: 1; opacity: 0.9; }
+    .tracker-tag .tracker-tag-remove:hover { opacity: 1; }
+    .tracker-items-rows { margin-bottom: 8px; }
+    .tracker-item-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .tracker-item-row select { min-width: 220px; }
+    .tracker-item-row input[type="number"] { width: 70px; }
+    .tracker-item-row .btn { padding: 6px 12px; font-size: 0.85rem; }
+    .tracker-save-wrap { margin-top: 20px; }
+    .inf-status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        margin-left: 8px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .inf-status-pill-ok {
+        background: rgba(76, 175, 80, 0.16);
+        color: #2e7d32;
+    }
+    .inf-status-pill-warn {
+        background: rgba(255, 193, 7, 0.18);
+        color: #a67c00;
+    }
+    .inf-status-pill-off {
+        background: rgba(244, 67, 54, 0.14);
+        color: #c62828;
+    }
+    .inf-status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+    .supply-field { margin-bottom: 16px; }
+    .supply-field label { display: block; font-size: 0.9rem; color: var(--main-text); margin-bottom: 6px; }
+    .supply-field .supply-hint { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; }
+    .supply-field select,
+    .supply-field input[type="number"],
+    .supply-field input[type="text"] {
+        font-family: 'Play', sans-serif;
+        font-size: 0.95rem;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        background: var(--main-bg);
+        color: var(--main-text);
+        min-width: 140px;
+    }
+    .supply-item-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .supply-item-row select { min-width: 220px; }
+    .supply-item-row input[type="number"] { width: 80px; }
+    .supply-saved { margin-top: 20px; padding: 14px; background: var(--border); border-radius: 6px; font-size: 0.9rem; }
+    .supply-saved h3 { font-size: 1rem; margin: 0 0 10px 0; color: var(--main-text); }
+    .supply-saved pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.85rem; }
+    .supply-saved.empty { color: var(--text-muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Информеры</h1>
+
+<div class="inf-page">
+    <div class="inf-tabs">
+        <a href="?tab=report" data-tab="report" class="{{ 'active' if (initial_tab|default('report')) == 'report' else '' }}">Ежедневный отчёт</a>
+        <a href="?tab=supply" data-tab="supply" class="{{ 'active' if (initial_tab|default('report')) == 'supply' else '' }}">Парсер очереди поставок</a>
+        <a href="?tab=slots" data-tab="slots" class="{{ 'active' if (initial_tab|default('report')) == 'slots' else '' }}">Отслеживатель слотов</a>
+    </div>
+    <div class="inf-content">
+        <div class="inf-tab-pane inf-tab-report {{ 'active' if (initial_tab|default('report')) == 'report' else '' }}" data-tab-pane="report">
+            <div class="card">
+                <h2>
+                    Ежедневный отчёт
+                    {% set rep = (informers_status.report if informers_status is defined and informers_status.report is defined else {}) %}
+                    {% set rep_active = rep.active if rep is mapping and rep.active is not none else False %}
+                    <span class="inf-status-pill {{ 'inf-status-pill-ok' if rep_active else 'inf-status-pill-off' }}">
+                        <span class="inf-status-dot"></span>
+                        {% if rep_active %}Активен{% else %}Отключен{% endif %}
+                    </span>
+                </h2>
+                <p style="color: var(--text-muted); margin-bottom: 12px; max-width: 640px;">
+                    Собирает сводный отчёт и отправляет в Telegram по расписанию. Здесь можно запустить отчёт вручную.
+                </p>
+                <a href="/admin/report/manual" class="btn btn-success">Сформировать отчёт сейчас</a>
+            </div>
+        </div>
+
+        <div class="inf-tab-pane inf-tab-supply {{ 'active' if (initial_tab|default('report')) == 'supply' else '' }}" data-tab-pane="supply">
+            <div class="card">
+                <h2>
+                    Парсер очереди поставок
+                    {% set sup = (informers_status.supply if informers_status is defined and informers_status.supply is defined else {}) %}
+                    {% set sup_cfg = sup.configured if sup is mapping and sup.configured is not none else False %}
+                    <span class="inf-status-pill {{ 'inf-status-pill-ok' if sup_cfg else 'inf-status-pill-off' }}">
+                        <span class="inf-status-dot"></span>
+                        {% if sup_cfg %}Настроен{% else %}Не настроен{% endif %}
+                    </span>
+                </h2>
+                <p style="color: var(--text-muted); margin-bottom: 12px; max-width: 640px;">
+                    Сканирует кластеры Ozon и строит таблицу доступных таймслотов на ближайшие недели.
+                    Настройте параметры черновика — они используются при создании заявки для каждого кластера.
+                </p>
+                <div class="action-buttons" style="margin-bottom: 20px;">
+                    <a href="/admin/report/supply-scan" class="btn">Запустить скан очереди поставок</a>
+                </div>
+
+                <div id="supply-saved-summary" class="supply-saved empty">
+                    <h3>Сохранённый конфиг</h3>
+                    <pre id="supply-saved-text">Не загружен. Нажмите «Загрузить текущий конфиг» или сохраните форму ниже.</pre>
+                </div>
+
+                <form id="supply-parser-form" style="margin-top: 24px;">
+                    <div class="supply-field">
+                        <label>Товарный состав (шаблон для всех кластеров)</label>
+                        <p class="supply-hint">Изделия из Справочника. Парсер подставит выбранные SKU и количество при запросе слотов по каждому кластеру.</p>
+                        <div id="supply-items-rows" class="tracker-items-rows"></div>
+                        <button type="button" class="btn" id="supply-add-item">+ Добавить позицию</button>
+                    </div>
+                    <div class="supply-field">
+                        <label>Режим удаления SKU</label>
+                        <select id="supply-deletion-sku-mode">
+                            <option value="PARTIAL">PARTIAL</option>
+                            <option value="FULL">FULL</option>
+                        </select>
+                    </div>
+                    <div class="supply-field">
+                        <label>Точка отгрузки — ID склада (warehouse_id)</label>
+                        <input type="number" id="supply-drop-off-warehouse-id" placeholder="1020005000295764" min="0" step="1">
+                    </div>
+                    <div class="supply-field">
+                        <label>Тип точки отгрузки (warehouse_type)</label>
+                        <select id="supply-warehouse-type">
+                            <option value="CROSS_DOCK">CROSS_DOCK</option>
+                            <option value="DELIVERY_POINT">DELIVERY_POINT</option>
+                        </select>
+                    </div>
+                    <div class="supply-field">
+                        <label>Склад продавца (seller_warehouse_id)</label>
+                        <input type="number" id="supply-seller-warehouse-id" placeholder="1020005008005660" min="0" step="1">
+                    </div>
+                    <div class="supply-field">
+                        <label>Тип доставки (delivery_info.type)</label>
+                        <select id="supply-delivery-type">
+                            <option value="DROPOFF">DROPOFF</option>
+                        </select>
+                    </div>
+                    <div class="tracker-save-wrap">
+                        <button type="button" class="btn" id="supply-scan-config-load">Загрузить текущий конфиг</button>
+                        <button type="submit" class="btn btn-success">Сохранить конфиг</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="inf-tab-pane inf-tab-slots {{ 'active' if (initial_tab|default('report')) == 'slots' else '' }}" data-tab-pane="slots">
+            <div class="card">
+                <h2>
+                    Отслеживатель слотов
+                    {% set sl = (informers_status.slots if informers_status is defined and informers_status.slots is defined else {}) %}
+                    {% set sl_cfg = sl.configured if sl is mapping and sl.configured is not none else False %}
+                    {% set sl_en = sl.enabled if sl is mapping and sl.enabled is not none else False %}
+                    {% set cls = 'inf-status-pill-off' %}
+                    {% if sl_cfg and sl_en %}{% set cls = 'inf-status-pill-ok' %}{% elif sl_cfg and not sl_en %}{% set cls = 'inf-status-pill-warn' %}{% endif %}
+                    <span class="inf-status-pill {{ cls }}">
+                        <span class="inf-status-dot"></span>
+                        {% if not sl_cfg %}Не настроен{% elif sl_en %}Включен{% else %}Выключен{% endif %}
+                    </span>
+                </h2>
+                <p style="color: var(--text-muted); margin-bottom: 16px; max-width: 640px;">
+                    Отслеживает появление свободных таймслотов для выбранных кластеров Ozon в указанном периоде.
+                    Параметры точки отгрузки берутся из конфига парсера очереди поставок. Уведомления в Telegram приходят только при появлении слотов.
+                </p>
+                <div class="tracker-save-wrap" style="margin-top: 0; margin-bottom: 16px;">
+                    <a href="/admin/report/slots-tracker" class="btn">Запустить отслеживатель сейчас</a>
+                </div>
+                <form id="tracker-form">
+                    <div class="tracker-field">
+                        <label>Кластеры</label>
+                        <p class="tracker-hint">Выберите кластер — он появится тегом. Удаление: крестик на теге.</p>
+                        <div class="tracker-cluster-row">
+                            <select id="tracker-cluster-select">
+                                <option value="">— выберите кластер —</option>
+                            </select>
+                        </div>
+                        <div id="tracker-cluster-tags" class="tracker-tags"></div>
+                    </div>
+                    <div class="tracker-field">
+                        <label>Период поиска (дней)</label>
+                        <select id="tracker-period">
+                            <option value="7">7 дней</option>
+                            <option value="14">14 дней</option>
+                            <option value="21">21 день</option>
+                        </select>
+                    </div>
+                    <div class="tracker-field">
+                        <label>Товарный состав (по 50 шт каждого SKU)</label>
+                        <p class="tracker-hint">Изделия из Справочника. Добавьте позиции и укажите количество.</p>
+                        <div id="tracker-items-rows" class="tracker-items-rows"></div>
+                        <button type="button" class="btn" id="tracker-add-item">+ Добавить позицию</button>
+                    </div>
+                    <div class="tracker-field">
+                        <label>Частота парсинга (часов)</label>
+                        <input type="number" id="tracker-frequency" min="1" max="168" value="4">
+                    </div>
+                    <div class="tracker-field">
+                        <label><input type="checkbox" id="tracker-enabled" checked> Включён</label>
+                    </div>
+                    <div class="tracker-save-wrap">
+                        <button type="submit" class="btn btn-success">Сохранить конфиг отслеживателя</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var trackerProducts = {{ (tracker_products or []) | tojson }};
+    var trackerConfig = {{ (tracker_config or {}) | tojson }};
+    var clustersList = [];
+    var selectedClusters = [];
+
+    var clusterSelectEl = document.getElementById('tracker-cluster-select');
+    var clusterTagsEl = document.getElementById('tracker-cluster-tags');
+    var periodEl = document.getElementById('tracker-period');
+    var itemsRowsEl = document.getElementById('tracker-items-rows');
+    var frequencyEl = document.getElementById('tracker-frequency');
+    var enabledEl = document.getElementById('tracker-enabled');
+
+    function renderClusterTag(clusterId, clusterName) {
+        var span = document.createElement('span');
+        span.className = 'tracker-tag';
+        span.dataset.clusterId = String(clusterId);
+        span.innerHTML = '<span>' + (clusterName || 'Кластер ' + clusterId) + '</span><span class="tracker-tag-remove" aria-label="Удалить">×</span>';
+        span.querySelector('.tracker-tag-remove').onclick = function() {
+            selectedClusters = selectedClusters.filter(function(c) { return c.id !== clusterId; });
+            span.remove();
+        };
+        return span;
+    }
+
+    function fillClusterSelect() {
+        if (!clusterSelectEl) return;
+        clusterSelectEl.innerHTML = '<option value="">— выберите кластер —</option>';
+        clustersList.forEach(function(c) {
+            var id = c.macrolocal_cluster_id != null ? c.macrolocal_cluster_id : c.id;
+            if (selectedClusters.some(function(s) { return s.id === id; })) return;
+            var o = document.createElement('option');
+            o.value = String(id);
+            o.textContent = (c.name || '') + ' (id ' + id + ')';
+            clusterSelectEl.appendChild(o);
+        });
+    }
+
+    function addClusterTag(clusterId, clusterName) {
+        if (selectedClusters.some(function(c) { return c.id === clusterId; })) return;
+        selectedClusters.push({ id: clusterId, name: clusterName || 'Кластер ' + clusterId });
+        clusterTagsEl.appendChild(renderClusterTag(clusterId, clusterName));
+        fillClusterSelect();
+    }
+
+    if (clusterSelectEl) {
+        clusterSelectEl.addEventListener('change', function() {
+            var val = this.value;
+            if (!val) return;
+            var id = parseInt(val, 10);
+            var c = clustersList.find(function(x) {
+                var xid = x.macrolocal_cluster_id != null ? x.macrolocal_cluster_id : x.id;
+                return xid === id;
+            });
+            addClusterTag(id, c ? (c.name || '') : '');
+            this.value = '';
+        });
+    }
+
+    function renderItemRow(sku, qty) {
+        sku = sku !== undefined && sku !== '' ? sku : '';
+        qty = qty !== undefined && qty !== '' ? parseInt(qty, 10) : 50;
+        if (isNaN(qty)) qty = 50;
+        var row = document.createElement('div');
+        row.className = 'tracker-item-row';
+        var sel = document.createElement('select');
+        sel.className = 'tracker-item-sku';
+        var opt0 = document.createElement('option');
+        opt0.value = '';
+        opt0.textContent = '— изделие (SKU) —';
+        sel.appendChild(opt0);
+        trackerProducts.forEach(function(p) {
+            var o = document.createElement('option');
+            o.value = String(p.ozon_sku);
+            o.textContent = (p.name || '') + ' (SKU ' + p.ozon_sku + ')';
+            if (String(p.ozon_sku) === String(sku)) o.selected = true;
+            sel.appendChild(o);
+        });
+        var qtyInp = document.createElement('input');
+        qtyInp.type = 'number';
+        qtyInp.min = 1;
+        qtyInp.value = qty;
+        qtyInp.className = 'tracker-item-qty';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn';
+        btn.textContent = '✕';
+        btn.onclick = function() { row.remove(); };
+        row.appendChild(sel);
+        row.appendChild(qtyInp);
+        row.appendChild(btn);
+        return row;
+    }
+
+    function loadTrackerConfig() {
+        if (trackerConfig && Object.keys(trackerConfig).length) {
+            if (periodEl) periodEl.value = String(trackerConfig.period_days || 7);
+            if (frequencyEl) frequencyEl.value = String(trackerConfig.frequency_hours || 4);
+            if (enabledEl) enabledEl.checked = trackerConfig.enabled !== 0;
+            selectedClusters = (trackerConfig.cluster_ids || []).map(function(id) {
+                var c = clustersList.find(function(x) {
+                    var xid = x.macrolocal_cluster_id != null ? x.macrolocal_cluster_id : x.id;
+                    return xid === id;
+                });
+                return { id: id, name: c ? (c.name || '') : ('Кластер ' + id) };
+            });
+            selectedClusters.forEach(function(c) {
+                clusterTagsEl.appendChild(renderClusterTag(c.id, c.name));
+            });
+            itemsRowsEl.innerHTML = '';
+            var items = trackerConfig.items || [];
+            if (items.length === 0) items.push({ sku: '', quantity: 50 });
+            items.forEach(function(it) {
+                itemsRowsEl.appendChild(renderItemRow(it.sku, it.quantity));
+            });
+            fillClusterSelect();
+        } else {
+            itemsRowsEl.appendChild(renderItemRow('', 50));
+        }
+    }
+
+    fetch('/admin/informers/ozon/crossdock-draft-options')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.clusters) clustersList = data.clusters;
+            fillClusterSelect();
+            loadTrackerConfig();
+        })
+        .catch(function() {
+            loadTrackerConfig();
+        });
+
+    if (document.getElementById('tracker-add-item')) {
+        document.getElementById('tracker-add-item').addEventListener('click', function() {
+            itemsRowsEl.appendChild(renderItemRow('', 50));
+        });
+    }
+
+    if (document.getElementById('tracker-form')) {
+        document.getElementById('tracker-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            var clusterIds = selectedClusters.map(function(c) { return c.id; });
+            var periodDays = parseInt(periodEl.value, 10) || 7;
+            if (periodDays !== 7 && periodDays !== 14 && periodDays !== 21) periodDays = 7;
+            var items = [];
+            itemsRowsEl.querySelectorAll('.tracker-item-row').forEach(function(row) {
+                var sel = row.querySelector('.tracker-item-sku');
+                var qtyInp = row.querySelector('.tracker-item-qty');
+                if (sel && sel.value !== '') {
+                    var qty = qtyInp ? parseInt(qtyInp.value, 10) : 50;
+                    if (isNaN(qty) || qty < 1) qty = 50;
+                    items.push({ sku: parseInt(sel.value, 10), quantity: qty });
+                }
+            });
+            var frequencyHours = parseInt(frequencyEl.value, 10) || 4;
+            if (frequencyHours < 1) frequencyHours = 4;
+            if (frequencyHours > 168) frequencyHours = 168;
+            var enabled = enabledEl.checked ? 1 : 0;
+            if (items.length === 0) {
+                alert('Добавьте хотя бы одну позицию (изделие и количество).');
+                return;
+            }
+            fetch('/admin/informers/slots-tracker-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cluster_ids: clusterIds,
+                    period_days: periodDays,
+                    items: items,
+                    frequency_hours: frequencyHours,
+                    enabled: enabled
+                })
+            })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        var url = new URL(window.location.href);
+                        url.searchParams.set('tab', 'slots');
+                        url.searchParams.set('success', '1');
+                        window.history.replaceState(null, '', url.toString());
+                        alert('Конфиг сохранён.');
+                    } else {
+                        alert(data.error || 'Ошибка сохранения');
+                    }
+                })
+                .catch(function(err) {
+                    alert('Ошибка: ' + (err.message || err));
+                });
+        });
+    }
+
+    // Вкладки
+    var params = new URLSearchParams(window.location.search);
+    var currentTab = params.get('tab') || 'report';
+    var tabLinks = document.querySelectorAll('.inf-tabs a[data-tab]');
+    var panes = document.querySelectorAll('.inf-tab-pane[data-tab-pane]');
+    function activate(tab) {
+        tabLinks.forEach(function(a) {
+            a.classList.toggle('active', a.dataset.tab === tab);
+        });
+        panes.forEach(function(p) {
+            p.classList.toggle('active', p.dataset.tabPane === tab);
+        });
+    }
+    activate(currentTab);
+    tabLinks.forEach(function(a) {
+        a.addEventListener('click', function(e) {
+            e.preventDefault();
+            var tab = a.dataset.tab || 'report';
+            var url = new URL(window.location.href);
+            url.searchParams.set('tab', tab);
+            window.history.replaceState(null, '', url.toString());
+            activate(tab);
+        });
+    });
+
+    // ——— Парсер очереди поставок: конфигуратор ———
+    var supplyProducts = [];
+    var supplyItemsRows = document.getElementById('supply-items-rows');
+    var supplySavedText = document.getElementById('supply-saved-text');
+    var supplySavedSummary = document.getElementById('supply-saved-summary');
+
+    function renderSupplyItemRow(sku, qty) {
+        sku = sku !== undefined && sku !== '' ? sku : '';
+        qty = qty !== undefined && qty !== '' ? parseInt(qty, 10) : 100;
+        if (isNaN(qty)) qty = 100;
+        var row = document.createElement('div');
+        row.className = 'supply-item-row';
+        var sel = document.createElement('select');
+        sel.className = 'supply-item-sku';
+        var opt0 = document.createElement('option');
+        opt0.value = '';
+        opt0.textContent = '— изделие (SKU) —';
+        sel.appendChild(opt0);
+        supplyProducts.forEach(function(p) {
+            var o = document.createElement('option');
+            o.value = String(p.ozon_sku);
+            o.textContent = (p.name || '') + ' (SKU ' + p.ozon_sku + ')';
+            if (String(p.ozon_sku) === String(sku)) o.selected = true;
+            sel.appendChild(o);
+        });
+        var qtyInp = document.createElement('input');
+        qtyInp.type = 'number';
+        qtyInp.min = 1;
+        qtyInp.value = qty;
+        qtyInp.className = 'supply-item-qty';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn';
+        btn.textContent = '✕';
+        btn.onclick = function() { row.remove(); };
+        row.appendChild(sel);
+        row.appendChild(qtyInp);
+        row.appendChild(btn);
+        return row;
+    }
+
+    function buildDraftBodyFromForm() {
+        var items = [];
+        if (supplyItemsRows) {
+            supplyItemsRows.querySelectorAll('.supply-item-row').forEach(function(row) {
+                var sel = row.querySelector('.supply-item-sku');
+                var qtyInp = row.querySelector('.supply-item-qty');
+                if (sel && sel.value !== '') {
+                    var qty = qtyInp ? parseInt(qtyInp.value, 10) : 100;
+                    if (isNaN(qty) || qty < 1) qty = 100;
+                    items.push({ sku: parseInt(sel.value, 10), quantity: qty });
+                }
+            });
+        }
+        var dropOffId = parseInt(document.getElementById('supply-drop-off-warehouse-id').value, 10) || 0;
+        var warehouseType = (document.getElementById('supply-warehouse-type').value || 'CROSS_DOCK').trim();
+        var sellerId = parseInt(document.getElementById('supply-seller-warehouse-id').value, 10) || 0;
+        var deliveryType = (document.getElementById('supply-delivery-type').value || 'DROPOFF').trim();
+        var deletionMode = (document.getElementById('supply-deletion-sku-mode').value || 'PARTIAL').trim();
+        if (deletionMode !== 'FULL') deletionMode = 'PARTIAL';
+        return {
+            cluster_info: {
+                macrolocal_cluster_id: 0,
+                items: items.length ? items : [{ sku: 0, quantity: 100 }]
+            },
+            deletion_sku_mode: deletionMode,
+            delivery_info: {
+                drop_off_warehouse: { warehouse_id: dropOffId, warehouse_type: warehouseType },
+                seller_warehouse_id: sellerId,
+                type: deliveryType
+            }
+        };
+    }
+
+    function fillFormFromDraftBody(body) {
+        if (!body || !body.cluster_info || !body.delivery_info) return;
+        var ci = body.cluster_info;
+        var di = body.delivery_info;
+        var dropOff = di.drop_off_warehouse || {};
+        if (document.getElementById('supply-deletion-sku-mode')) {
+            document.getElementById('supply-deletion-sku-mode').value = (body.deletion_sku_mode === 'FULL') ? 'FULL' : 'PARTIAL';
+        }
+        if (document.getElementById('supply-drop-off-warehouse-id')) {
+            document.getElementById('supply-drop-off-warehouse-id').value = dropOff.warehouse_id || '';
+        }
+        if (document.getElementById('supply-warehouse-type')) {
+            var wt = (dropOff.warehouse_type || 'CROSS_DOCK').trim();
+            document.getElementById('supply-warehouse-type').value = (wt === 'DELIVERY_POINT') ? 'DELIVERY_POINT' : 'CROSS_DOCK';
+        }
+        if (document.getElementById('supply-seller-warehouse-id')) {
+            document.getElementById('supply-seller-warehouse-id').value = di.seller_warehouse_id || '';
+        }
+        if (document.getElementById('supply-delivery-type')) {
+            document.getElementById('supply-delivery-type').value = (di.type || 'DROPOFF').trim();
+        }
+        if (supplyItemsRows) {
+            supplyItemsRows.innerHTML = '';
+            var items = ci.items || [];
+            if (items.length === 0) items = [{ sku: '', quantity: 100 }];
+            items.forEach(function(it) {
+                supplyItemsRows.appendChild(renderSupplyItemRow(it.sku, it.quantity));
+            });
+        }
+    }
+
+    function updateSupplySavedSummary(body) {
+        if (!supplySavedText || !supplySavedSummary) return;
+        if (!body || !body.cluster_info) {
+            supplySavedText.textContent = 'Конфиг не загружен.';
+            supplySavedSummary.classList.add('empty');
+            return;
+        }
+        supplySavedSummary.classList.remove('empty');
+        var lines = [];
+        var ci = body.cluster_info;
+        var di = body.delivery_info || {};
+        var dropOff = di.drop_off_warehouse || {};
+        lines.push('Товарный состав: ' + (ci.items && ci.items.length ? ci.items.map(function(i) { return 'SKU ' + i.sku + ' × ' + i.quantity; }).join(', ') : '—'));
+        lines.push('Режим удаления SKU: ' + (body.deletion_sku_mode || 'PARTIAL'));
+        lines.push('Точка отгрузки: id ' + (dropOff.warehouse_id || '—') + ', тип ' + (dropOff.warehouse_type || '—'));
+        lines.push('Склад продавца: ' + (di.seller_warehouse_id || '—'));
+        lines.push('Тип доставки: ' + (di.type || 'DROPOFF'));
+        supplySavedText.textContent = lines.join('\n');
+    }
+
+    if (document.getElementById('supply-add-item')) {
+        document.getElementById('supply-add-item').addEventListener('click', function() {
+            if (supplyItemsRows) supplyItemsRows.appendChild(renderSupplyItemRow('', 100));
+        });
+    }
+
+    function loadSupplyConfigFromServer() {
+        fetch('/admin/informers/supply-scan-config', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && data.draft_body) {
+                    fillFormFromDraftBody(data.draft_body);
+                    updateSupplySavedSummary(data.draft_body);
+                } else {
+                    if (data.ok) {
+                        if (supplyItemsRows) {
+                            supplyItemsRows.innerHTML = '';
+                            supplyItemsRows.appendChild(renderSupplyItemRow('', 100));
+                        }
+                        updateSupplySavedSummary(null);
+                    } else {
+                        alert(data.error || 'Ошибка загрузки');
+                    }
+                }
+            })
+            .catch(function(err) {
+                alert('Ошибка загрузки: ' + (err.message || err));
+            });
+    }
+
+    if (document.getElementById('supply-scan-config-load')) {
+        document.getElementById('supply-scan-config-load').addEventListener('click', function() {
+            if (supplyProducts.length === 0) {
+                fetch('/admin/informers/ozon/crossdock-draft-options')
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.products) supplyProducts = data.products;
+                        loadSupplyConfigFromServer();
+                    })
+                    .catch(function() { loadSupplyConfigFromServer(); });
+            } else {
+                loadSupplyConfigFromServer();
+            }
+        });
+    }
+
+    if (document.getElementById('supply-parser-form')) {
+        document.getElementById('supply-parser-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            var draftBody = buildDraftBodyFromForm();
+            if (!draftBody.cluster_info.items.length || (draftBody.cluster_info.items.length === 1 && draftBody.cluster_info.items[0].sku === 0)) {
+                alert('Добавьте хотя бы одну позицию с выбранным изделием (SKU).');
+                return;
+            }
+            fetch('/admin/informers/supply-scan-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ draft_body: draftBody })
+            })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        updateSupplySavedSummary(draftBody);
+                        alert('Конфиг сохранён.');
+                    } else {
+                        alert(data.error || 'Ошибка сохранения');
+                    }
+                })
+                .catch(function(err) {
+                    alert('Ошибка: ' + (err.message || err));
+                });
+        });
+    }
+
+    // При загрузке страницы: одна строка в составе (список изделий подгрузится асинхронно)
+    if (supplyItemsRows && supplyItemsRows.children.length === 0) {
+        supplyItemsRows.appendChild(renderSupplyItemRow('', 100));
+    }
+    (function ensureSupplyProducts() {
+        if (supplyProducts.length > 0) {
+            loadSupplyConfigFromServer();
+            return;
+        }
+        fetch('/admin/informers/ozon/crossdock-draft-options')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.products) supplyProducts = data.products;
+                if (supplyItemsRows) {
+                    supplyItemsRows.querySelectorAll('.supply-item-row').forEach(function(row) {
+                        var sel = row.querySelector('.supply-item-sku');
+                        if (!sel || sel.options.length > 1) return;
+                        var val = sel.value;
+                        sel.innerHTML = '';
+                        var opt0 = document.createElement('option');
+                        opt0.value = '';
+                        opt0.textContent = '— изделие (SKU) —';
+                        sel.appendChild(opt0);
+                        supplyProducts.forEach(function(p) {
+                            var o = document.createElement('option');
+                            o.value = String(p.ozon_sku);
+                            o.textContent = (p.name || '') + ' (SKU ' + p.ozon_sku + ')';
+                            if (String(p.ozon_sku) === String(val)) o.selected = true;
+                            sel.appendChild(o);
+                        });
+                    });
+                }
+                loadSupplyConfigFromServer();
+            })
+            .catch(function() { loadSupplyConfigFromServer(); });
+    })();
+})();
+</script>
+{% endblock %}

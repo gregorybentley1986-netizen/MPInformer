@@ -1,0 +1,104 @@
+{% extends "site/base.html" %}
+{% block title %}Настройки — Админка{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}
+<a href="/" class="btn-header">Сайт</a>
+{% endblock %}
+{% block sidebar %}
+<a href="/admin" class="btn">Главная</a>
+<a href="/admin/reference" class="btn">Справочники</a>
+<a href="/admin/users" class="btn">Пользователи</a>
+<a href="/admin/settings" class="btn">Настройки</a>
+<a href="/admin/logs" class="btn">Логи</a>
+<a href="/admin/logout" class="btn">Выход</a>
+{% endblock %}
+{% block extra_css %}
+<style>
+    .alert { padding: 16px; margin-bottom: 20px; border: 1px solid transparent; }
+    .alert-success { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+    .alert-error { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-weight: 700; color: var(--main-text); margin-bottom: 8px; }
+    .form-group input, .form-group select {
+        width: 100%;
+        max-width: 400px;
+        padding: 10px 14px;
+        border: 2px solid var(--border);
+        font-size: 1rem;
+        font-family: inherit;
+    }
+    .form-group input:focus, .form-group select:focus {
+        outline: none;
+        border-color: var(--accent);
+    }
+    .form-group small { display: block; color: var(--text-muted); margin-top: 6px; font-size: 0.9rem; }
+    .form-actions { margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn-success { background: #4caf50; color: #fff; }
+    .btn-success:hover { background: #45a049; }
+    .info-box { background: #e8f4fd; border-left: 4px solid #2196f3; padding: 16px; margin-bottom: 20px; font-size: 0.95rem; }
+    .form-section { margin-top: 24px; }
+    .form-section h3 { font-family: 'Russo One', sans-serif; font-size: 1rem; color: var(--main-text); margin-bottom: 12px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Настройки MPInformer</h1>
+
+{% if request.query_params.get("success") %}
+<div class="alert alert-success">✅ Настройки успешно обновлены! Изменения применены.</div>
+{% endif %}
+{% if request.query_params.get("error") %}
+<div class="alert alert-error">❌ Произошла ошибка при обновлении настроек</div>
+{% endif %}
+
+<div class="card">
+    <h2>Параметры отчёта</h2>
+    <div class="info-box">
+        <strong>Внимание:</strong> Время уведомлений можно указать несколько через запятую (например: 09:00, 14:00, 18:00). Отчёт за текущие сутки: с 00:00 по момент формирования.
+    </div>
+
+    <form method="POST" action="/admin/settings/update">
+        <div class="form-section">
+            <h3>Параметры отчётов</h3>
+            <div class="form-group">
+                <label for="report_notification_times">Время уведомлений (ЧЧ:ММ)</label>
+                <input type="text" id="report_notification_times" name="report_notification_times"
+                    value="{{ settings.report_notification_times }}" placeholder="09:00, 14:00, 18:00">
+                <small>Несколько времён через запятую — во сколько приходят уведомления. В отчёте — заказы с 00:00 текущих суток до момента формирования.</small>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3>Системные настройки</h3>
+            <div class="form-group">
+                <label for="scheduler_interval_minutes">Интервал проверки заказов (минуты)</label>
+                <input type="number" id="scheduler_interval_minutes" name="scheduler_interval_minutes"
+                    value="{{ settings.scheduler_interval_minutes }}" min="1" max="1440">
+                <small>Резервный интервал. 1–1440 минут.</small>
+            </div>
+            <div class="form-group">
+                <label for="log_level">Уровень логирования</label>
+                <select id="log_level" name="log_level">
+                    <option value="DEBUG" {% if settings.log_level == "DEBUG" %}selected{% endif %}>DEBUG</option>
+                    <option value="INFO" {% if settings.log_level == "INFO" %}selected{% endif %}>INFO</option>
+                    <option value="WARNING" {% if settings.log_level == "WARNING" %}selected{% endif %}>WARNING</option>
+                    <option value="ERROR" {% if settings.log_level == "ERROR" %}selected{% endif %}>ERROR</option>
+                </select>
+                <small>Детализация логов</small>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success">Сохранить настройки</button>
+            <a href="/admin" class="btn">Назад</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Текущие значения</h2>
+    <p><strong>Время уведомлений:</strong> {{ settings.report_notification_times }}</p>
+    <p><strong>Интервал проверки:</strong> {{ settings.scheduler_interval_minutes }} мин</p>
+    <p><strong>Уровень логирования:</strong> {{ settings.log_level }}</p>
+    <p><strong>Порт сервера:</strong> {{ settings.server_port }}</p>
+</div>
+{% endblock %}

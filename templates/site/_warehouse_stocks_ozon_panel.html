@@ -1,0 +1,123 @@
+{# Требует: ozon_by_article, last_updated_ozon; опционально ws_stocks_refresh_btn_id, ws_stocks_spinner_id, ws_stocks_compact #}
+{% set _ws_btn = ws_stocks_refresh_btn_id|default('ws-refresh-btn') %}
+{% set _ws_spin = ws_stocks_spinner_id|default('ws-refresh-spinner') %}
+{% set _ws_compact = ws_stocks_compact|default(false) %}
+<div class="warehouse-section{% if _ws_compact %} warehouse-section--compact{% endif %}">
+    <div class="table-toolbar">
+        {% if _ws_compact %}
+        <h3 class="wh-toolbar-title-compact">Ozon</h3>
+        {% else %}
+        <h2>Ozon</h2>
+        {% endif %}
+        <div class="btns">
+            {% if last_updated_ozon %}
+            <span class="last-updated">
+                Обновлено: {{ last_updated_ozon.strftime('%d.%m.%Y %H:%M') }} МСК
+            </span>
+            {% endif %}
+            <span class="ws-refresh-wrap">
+                <button type="button" class="btn" id="{{ _ws_btn }}">Обновить</button>
+                <span class="ws-refresh-spinner" id="{{ _ws_spin }}" aria-hidden="true"></span>
+            </span>
+        </div>
+    </div>
+    {% if ozon_by_article %}
+    {% set cluster_names = ozon_by_article[0].clusters | map(attribute='name') | list if ozon_by_article else [] %}
+    <div class="wh-matrix-wrap">
+        <table class="wh-matrix">
+            <thead>
+                <tr>
+                    <th class="wh-col-fixed">Артикул</th>
+                    <th class="wh-col-fixed wh-col-name">Название</th>
+                    {% for name in cluster_names %}
+                    <th class="wh-col-cluster"><span class="wh-cluster-label-wrap"><span class="wh-cluster-label" title="{{ name }}">{{ name }}</span></span></th>
+                    {% endfor %}
+                    <th class="wh-col-total">Итого</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in ozon_by_article %}
+                <tr>
+                    <td class="wh-col-fixed">{{ item.sku }}</td>
+                    <td class="wh-col-fixed wh-col-name">{{ item.name }}</td>
+                    {% for cl in item.clusters %}
+                    {% set s = (cl.stock | default(0) | int) %}
+                    {% if s == 0 %}
+                        {% set cell_class = 'wh-stock-0' %}
+                    {% elif s < 10 %}
+                        {% set cell_class = 'wh-stock-1-9' %}
+                    {% elif s <= 50 %}
+                        {% set cell_class = 'wh-stock-10-50' %}
+                    {% else %}
+                        {% set cell_class = 'wh-stock-50-plus' %}
+                    {% endif %}
+                    {% set sq = (cl.supply_queue_corner_qty | default(0, true) | int) %}
+                    {% set sqt = (cl.supply_queue_transit_qty | default(0, true) | int) %}
+                    <td class="wh-cell-qty {{ cell_class }}"{% if sq > 0 or sqt > 0 %} title="{% if sq > 0 %}Заполнение / готова к отгрузке: {{ sq }}{% endif %}{% if sq > 0 and sqt > 0 %} · {% endif %}{% if sqt > 0 %}Принята на точке отгрузки / в пути / приёмка: {{ sqt }}{% endif %}"{% endif %}>
+                        <span class="wh-cell-main">{{ s }}</span>
+                        {% if sq > 0 %}<span class="wh-cell-sq-corner" aria-hidden="true">{{ sq }}</span>{% endif %}
+                        {% if sqt > 0 %}<span class="wh-cell-sq-transit" aria-hidden="true">{{ sqt }}</span>{% endif %}
+                    </td>
+                    {% endfor %}
+                    {% set sqtot_r = (item.supply_queue_corner_total | default(0, true) | int) %}
+                    {% set sqtot_t = (item.supply_queue_transit_total | default(0, true) | int) %}
+                    <td class="wh-col-total"{% if sqtot_r > 0 or sqtot_t > 0 %} title="{% if sqtot_r > 0 %}Заполнение / готова к отгрузке (всего): {{ sqtot_r }}{% endif %}{% if sqtot_r > 0 and sqtot_t > 0 %} · {% endif %}{% if sqtot_t > 0 %}В пути / приёмка (всего): {{ sqtot_t }}{% endif %}"{% endif %}>
+                        <span class="wh-cell-main">{{ item.total_stock }}</span>
+                        {% if sqtot_r > 0 %}<span class="wh-cell-sq-corner" aria-hidden="true">{{ sqtot_r }}</span>{% endif %}
+                        {% if sqtot_t > 0 %}<span class="wh-cell-sq-transit" aria-hidden="true">{{ sqtot_t }}</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="wh-legend">
+        <span><i class="leg-0"></i> 0</span>
+        <span><i class="leg-1"></i> 1–9</span>
+        <span><i class="leg-2"></i> 10–50</span>
+        <span><i class="leg-3"></i> &gt;50</span>
+        <span>Коричневым справа сверху — снимок «Очередь поставок»: «заполнение данных», «готова к отгрузке». Синим справа снизу — «принята на точке отгрузки», «в пути», «приёмка на складе». В «Итого» — суммы по кластерам.</span>
+    </div>
+    {% else %}
+    <div class="empty-state">Нет данных по товарам Ozon</div>
+    {% endif %}
+</div>
+<script>
+(function() {
+    var btn = document.getElementById('{{ _ws_btn }}');
+    var spinner = document.getElementById('{{ _ws_spin }}');
+    if (!btn || !spinner) return;
+
+    function setLoading(on) {
+        btn.disabled = !!on;
+        btn.textContent = on ? 'Обновляю…' : 'Обновить';
+        spinner.classList.toggle('show', !!on);
+    }
+
+    btn.addEventListener('click', function() {
+        if (btn.disabled) return;
+        setLoading(true);
+        fetch('/api/warehouse-stocks/refresh', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        })
+            .then(function(r) {
+                return r.json().then(function(j) { return { ok: r.ok, body: j }; });
+            })
+            .then(function(x) {
+                if (x.ok && x.body && x.body.ok) {
+                    window.location.reload();
+                    return;
+                }
+                setLoading(false);
+                var msg = (x.body && (x.body.error || x.body.detail)) ? (x.body.error || x.body.detail) : 'Не удалось обновить остатки';
+                window.alert(msg);
+            })
+            .catch(function(err) {
+                setLoading(false);
+                window.alert('Ошибка запроса: ' + (err && err.message ? err.message : String(err)));
+            });
+    });
+})();
+</script>

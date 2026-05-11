@@ -1,0 +1,1106 @@
+{% extends "base.html" %}
+{% block title %}Очередь печати{% endblock %}
+{% block extra_css %}
+<style>
+    .pq-section { margin-bottom: 28px; }
+    .pq-section h2 {
+        font-family: 'Russo One', sans-serif;
+        font-size: 1.2rem;
+        font-weight: normal;
+        color: var(--main-text);
+        margin-bottom: 12px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid var(--accent);
+    }
+    .pq-section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .pq-section-header h2 { margin-bottom: 0; padding-bottom: 6px; }
+    .pq-table tbody tr { cursor: default; }
+    .pq-table .col-actions { overflow: hidden; }
+    .pq-table .col-actions .pq-actions-wrap { float: right; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; }
+    .pq-modal-overlay { display: none; position: fixed; left: 0; top: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; }
+    .pq-modal-overlay.pq-modal-open { display: flex; }
+    .pq-modal { background: var(--main-bg, #fff); border-radius: 8px; padding: 24px; min-width: 320px; max-width: 480px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+    .pq-modal h3 { margin: 0 0 16px 0; font-family: 'Russo One', sans-serif; font-size: 1.1rem; }
+    .pq-modal .form-group { margin-bottom: 12px; }
+    .pq-modal .form-group label { display: block; margin-bottom: 4px; font-size: 0.9rem; }
+    .pq-modal .form-group select,
+    .pq-modal .form-group input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; box-sizing: border-box; font-family: 'Play', sans-serif; }
+    .pq-modal .form-group input[readonly] { background: #f5f5f5; color: var(--text-muted); }
+    .pq-modal .form-group select:disabled,
+    .pq-modal .form-group input:disabled { background: #eee; color: #999; cursor: not-allowed; }
+    .pq-modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+    .pq-modal-actions .btn { padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: 'Play', sans-serif; }
+    .pq-modal-actions .btn-primary { background: var(--accent); color: #2a2a2a; border: none; }
+    .pq-modal-actions .btn-secondary { background: #e0e0e0; color: #333; border: 1px solid #ccc; }
+    .pq-gantt-wrap { border: 1px solid var(--border); border-radius: 8px; background: #fff; overflow: hidden; }
+    .pq-gantt-main { display: flex; min-width: 0; }
+    .pq-gantt-labels-col { width: 180px; min-width: 180px; flex-shrink: 0; background: #f5f5f5; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: visible; }
+    .pq-gantt-axis-labels { flex-shrink: 0; border-bottom: 1px solid var(--border); }
+    .pq-gantt-axis-label-row { height: 26px; padding: 4px 8px; font-weight: 600; font-size: 0.8rem; display: flex; align-items: center; }
+    .pq-gantt-axis-label-row:first-child { height: 28px; }
+    .pq-gantt-lane-labels { flex: 1; min-height: 0; background: #fafafa; overflow: visible; }
+    .pq-gantt-lane-label { height: 60px; padding: 6px 12px; font-size: 0.9rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; overflow: visible; box-sizing: border-box; }
+    .pq-gantt-printer-spool { width: 55px; height: 55px; flex-shrink: 0; margin-left: auto; display: flex; align-items: center; justify-content: center; align-self: center; overflow: visible; }
+    .pq-gantt-printer-spool img { width: 55px; height: 55px; display: block; object-fit: contain; object-position: center; vertical-align: middle; }
+    .pq-gantt-printer-spool a { display: flex; align-items: center; justify-content: center; text-decoration: none; color: inherit; }
+    .pq-gantt-printer-spool a:hover { opacity: 0.85; }
+    .pq-gantt-bind-spool-link { margin-left: auto; width: 55px; height: 55px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-decoration: none; color: var(--accent, #1976d2); border: 1px solid var(--border); border-radius: 6px; }
+    .pq-gantt-bind-spool-link:hover { background: rgba(0,0,0,0.05); }
+    .pq-gantt-bind-spool-link svg { width: 36px; height: 36px; display: block; }
+    .pq-gantt-scroll-col { flex: 1; min-width: 0; overflow-x: auto; border-left: none; outline: none; }
+    .pq-gantt-scroll-inner { min-width: 0; border-left: none; }
+
+    .pq-printer-status-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        border: 1px solid rgba(0,0,0,0.25);
+        background: #9e9e9e; /* disconnected по умолчанию */
+        flex-shrink: 0;
+    }
+    .pq-status-free { background: #2e7d32; }        /* green */
+    .pq-status-busy { background: #f9a825; }        /* yellow */
+    .pq-status-error { background: #d32f2f; }       /* red */
+    .pq-status-disconnected { background: #9e9e9e; }/* gray */
+
+    .pq-gantt-time-axis-wrap { display: flex; flex-direction: column; border-bottom: 1px solid var(--border); flex-shrink: 0; border-left: none; position: relative; }
+    .pq-gantt-time-row { display: flex; align-items: stretch; font-size: 0.75rem; color: var(--text-muted); border-left: none; padding-left: 1px; }
+    .pq-gantt-time-row--dates { height: 28px; font-weight: 600; border-bottom: 1px solid #ddd; }
+    .pq-gantt-time-row--hours { height: 26px; }
+    .pq-gantt-time-tick { flex-shrink: 0; padding: 0 2px; text-align: center; display: flex; align-items: center; justify-content: center; border-right: 1px solid #e0e0e0; box-sizing: border-box; }
+    .pq-gantt-time-tick.tick--day { border-right: 1px solid #e0e0e0; }
+    .pq-gantt-time-tick.tick--day.tick--weekend { color: #c62828; }
+    .pq-gantt-time-tick:first-child { border-left: none; }
+    .pq-gantt-time-axis-day-lines { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; pointer-events: none; z-index: 2; }
+    .pq-gantt-time-axis-day-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #999; }
+    .pq-gantt-time-axis-day-line--first { width: 1px; background: #e0e0e0; left: 0; }
+    .pq-gantt-lanes-wrap { position: relative; flex-shrink: 0; border-left: none; }
+    .pq-gantt-lanes { position: relative; flex-shrink: 0; border-left: none; }
+    .pq-gantt-now-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #c62828; pointer-events: none; z-index: 10; }
+    .pq-gantt-lane { height: 60px; border-bottom: 1px solid var(--border); position: relative; border-left: none; overflow: visible; }
+    .pq-gantt-lane-grid { position: absolute; left: 0; top: 0; bottom: 0; right: 0; pointer-events: none; }
+    .pq-gantt-scroll-inner { position: relative; }
+    .pq-gantt-bar-wrap {
+        position: absolute;
+        top: 0;
+        cursor: grab;
+        box-sizing: border-box;
+    }
+    .pq-gantt-bar {
+        position: relative;
+        top: 10px;
+        height: 32px;
+        border-radius: 4px;
+        padding: 2px 6px 2px 20px;
+        margin-right: 3px;
+        font-size: 0.43rem;
+        font-weight: normal;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        line-height: 1.25;
+        cursor: grab;
+        box-sizing: border-box;
+        border: 1px solid rgba(0,0,0,0.2);
+    }
+    .pq-gantt-bar:active { cursor: grabbing; }
+    .pq-gantt-bar-plastic {
+        position: absolute;
+        left: 0;
+        top: 10px;
+        width: 16px;
+        height: 32px;
+        padding: 0 2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        border-top-right-radius: 4px;
+        border-bottom-right-radius: 4px;
+        background: #4a4a4a;
+        color: #fff;
+        font-size: 0.49rem;
+        font-weight: normal;
+        line-height: 1.2;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        transform: rotate(180deg);
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 2;
+    }
+    .pq-gantt-bar-wrap.gantt-bar--conflict .pq-gantt-bar { box-shadow: 0 0 0 2px #c62828; }
+    .pq-gantt-bar-wrap.pq-gantt-bar--selected .pq-gantt-bar { box-shadow: 0 0 0 2px var(--accent); z-index: 5; }
+    .pq-gantt-bar-phantom {
+        position: absolute;
+        top: 10px;
+        height: 32px;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 0.8rem;
+        pointer-events: none;
+        z-index: 20;
+        opacity: 0.7;
+        box-sizing: border-box;
+        border: 2px dashed rgba(0,0,0,0.4);
+        transition: none;
+    }
+    .pq-section #pq-table.pq-table { width: 100%; max-width: 100%; border-collapse: collapse; font-size: 0.9rem; table-layout: fixed; }
+    .pq-section #pq-table.pq-table th,
+    .pq-section #pq-table.pq-table td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: middle; box-sizing: border-box; line-height: 1.4; min-height: 36px; }
+    .pq-section #pq-table.pq-table th:last-child,
+    .pq-section #pq-table.pq-table td:last-child { border-right: none; }
+    .pq-section #pq-table.pq-table th { font-family: 'Russo One', sans-serif; background: #f0f0f0; font-weight: 500; }
+    .pq-section #pq-table.pq-table select,
+    .pq-section #pq-table.pq-table input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; box-sizing: border-box; font-family: 'Play', sans-serif; }
+    .pq-section #pq-table.pq-table input[readonly] { background: #f5f5f5; color: var(--text-muted); }
+    .pq-section #pq-table.pq-table .col-num { text-align: center; }
+    .pq-section #pq-table.pq-table .pq-cell-start,
+    .pq-section #pq-table.pq-table .pq-cell-end { white-space: nowrap; }
+    .pq-section #pq-table.pq-table .btn-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: none; background: transparent; cursor: pointer; border-radius: 4px; color: #333; }
+    .pq-section #pq-table.pq-table .btn-icon:hover { background: #e0e0e0; }
+    .pq-section #pq-table.pq-table .btn-icon.btn-danger-icon { color: #c62828; }
+    .pq-section #pq-table.pq-table .btn-icon.btn-danger-icon:hover { background: #ffebee; }
+    .pq-section #pq-table.pq-table .btn-icon svg { width: 18px; height: 18px; fill: currentColor; }
+    .pq-section #pq-table.pq-table tbody tr.pq-row-selected { background: rgba(255, 193, 7, 0.25); }
+    .pq-section #pq-table.pq-table .col-cb { width: 44px; text-align: center; }
+    .pq-btn-add-top { padding: 8px 16px; background: var(--accent); color: #2a2a2a; border: none; border-radius: 4px; cursor: pointer; font-family: 'Russo One', sans-serif; }
+    .pq-btn-add-top:hover { background: var(--accent-dark); }
+    .pq-btn-delete-selected { padding: 8px 16px; background: #c62828; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-family: 'Russo One', sans-serif; font-size: 0.9rem; }
+    .pq-btn-delete-selected:hover { background: #b71c1c; }
+    .pq-btn-delete-selected:disabled { opacity: 0.5; cursor: not-allowed; }
+    .pq-view-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .pq-view-toolbar .pq-view-nav { padding: 8px 16px; background: #e8e8e8; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-family: 'Play', sans-serif; }
+    .pq-view-toolbar .pq-view-nav:hover { background: #ddd; }
+    .pq-view-toolbar .pq-view-range { font-weight: 600; font-size: 0.95rem; min-width: 120px; text-align: center; }
+    .pq-view-toolbar .pq-view-spacer { flex: 1; min-width: 20px; }
+    .pq-subnav { display: flex; gap: 8px; margin-bottom: 16px; flex-shrink: 0; }
+    .pq-subnav a { display: block; padding: 10px 16px; text-decoration: none; color: var(--main-text); background: #f0f0f0; border: 1px solid var(--border); border-radius: 4px; font-family: 'Russo One', sans-serif; font-size: 0.9rem; }
+    .pq-subnav a:hover { background: #e8e8e8; }
+    .pq-subnav a.active { background: var(--accent); color: #2a2a2a; border-color: var(--accent); }
+    .pq-week-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .pq-week-toolbar .pq-week-nav { padding: 8px 14px; background: #e8e8e8; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-family: 'Play', sans-serif; font-size: 0.9rem; flex-shrink: 0; }
+    .pq-week-toolbar .pq-week-nav:hover { background: #ddd; }
+    .pq-week-toolbar .pq-week-center {
+        flex: 1;
+        min-width: 200px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.95rem;
+        padding: 10px 16px;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+    .pq-week-toolbar .pq-week-center.pq-week-current { background: #c8e6c9; color: #1b5e20; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="pq-section">
+    <h1>Очередь печати</h1>
+    <div class="pq-subnav">
+        <a href="/print-plan">План печати</a>
+        <a href="/print-queue" class="active">Очередь печати</a>
+    </div>
+    <div class="pq-week-toolbar">
+        <button type="button" class="pq-week-nav" id="pq-btn-week-prev" title="Предыдущая неделя">← Назад</button>
+        <div class="pq-week-center" id="pq-week-center">
+            <span id="pq-week-label">Неделя:</span> <span id="pq-week-dates">—</span>
+        </div>
+        <button type="button" class="pq-week-nav" id="pq-btn-week-next" title="Следующая неделя">Вперёд →</button>
+    </div>
+    <div class="pq-gantt-wrap">
+        <div class="pq-gantt-main">
+            <div class="pq-gantt-labels-col">
+                <div class="pq-gantt-axis-labels">
+                    <div class="pq-gantt-axis-label-row">День</div>
+                    <div class="pq-gantt-axis-label-row">Час</div>
+                </div>
+                <div class="pq-gantt-lane-labels" id="pq-gantt-lane-labels"></div>
+            </div>
+            <div class="pq-gantt-scroll-col" id="pq-gantt-scroll-col">
+                <div class="pq-gantt-scroll-inner" id="pq-gantt-scroll-inner">
+                    <div class="pq-gantt-time-axis-wrap" id="pq-gantt-time-axis-wrap"></div>
+                    <div class="pq-gantt-lanes-wrap" id="pq-gantt-lanes-wrap">
+                        <div class="pq-gantt-lanes" id="pq-gantt-lanes"></div>
+                        <div class="pq-gantt-now-line" id="pq-gantt-now-line" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="pq-section">
+    <div class="pq-section-header">
+        <h2>Задания для принтеров</h2>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <button type="button" class="btn pq-btn-add-top" id="pq-btn-add">Добавить задание</button>
+            <button type="button" class="pq-btn-delete-selected" id="pq-btn-delete-selected" disabled title="Удалить выбранные">Удалить выбранные</button>
+        </div>
+    </div>
+    <table class="pq-table" id="pq-table">
+        <colgroup>
+            <col class="col-cb" style="width: 44px">
+            <col class="col-num" style="width: 5%">
+            <col style="width: 20%">
+            <col style="width: 11%">
+            <col style="width: 18%">
+            <col style="width: 12%">
+            <col style="width: 12%">
+            <col class="col-actions" style="width: 14%">
+        </colgroup>
+        <thead>
+            <tr>
+                <th class="col-cb"><input type="checkbox" id="pq-select-all" title="Выбрать все" aria-label="Выбрать все"></th>
+                <th class="col-num">№</th>
+                <th>Задание</th>
+                <th>Принтер</th>
+                <th>Материал</th>
+                <th>Начало</th>
+                <th>Окончание</th>
+                <th class="col-actions">Действия</th>
+            </tr>
+        </thead>
+        <tbody id="pq-tbody">
+            {% for qi in queue_items %}
+            <tr data-id="{{ qi.id }}">
+                <td class="col-cb"><input type="checkbox" class="pq-row-cb" data-id="{{ qi.id }}" aria-label="Выбрать"></td>
+                <td class="col-num pq-cell-num">{{ qi.sequence or loop.index }}</td>
+                <td class="pq-cell-job">{{ qi.job_name }}</td>
+                <td class="pq-cell-printer">{{ qi.printer_number }}</td>
+                <td class="pq-cell-material">{{ qi.material_name }}</td>
+                <td class="pq-cell-start">{% if qi.scheduled_start %}{{ qi.scheduled_start.strftime('%d.%m.%Y %H:%M') }} МСК{% endif %}</td>
+                <td class="pq-cell-end">{% if qi.scheduled_end %}{{ qi.scheduled_end.strftime('%d.%m.%Y %H:%M') }} МСК{% endif %}</td>
+                <td class="col-actions">
+                    <div class="pq-actions-wrap">
+                        <button type="button" class="btn-icon edit" data-id="{{ qi.id }}" title="Редактировать" aria-label="Редактировать"><svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
+                        <button type="button" class="btn-icon copy" data-id="{{ qi.id }}" title="Копировать" aria-label="Копировать"><svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button>
+                        <button type="button" class="btn-icon btn-danger-icon delete" data-id="{{ qi.id }}" title="Удалить" aria-label="Удалить"><svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="pq-modal-overlay" id="pq-modal-overlay">
+    <div class="pq-modal">
+        <h3 id="pq-modal-title">Редактировать задание</h3>
+        <form id="pq-modal-form">
+            <input type="hidden" id="pq-modal-item-id" value="">
+            <div class="form-group">
+                <label for="pq-modal-job">Задание</label>
+                <select id="pq-modal-job"></select>
+            </div>
+            <div class="form-group">
+                <label for="pq-modal-printer">Принтер</label>
+                <select id="pq-modal-printer"></select>
+            </div>
+            <div class="form-group">
+                <label for="pq-modal-material">Материал</label>
+                <select id="pq-modal-material"></select>
+            </div>
+            <div class="form-group">
+                <label for="pq-modal-start">Начало</label>
+                <input type="datetime-local" id="pq-modal-start" step="900">
+            </div>
+            <div class="form-group">
+                <label for="pq-modal-end">Окончание</label>
+                <input type="text" id="pq-modal-end" readonly>
+            </div>
+            <div class="pq-modal-actions">
+                <button type="button" class="btn btn-secondary" id="pq-modal-cancel">Отмена</button>
+                <button type="submit" class="btn btn-primary" id="pq-modal-save">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="application/json" id="pq-printers-json">{{ printers_json | safe }}</script>
+<script type="application/json" id="pq-jobs-json">{{ print_jobs_json | safe }}</script>
+<script type="application/json" id="pq-materials-json">{{ materials_json | safe }}</script>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function() {
+    var printers = JSON.parse(document.getElementById('pq-printers-json').textContent || '[]');
+    var jobs = JSON.parse(document.getElementById('pq-jobs-json').textContent || '[]');
+    var materials = JSON.parse(document.getElementById('pq-materials-json').textContent || '[]');
+    var jobById = {};
+    jobs.forEach(function(j) { jobById[j.id] = j; });
+
+    var INTERVAL_MIN = 15;
+    var SLOT_PX = 15;
+    var RANGE_DAYS = 7;
+    var viewStart = null;
+    var viewEnd = null;
+    var laneWidth = 800;
+    var currentWeekStart = '';
+    var STORAGE_KEY_WEEK = 'printPlanWeek';
+    var selectedItemId = null;
+    var barDragStarted = false;
+    var initialScrollDone = false;
+    var nowLineIntervalId = null;
+
+    function nowLinePositionPx() {
+        if (!viewStart || !viewEnd) return null;
+        var nowMs = Date.now();
+        var viewStartMs = viewStart.getTime();
+        var viewEndMs = viewEnd.getTime();
+        if (nowMs < viewStartMs || nowMs >= viewEndMs) return null;
+        var slotsPerHour = 60 / INTERVAL_MIN;
+        var hourWidth = slotsPerHour * SLOT_PX;
+        var hourMs = 60 * 60 * 1000;
+        var fullHoursFromStart = Math.floor((nowMs - viewStartMs) / hourMs);
+        var startOfCurrentHourMs = viewStartMs + fullHoursFromStart * hourMs;
+        var minutesWithinHour = (nowMs - startOfCurrentHourMs) / 60000;
+        var pxPerMinute = hourWidth / 60;
+        var nowPosPx = fullHoursFromStart * hourWidth + minutesWithinHour * pxPerMinute;
+        return Math.max(0, Math.min(laneWidth, nowPosPx));
+    }
+
+    function updateNowLine() {
+        if (!viewStart || !viewEnd) return;
+        var nowLine = document.getElementById('pq-gantt-now-line');
+        if (!nowLine) return;
+        var nowPosPx = nowLinePositionPx();
+        if (nowPosPx != null) {
+            nowLine.style.display = 'block';
+            nowLine.style.left = nowPosPx + 'px';
+        } else {
+            nowLine.style.display = 'none';
+        }
+    }
+
+    function setSelection(itemId) {
+        selectedItemId = itemId != null ? itemId : null;
+        document.querySelectorAll('#pq-tbody tr[data-id]').forEach(function(tr) {
+            tr.classList.toggle('pq-row-selected', itemId != null && tr.dataset.id && parseInt(tr.dataset.id, 10) === itemId);
+        });
+        var firstBar = null;
+        document.querySelectorAll('.pq-gantt-bar-wrap').forEach(function(wrap) {
+            var match = itemId != null && parseInt(wrap.dataset.itemId, 10) === itemId;
+            wrap.classList.toggle('pq-gantt-bar--selected', match);
+            if (match && !firstBar) firstBar = wrap;
+        });
+        if (firstBar) {
+            firstBar.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+    }
+
+    function contrastColor(hex) {
+        if (!hex || hex.length < 7) return '#1a1a1a';
+        var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+        var lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return lum > 0.5 ? '#1a1a1a' : '#f5f5f5';
+    }
+
+    function roundTo15Min(d) {
+        var t = new Date(d);
+        var m = t.getMinutes();
+        t.setMinutes(Math.floor(m / 15) * 15, 0, 0);
+        return t;
+    }
+
+    function formatTime(d) {
+        return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    }
+    function formatHour(d) {
+        return ('0' + d.getHours()).slice(-2) + ':00';
+    }
+
+    function formatDate(d) {
+        return ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2);
+    }
+    var DAY_NAMES = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+    function dateLabel(d, todayStart, tomorrowStart) {
+        var t = d.getTime();
+        var dayName = DAY_NAMES[d.getDay()];
+        var dateStr = formatDate(d);
+        if (t >= todayStart && t < tomorrowStart) return 'сегодня, ' + dateStr + ', ' + dayName;
+        if (t >= tomorrowStart && t < tomorrowStart + 86400000) return 'завтра, ' + dateStr + ', ' + dayName;
+        return dateStr + ', ' + dayName;
+    }
+
+    var periodMs = function() { return RANGE_DAYS * 24 * 60 * 60 * 1000; };
+
+    function floorViewTo15Min(d) {
+        var t = new Date(d);
+        var m = t.getMinutes() + t.getSeconds() / 60 + t.getMilliseconds() / 60000;
+        t.setMinutes(Math.floor(m / INTERVAL_MIN) * INTERVAL_MIN, 0, 0);
+        return t;
+    }
+
+    function getMondayOfWeek(d) {
+        var dt = new Date(d);
+        var day = dt.getDay();
+        var diff = day === 0 ? 6 : day - 1;
+        dt.setDate(dt.getDate() - diff);
+        return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+    }
+    function formatWeekRangeLabel(weekStart) {
+        var m = new Date(weekStart + 'T12:00:00');
+        var end = new Date(m);
+        end.setDate(end.getDate() + 6);
+        var fmtStart = function(d) { return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0'); };
+        var fmtEnd = function(d) { return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear(); };
+        return 'с ' + fmtStart(m) + ' по ' + fmtEnd(end);
+    }
+    function isCurrentWeek(weekStart) {
+        return weekStart === getMondayOfWeek(new Date());
+    }
+    function loadStoredWeek() {
+        try {
+            var w = localStorage.getItem(STORAGE_KEY_WEEK);
+            if (w && /^\d{4}-\d{2}-\d{2}$/.test(w)) return w;
+        } catch (e) {}
+        return null;
+    }
+    function saveStoredWeek(weekStart) {
+        try { localStorage.setItem(STORAGE_KEY_WEEK, weekStart); } catch (e) {}
+    }
+    function updateWeekUI(weekStart) {
+        document.getElementById('pq-week-label').textContent = isCurrentWeek(weekStart) ? 'Текущая неделя:' : 'Неделя:';
+        document.getElementById('pq-week-dates').textContent = formatWeekRangeLabel(weekStart);
+        var centerEl = document.getElementById('pq-week-center');
+        if (isCurrentWeek(weekStart)) centerEl.classList.add('pq-week-current');
+        else centerEl.classList.remove('pq-week-current');
+    }
+    function setViewRangeFromWeek(weekStart) {
+        RANGE_DAYS = 7;
+        var m = new Date(weekStart + 'T00:00:00+03:00');
+        viewStart = floorViewTo15Min(m.getTime());
+        viewEnd = new Date(viewStart.getTime() + periodMs());
+        var totalMin = (viewEnd - viewStart) / 60000;
+        var ticks = Math.ceil(totalMin / INTERVAL_MIN);
+        laneWidth = ticks * SLOT_PX;
+        renderGantt();
+    }
+
+    function setViewRange(days) {
+        RANGE_DAYS = days;
+        var now = new Date();
+        var period = periodMs();
+        viewStart = floorViewTo15Min(now.getTime() - period / 3);
+        viewEnd = new Date(viewStart.getTime() + period);
+        var totalMin = (viewEnd - viewStart) / 60000;
+        var ticks = Math.ceil(totalMin / INTERVAL_MIN);
+        laneWidth = ticks * SLOT_PX;
+        renderGantt();
+    }
+
+    function shiftViewBack() {
+        if (!currentWeekStart) return;
+        var m = new Date(currentWeekStart + 'T12:00:00');
+        m.setDate(m.getDate() - 7);
+        currentWeekStart = m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0') + '-' + String(m.getDate()).padStart(2, '0');
+        saveStoredWeek(currentWeekStart);
+        setViewRangeFromWeek(currentWeekStart);
+        updateWeekUI(currentWeekStart);
+        updateTableFromApi(window.__pqItems || []);
+    }
+
+    function shiftViewForward() {
+        if (!currentWeekStart) return;
+        var m = new Date(currentWeekStart + 'T12:00:00');
+        m.setDate(m.getDate() + 7);
+        currentWeekStart = m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0') + '-' + String(m.getDate()).padStart(2, '0');
+        saveStoredWeek(currentWeekStart);
+        setViewRangeFromWeek(currentWeekStart);
+        updateWeekUI(currentWeekStart);
+        updateTableFromApi(window.__pqItems || []);
+    }
+
+    function loadPrintersStatus() {
+        fetch('/api/print-queue/printers-status', { cache: 'no-store' })
+            .then(function(r) { return r.json(); })
+            .then(function(list) {
+                (list || []).forEach(function(s) {
+                    var dot = document.getElementById('pq-printer-status-dot-' + s.printer_id);
+                    if (!dot) return;
+                    dot.classList.remove('pq-status-free', 'pq-status-busy', 'pq-status-error', 'pq-status-disconnected');
+                    dot.classList.add('pq-status-' + (s.status || 'disconnected'));
+                    dot.title = s.title || s.status || '—';
+                });
+            })
+            .catch(function() {});
+    }
+
+    function loadItems(cb) {
+        fetch('/api/print-queue/items').then(function(r) { return r.json(); }).then(function(items) {
+            window.__pqItems = items;
+            if (cb) cb(items);
+            renderGantt();
+            loadPrintersStatus();
+            updateTableFromApi(items);
+        });
+    }
+
+    function detectConflicts(items) {
+        var byPrinter = {};
+        items.forEach(function(it) {
+            if (!byPrinter[it.printer_id]) byPrinter[it.printer_id] = [];
+            byPrinter[it.printer_id].push(it);
+        });
+        var conflictIds = {};
+        Object.keys(byPrinter).forEach(function(printerId) {
+            var list = byPrinter[printerId];
+            for (var i = 0; i < list.length; i++) {
+                var a = list[i];
+                var startA = new Date(a.scheduled_start).getTime();
+                var endA = new Date(a.scheduled_end).getTime();
+                var jobA = jobById[a.print_job_id];
+                var printerOk = !jobA || !jobA.printer_ids || jobA.printer_ids.length === 0 || jobA.printer_ids.indexOf(parseInt(printerId, 10)) !== -1;
+                if (!printerOk) conflictIds[a.id] = true;
+                for (var j = i + 1; j < list.length; j++) {
+                    var b = list[j];
+                    var startB = new Date(b.scheduled_start).getTime();
+                    var endB = new Date(b.scheduled_end).getTime();
+                    if (startA < endB && startB < endA) {
+                        conflictIds[a.id] = true;
+                        conflictIds[b.id] = true;
+                    }
+                }
+            }
+        });
+        return conflictIds;
+    }
+
+    function renderGantt() {
+        var items = window.__pqItems || [];
+        var conflictIds = detectConflicts(items);
+        var ganttBarDragOffsetX = 0;
+        var ganttBarPhantom = null;
+        var ganttBarDropLeftPx = 0;
+        var ganttBarPhantomWidthPx = 0;
+        var scrollCol = document.getElementById('pq-gantt-scroll-col');
+        var axisWrap = document.getElementById('pq-gantt-time-axis-wrap');
+        var labelsEl = document.getElementById('pq-gantt-lane-labels');
+        var lanesEl = document.getElementById('pq-gantt-lanes');
+        if (!viewStart || !viewEnd) {
+            if (currentWeekStart) setViewRangeFromWeek(currentWeekStart);
+            else setViewRange(RANGE_DAYS);
+            return;
+        }
+        var totalMin = (viewEnd - viewStart) / 60000;
+        var ticks = Math.ceil(totalMin / INTERVAL_MIN);
+        var slotsPerDay = 24 * (60 / INTERVAL_MIN);
+        var slotMs = INTERVAL_MIN * 60 * 1000;
+        var nowCal = new Date();
+        var todayStart = new Date(nowCal.getFullYear(), nowCal.getMonth(), nowCal.getDate(), 0, 0, 0, 0).getTime();
+        var tomorrowStart = todayStart + 86400000;
+        var scrollInner = document.getElementById('pq-gantt-scroll-inner');
+        scrollInner.style.width = laneWidth + 'px';
+        axisWrap.style.width = laneWidth + 'px';
+        axisWrap.innerHTML = '';
+        var rowDates = document.createElement('div');
+        rowDates.className = 'pq-gantt-time-row pq-gantt-time-row--dates';
+        var rowHours = document.createElement('div');
+        rowHours.className = 'pq-gantt-time-row pq-gantt-time-row--hours';
+        var slotsPerHour = 60 / INTERVAL_MIN;
+        var hourWidth = slotsPerHour * SLOT_PX;
+        for (var d = 0; d < RANGE_DAYS; d++) {
+            var dayDate = new Date(viewStart.getTime() + d * slotsPerDay * INTERVAL_MIN * 60000);
+            var daySpan = document.createElement('span');
+            daySpan.className = 'pq-gantt-time-tick tick--day' + (dayDate.getDay() === 0 || dayDate.getDay() === 6 ? ' tick--weekend' : '');
+            daySpan.style.width = slotsPerDay * SLOT_PX + 'px';
+            daySpan.textContent = dateLabel(dayDate, todayStart, tomorrowStart);
+            rowDates.appendChild(daySpan);
+        }
+        for (var i = 0; i < ticks; i += slotsPerHour) {
+            var t = new Date(viewStart.getTime() + i * INTERVAL_MIN * 60000);
+            var isDayStart = (i % slotsPerDay) === 0;
+            var hourSpan = document.createElement('span');
+            hourSpan.className = 'pq-gantt-time-tick';
+            hourSpan.style.width = hourWidth + 'px';
+            hourSpan.textContent = formatHour(t);
+            rowHours.appendChild(hourSpan);
+        }
+        axisWrap.appendChild(rowDates);
+        axisWrap.appendChild(rowHours);
+        var axisDayLines = document.getElementById('pq-gantt-axis-day-lines');
+        if (axisDayLines) axisDayLines.remove();
+        axisDayLines = document.createElement('div');
+        axisDayLines.className = 'pq-gantt-time-axis-day-lines';
+        axisDayLines.id = 'pq-gantt-axis-day-lines';
+        var firstLine = document.createElement('div');
+        firstLine.className = 'pq-gantt-time-axis-day-line pq-gantt-time-axis-day-line--first';
+        axisDayLines.appendChild(firstLine);
+        for (var d = 1; d < RANGE_DAYS; d++) {
+            var lineEl = document.createElement('div');
+            lineEl.className = 'pq-gantt-time-axis-day-line';
+            lineEl.style.left = (d * slotsPerDay * SLOT_PX) + 'px';
+            axisDayLines.appendChild(lineEl);
+        }
+        axisWrap.appendChild(axisDayLines);
+        if (!initialScrollDone) {
+            var scrollCol = document.getElementById('pq-gantt-scroll-col');
+            if (scrollCol && laneWidth > 0) {
+                var nowPosPx = nowLinePositionPx();
+                if (nowPosPx != null) {
+                    var third = scrollCol.clientWidth / 3;
+                    scrollCol.scrollLeft = Math.max(0, nowPosPx - third);
+                }
+            }
+            initialScrollDone = true;
+        }
+        var nowLine = document.getElementById('pq-gantt-now-line');
+        var nowPosPx = nowLinePositionPx();
+        if (nowPosPx != null) {
+            nowLine.style.display = 'block';
+            nowLine.style.left = nowPosPx + 'px';
+        } else {
+            nowLine.style.display = 'none';
+        }
+        if (nowLineIntervalId) clearInterval(nowLineIntervalId);
+        nowLineIntervalId = setInterval(updateNowLine, 10000);
+        labelsEl.innerHTML = '';
+        lanesEl.innerHTML = '';
+        printers.forEach(function(pr, idx) {
+            var labelDiv = document.createElement('div');
+            labelDiv.className = 'pq-gantt-lane-label';
+            var statusDot = document.createElement('span');
+            statusDot.className = 'pq-printer-status-dot pq-status-disconnected';
+            statusDot.id = 'pq-printer-status-dot-' + pr.id;
+            statusDot.title = 'Не подключен';
+            labelDiv.appendChild(statusDot);
+            labelDiv.appendChild(document.createTextNode(pr.number || '—'));
+            if (pr.spool_dataurl && pr.spool_id) {
+                var spoolWrap = document.createElement('span');
+                spoolWrap.className = 'pq-gantt-printer-spool';
+                var spoolLink = document.createElement('a');
+                spoolLink.href = '/warehouse/spool/' + pr.spool_id;
+                spoolLink.title = 'Карточка катушки';
+                var spoolImg = document.createElement('img');
+                spoolImg.src = pr.spool_dataurl;
+                spoolImg.alt = '';
+                spoolLink.appendChild(spoolImg);
+                spoolWrap.appendChild(spoolLink);
+                labelDiv.appendChild(spoolWrap);
+            } else if (!pr.spool_id) {
+                var bindWrap = document.createElement('span');
+                bindWrap.className = 'pq-gantt-printer-spool';
+                var bindLink = document.createElement('a');
+                bindLink.className = 'pq-gantt-bind-spool-link';
+                bindLink.href = '/admin/reference?ref=printers&bind_printer=' + pr.id + '&return_to=print_queue';
+                bindLink.title = 'Привязать катушку (QR)';
+                bindLink.setAttribute('aria-label', 'Привязать катушку по QR-коду');
+                bindLink.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h6v6H3V3zm2 2v2h2V5H5zm8-2h6v6h-6V3zm2 2v2h2V5h-2zM3 15h6v6H3v-6zm2 2v2h2v-2H5zm13-2h1v1h-1v-1zm-3 3h1v1h-1v-1zm2 2h1v1h-1v-1zm2-2h1v1h-1v-1zm0 4h1v1h-1v-1zm2-2h1v1h-1v-1zm2 2h1v1h-1v-1z"/></svg>';
+                bindWrap.appendChild(bindLink);
+                labelDiv.appendChild(bindWrap);
+            }
+            labelsEl.appendChild(labelDiv);
+            var laneDiv = document.createElement('div');
+            laneDiv.className = 'pq-gantt-lane';
+            laneDiv.dataset.printerId = pr.id;
+            laneDiv.style.width = laneWidth + 'px';
+            var gridDiv = document.createElement('div');
+            gridDiv.className = 'pq-gantt-lane-grid';
+            gridDiv.style.width = laneWidth + 'px';
+            gridDiv.style.backgroundImage = 'repeating-linear-gradient(90deg, transparent 0, transparent ' + (SLOT_PX - 1) + 'px, #e0e0e0 ' + (SLOT_PX - 1) + 'px, #e0e0e0 ' + SLOT_PX + 'px)';
+            gridDiv.style.backgroundSize = SLOT_PX + 'px 100%';
+            gridDiv.style.backgroundPosition = '1px 0';
+            var slotsPerDay = 24 * (60 / INTERVAL_MIN);
+            for (var d = 1; d < RANGE_DAYS; d++) {
+                var lineDiv = document.createElement('div');
+                lineDiv.style.position = 'absolute';
+                lineDiv.style.left = (d * slotsPerDay * SLOT_PX) + 'px';
+                lineDiv.style.top = '0';
+                lineDiv.style.bottom = '0';
+                lineDiv.style.width = '2px';
+                lineDiv.style.background = '#999';
+                lineDiv.style.pointerEvents = 'none';
+                gridDiv.appendChild(lineDiv);
+            }
+            laneDiv.appendChild(gridDiv);
+            var laneItems = items.filter(function(it) { return it.printer_id === pr.id; });
+            laneItems.forEach(function(it) {
+                var start = new Date(it.scheduled_start).getTime();
+                var end = new Date(it.scheduled_end).getTime();
+                var viewStartT = viewStart.getTime();
+                var viewEndT = viewEnd.getTime();
+                if (end <= viewStartT || start >= viewEndT) return;
+                var startClamped = Math.max(start, viewStartT);
+                var endClamped = Math.min(end, viewEndT);
+                var slotIndexStart = Math.floor((startClamped - viewStartT) / slotMs);
+                var slotIndexEnd = Math.ceil((endClamped - viewStartT) / slotMs);
+                var leftPx = slotIndexStart * SLOT_PX;
+                var widthPx = (slotIndexEnd - slotIndexStart) * SLOT_PX;
+                leftPx = Math.max(0, Math.min(laneWidth, leftPx));
+                widthPx = Math.min(widthPx, laneWidth - leftPx);
+                if (widthPx <= 0) return;
+                var wrap = document.createElement('div');
+                wrap.className = 'pq-gantt-bar-wrap' + (conflictIds[it.id] ? ' gantt-bar--conflict' : '');
+                wrap.dataset.itemId = it.id;
+                wrap.style.left = leftPx + 'px';
+                wrap.style.width = widthPx + 'px';
+                var bar = document.createElement('div');
+                bar.className = 'pq-gantt-bar';
+                bar.style.backgroundColor = it.material_hex || '#cccccc';
+                bar.style.color = contrastColor(it.material_hex || '#cccccc');
+                bar.textContent = (it.sequence ? it.sequence + '. ' : '') + (it.job_name || 'Задание');
+                var plasticLabel = document.createElement('div');
+                plasticLabel.className = 'pq-gantt-bar-plastic';
+                plasticLabel.textContent = (it.plastic_type || '').trim() || '\u00a0';
+                wrap.appendChild(bar);
+                wrap.appendChild(plasticLabel);
+                wrap.draggable = true;
+                wrap.addEventListener('dragstart', function(e) {
+                    barDragStarted = true;
+                    var wrapRect = wrap.getBoundingClientRect();
+                    var scrollInner = document.getElementById('pq-gantt-scroll-inner');
+                    ganttBarDragOffsetX = e.clientX - wrapRect.left;
+                    ganttBarPhantomWidthPx = wrapRect.width;
+                    if (scrollInner) {
+                        var innerRect = scrollInner.getBoundingClientRect();
+                        ganttBarDropLeftPx = Math.max(0, Math.min(laneWidth, wrapRect.left - innerRect.left));
+                    }
+                    if (ganttBarPhantom) ganttBarPhantom.remove();
+                    ganttBarPhantom = document.createElement('div');
+                    ganttBarPhantom.className = 'pq-gantt-bar-phantom';
+                    ganttBarPhantom.style.left = wrap.style.left;
+                    ganttBarPhantom.style.width = wrap.style.width;
+                    ganttBarPhantom.style.backgroundColor = bar.style.backgroundColor;
+                    ganttBarPhantom.style.color = bar.style.color;
+                    ganttBarPhantom.textContent = bar.textContent;
+                    laneDiv.appendChild(ganttBarPhantom);
+                    e.dataTransfer.setData('text/plain', it.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                wrap.addEventListener('dragend', function() {
+                    barDragStarted = false;
+                    if (ganttBarPhantom) { ganttBarPhantom.remove(); ganttBarPhantom = null; }
+                });
+                wrap.addEventListener('click', function(e) {
+                    if (barDragStarted) return;
+                    e.stopPropagation();
+                    setSelection(it.id);
+                });
+                laneDiv.appendChild(wrap);
+            });
+            laneDiv.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (!ganttBarPhantom || !scrollCol) return;
+                var scrollInner = document.getElementById('pq-gantt-scroll-inner');
+                if (!scrollInner) return;
+                var innerRect = scrollInner.getBoundingClientRect();
+                var mouseXInContent = e.clientX - innerRect.left;
+                var rawLeftPx = Math.max(0, Math.min(laneWidth, mouseXInContent - ganttBarDragOffsetX));
+                var newLeftPx = Math.round(rawLeftPx / SLOT_PX) * SLOT_PX;
+                newLeftPx = Math.max(0, Math.min(laneWidth, newLeftPx));
+                ganttBarDropLeftPx = newLeftPx;
+                if (ganttBarPhantom.parentNode !== laneDiv) laneDiv.appendChild(ganttBarPhantom);
+                ganttBarPhantom.style.left = newLeftPx + 'px';
+            });
+            laneDiv.addEventListener('drop', function(e) {
+                e.preventDefault();
+                var itemId = e.dataTransfer.getData('text/plain');
+                if (!itemId) return;
+                var phantomLeftPx;
+                if (ganttBarPhantom && ganttBarPhantom.parentNode === laneDiv) {
+                    var phantomRect = ganttBarPhantom.getBoundingClientRect();
+                    var laneRect = laneDiv.getBoundingClientRect();
+                    phantomLeftPx = (phantomRect.left - laneRect.left);
+                    phantomLeftPx = Math.round(phantomLeftPx / SLOT_PX) * SLOT_PX;
+                } else {
+                    phantomLeftPx = ganttBarDropLeftPx;
+                }
+                if (ganttBarPhantom) { ganttBarPhantom.remove(); ganttBarPhantom = null; }
+                phantomLeftPx = Math.max(0, Math.min(laneWidth, phantomLeftPx));
+                var rangeMs = viewEnd.getTime() - viewStart.getTime();
+                var exactTimeMs = viewStart.getTime() + (phantomLeftPx / laneWidth) * rangeMs;
+                var newStart = floorViewTo15Min(exactTimeMs);
+                var prId = parseInt(laneDiv.dataset.printerId, 10);
+                fetch('/api/print-queue/items/' + itemId, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scheduled_start: newStart.toISOString(), printer_id: prId })
+                }).then(function(r) {
+                    if (r.ok) return fetch('/api/print-queue/items').then(function(r2) { return r2.json(); });
+                    throw new Error('Patch failed');
+                }).then(function(list) {
+                    window.__pqItems = list;
+                    renderGantt();
+                    updateTableFromApi(list);
+                }).catch(function() {});
+            });
+            lanesEl.appendChild(laneDiv);
+        });
+        setSelection(selectedItemId);
+    }
+
+    var printerById = {};
+    printers.forEach(function(p) { printerById[p.id] = p; });
+    var materialById = {};
+    materials.forEach(function(m) { materialById[m.id] = m; });
+
+    function formatEndDate(d) {
+        return d.getDate().toString().padStart(2,'0') + '.' + (d.getMonth()+1).toString().padStart(2,'0') + '.' + d.getFullYear() + ' ' + d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+    }
+
+    function updateTableFromApi(items) {
+        items = items || (window.__pqItems || []);
+        if (viewStart && viewEnd) {
+            var viewStartT = viewStart.getTime();
+            var viewEndT = viewEnd.getTime();
+            items = items.filter(function(it) {
+                var start = new Date(it.scheduled_start).getTime();
+                var end = new Date(it.scheduled_end).getTime();
+                return end > viewStartT && start < viewEndT;
+            });
+        }
+        items = items.slice().sort(function(a, b) { return (b.sequence || 0) - (a.sequence || 0); });
+        var tbody = document.getElementById('pq-tbody');
+        tbody.innerHTML = '';
+        items.forEach(function(it) {
+            var start = new Date(it.scheduled_start);
+            var end = new Date(it.scheduled_end);
+            var pr = printerById[it.printer_id];
+            var mat = it.material_id ? materialById[it.material_id] : null;
+            var printerNumber = pr ? (pr.number || '') : '';
+            var materialName = mat ? (mat.name || '') : '';
+            var tr = document.createElement('tr');
+            tr.dataset.id = it.id;
+            tr.innerHTML = '<td class="col-cb"><input type="checkbox" class="pq-row-cb" data-id="' + it.id + '" aria-label="Выбрать"></td>' +
+                '<td class="col-num pq-cell-num">' + (it.sequence || '') + '</td>' +
+                '<td class="pq-cell-job">' + (it.job_name || '').replace(/</g, '&lt;') + '</td>' +
+                '<td class="pq-cell-printer">' + (printerNumber || '').replace(/</g, '&lt;') + '</td>' +
+                '<td class="pq-cell-material">' + (materialName || '').replace(/</g, '&lt;') + '</td>' +
+                '<td class="pq-cell-start">' + start.getDate().toString().padStart(2,'0') + '.' + (start.getMonth()+1).toString().padStart(2,'0') + '.' + start.getFullYear() + ' ' + start.getHours().toString().padStart(2,'0') + ':' + start.getMinutes().toString().padStart(2,'0') + '</td>' +
+                '<td class="pq-cell-end">' + formatEndDate(end) + '</td>' +
+                '<td class="col-actions"><div class="pq-actions-wrap"><button type="button" class="btn-icon edit" data-id="' + it.id + '" title="Редактировать" aria-label="Редактировать"><svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button><button type="button" class="btn-icon copy" data-id="' + it.id + '" title="Копировать" aria-label="Копировать"><svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button><button type="button" class="btn-icon btn-danger-icon delete" data-id="' + it.id + '" title="Удалить" aria-label="Удалить"><svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button></div></td>';
+            tbody.appendChild(tr);
+        });
+        setSelection(selectedItemId);
+        updateDeleteSelectedButton();
+    }
+
+    function getSelectedQueueItemIds() {
+        var ids = [];
+        document.querySelectorAll('.pq-row-cb:checked').forEach(function(cb) {
+            var id = parseInt(cb.dataset.id, 10);
+            if (!isNaN(id)) ids.push(id);
+        });
+        return ids;
+    }
+
+    function updateDeleteSelectedButton() {
+        var btn = document.getElementById('pq-btn-delete-selected');
+        var selectAll = document.getElementById('pq-select-all');
+        var checked = document.querySelectorAll('.pq-row-cb:checked');
+        var total = document.querySelectorAll('.pq-row-cb').length;
+        btn.disabled = checked.length === 0;
+        if (selectAll) {
+            selectAll.checked = total > 0 && checked.length === total;
+            selectAll.indeterminate = checked.length > 0 && checked.length < total;
+        }
+    }
+
+    function bulkDeleteSelected() {
+        var ids = getSelectedQueueItemIds();
+        if (ids.length === 0) return;
+        if (!confirm('Удалить выбранные задания (' + ids.length + ')?')) return;
+        var btn = document.getElementById('pq-btn-delete-selected');
+        btn.disabled = true;
+        fetch('/api/print-queue/items/bulk-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: ids })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.ok) loadItems();
+        }).finally(function() { updateDeleteSelectedButton(); });
+    }
+
+    function getPrintersForJob(jobId) {
+        var j = jobById[jobId];
+        if (!j || !j.printer_ids || j.printer_ids.length === 0) return printers.slice();
+        return printers.filter(function(p) { return j.printer_ids.indexOf(p.id) !== -1; });
+    }
+
+    function updateModalPrinterOptions() {
+        var jobId = parseInt(document.getElementById('pq-modal-job').value, 10);
+        var allowed = getPrintersForJob(jobId);
+        var printerSelect = document.getElementById('pq-modal-printer');
+        var cur = printerSelect.value;
+        printerSelect.innerHTML = allowed.map(function(p) { return '<option value="' + p.id + '">' + (p.number || '').replace(/</g, '&lt;') + ' — ' + (p.name || '').replace(/</g, '&lt;') + '</option>'; }).join('');
+        if (allowed.some(function(p) { return p.id === parseInt(cur, 10); })) printerSelect.value = cur;
+        else if (allowed.length) printerSelect.value = allowed[0].id;
+    }
+
+    function updateModalSteps() {
+        var jobSelect = document.getElementById('pq-modal-job');
+        var printerSelect = document.getElementById('pq-modal-printer');
+        var materialSelect = document.getElementById('pq-modal-material');
+        var startInp = document.getElementById('pq-modal-start');
+        var jobId = jobSelect.value ? parseInt(jobSelect.value, 10) : null;
+        var printerId = printerSelect.value ? parseInt(printerSelect.value, 10) : null;
+        jobSelect.disabled = false;
+        if (jobId) {
+            updateModalPrinterOptions();
+            printerSelect.disabled = false;
+            if (printerId) {
+                materialSelect.disabled = false;
+                startInp.disabled = false;
+                updateModalEnd();
+            } else {
+                materialSelect.disabled = true;
+                materialSelect.value = '';
+                startInp.disabled = true;
+                document.getElementById('pq-modal-end').value = '';
+            }
+        } else {
+            printerSelect.disabled = true;
+            printerSelect.innerHTML = '<option value="">— выберите задание</option>';
+            printerSelect.value = '';
+            materialSelect.disabled = true;
+            materialSelect.value = '';
+            startInp.disabled = true;
+            document.getElementById('pq-modal-end').value = '';
+        }
+    }
+
+    function openModal(itemId, copyFrom) {
+        var modal = document.getElementById('pq-modal-overlay');
+        var titleEl = document.getElementById('pq-modal-title');
+        document.getElementById('pq-modal-item-id').value = itemId || '';
+        var jobSelect = document.getElementById('pq-modal-job');
+        var printerSelect = document.getElementById('pq-modal-printer');
+        var materialSelect = document.getElementById('pq-modal-material');
+        var startInp = document.getElementById('pq-modal-start');
+        var endInp = document.getElementById('pq-modal-end');
+        jobSelect.innerHTML = jobs.map(function(j) { return '<option value="' + j.id + '">' + (j.name || '').replace(/</g, '&lt;') + '</option>'; }).join('');
+        materialSelect.innerHTML = '<option value="">— не выбрано</option>' + materials.map(function(m) { return '<option value="' + m.id + '">' + (m.name || '').replace(/</g, '&lt;') + (m.color ? ' — ' + m.color.replace(/</g, '&lt;') : '') + '</option>'; }).join('');
+        var it = itemId ? (window.__pqItems || []).find(function(i) { return i.id === itemId; }) : copyFrom;
+        if (it) {
+            titleEl.textContent = itemId ? 'Редактировать задание' : 'Добавить задание (копия)';
+            jobSelect.value = it.print_job_id;
+            updateModalPrinterOptions();
+            printerSelect.value = it.printer_id;
+            materialSelect.value = it.material_id || '';
+            var start = new Date(it.scheduled_start);
+            start = roundTo15Min(start);
+            startInp.value = start.toISOString().slice(0, 16);
+            endInp.value = formatEndDate(new Date(it.scheduled_end));
+        } else {
+            titleEl.textContent = 'Добавить задание';
+            jobSelect.value = '';
+            printerSelect.innerHTML = '<option value="">— выберите задание</option>';
+            printerSelect.value = '';
+            materialSelect.value = '';
+            var now = roundTo15Min(new Date());
+            startInp.value = now.toISOString().slice(0, 16);
+            endInp.value = '';
+        }
+        updateModalSteps();
+        modal.classList.add('pq-modal-open');
+    }
+
+    function updateModalEnd() {
+        var jobId = parseInt(document.getElementById('pq-modal-job').value, 10);
+        var j = jobById[jobId];
+        var startVal = document.getElementById('pq-modal-start').value;
+        var endInp = document.getElementById('pq-modal-end');
+        if (!j || !startVal) { endInp.value = ''; return; }
+        var start = new Date(startVal);
+        var end = new Date(start.getTime() + (j.duration_minutes || 0) * 60000);
+        endInp.value = formatEndDate(end);
+    }
+
+    function closeModal() {
+        document.getElementById('pq-modal-overlay').classList.remove('pq-modal-open');
+    }
+
+    function saveModal() {
+        var itemId = document.getElementById('pq-modal-item-id').value;
+        var printJobId = parseInt(document.getElementById('pq-modal-job').value, 10);
+        var printerId = parseInt(document.getElementById('pq-modal-printer').value, 10);
+        var matVal = document.getElementById('pq-modal-material').value;
+        var materialId = matVal ? parseInt(matVal, 10) : null;
+        var startVal = document.getElementById('pq-modal-start').value;
+        if (!printJobId || !printerId || !startVal) return;
+        var start = roundTo15Min(new Date(startVal));
+        var body = { print_job_id: printJobId, printer_id: printerId, material_id: materialId, scheduled_start: start.toISOString() };
+        if (itemId) body.id = parseInt(itemId, 10);
+        fetch('/api/print-queue/items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.id) { closeModal(); loadItems(); }
+        }).catch(function() {});
+    }
+
+    document.getElementById('pq-modal-start').addEventListener('change', function() {
+        var d = document.getElementById('pq-modal-start').value;
+        if (d) {
+            var dt = roundTo15Min(new Date(d));
+            document.getElementById('pq-modal-start').value = dt.toISOString().slice(0, 16);
+        }
+        updateModalEnd();
+    });
+    document.getElementById('pq-modal-job').addEventListener('change', updateModalSteps);
+    document.getElementById('pq-modal-printer').addEventListener('change', updateModalSteps);
+    document.getElementById('pq-modal-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveModal();
+    });
+    document.getElementById('pq-modal-cancel').addEventListener('click', closeModal);
+    // Закрытие по клику на фон убрано: закрывать только кнопкой/крестиком.
+
+    document.getElementById('pq-btn-add').addEventListener('click', function() { openModal(null); });
+
+    document.getElementById('pq-gantt-lanes-wrap').addEventListener('click', function(e) {
+        if (!e.target.closest('.pq-gantt-bar-wrap')) setSelection(null);
+    });
+
+    document.getElementById('pq-select-all').addEventListener('change', function() {
+        document.querySelectorAll('.pq-row-cb').forEach(function(cb) { cb.checked = this.checked; }, this);
+        this.indeterminate = false;
+        updateDeleteSelectedButton();
+    });
+    document.getElementById('pq-tbody').addEventListener('change', function(e) {
+        if (e.target.classList && e.target.classList.contains('pq-row-cb')) updateDeleteSelectedButton();
+    });
+    document.getElementById('pq-btn-delete-selected').addEventListener('click', bulkDeleteSelected);
+
+    document.getElementById('pq-tbody').addEventListener('click', function(e) {
+        var tr = e.target.closest('tr');
+        if (!tr) return;
+        if (e.target.classList && e.target.classList.contains('pq-row-cb')) return;
+        if (e.target.closest('.btn-icon.edit')) {
+            openModal(parseInt(tr.dataset.id, 10));
+            return;
+        }
+        if (e.target.closest('.btn-icon.copy')) {
+            var it = (window.__pqItems || []).find(function(i) { return i.id === parseInt(tr.dataset.id, 10); });
+            if (it) openModal(null, it);
+            return;
+        }
+        if (e.target.closest('.btn-icon.delete')) {
+            if (!confirm('Удалить?')) return;
+            var id = parseInt(tr.dataset.id, 10);
+            fetch('/api/print-queue/items/' + id, { method: 'DELETE' }).then(function(r) {
+                if (r.ok) loadItems();
+            });
+            return;
+        }
+        if (tr.dataset.id) setSelection(parseInt(tr.dataset.id, 10));
+    });
+
+    currentWeekStart = loadStoredWeek() || getMondayOfWeek(new Date());
+    saveStoredWeek(currentWeekStart);
+    setViewRangeFromWeek(currentWeekStart);
+    updateWeekUI(currentWeekStart);
+    document.getElementById('pq-btn-week-prev').addEventListener('click', shiftViewBack);
+    document.getElementById('pq-btn-week-next').addEventListener('click', shiftViewForward);
+    loadItems();
+    setInterval(loadPrintersStatus, 20000);
+})();
+</script>
+{% endblock %}

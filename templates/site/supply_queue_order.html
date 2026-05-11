@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% block title %}Заявка {{ sq_row.order_number|default(sq_order_id) }}{% endblock %}
+{% block extra_css %}
+<style>
+    .supply-queue-order-page { padding: 24px 0; max-width: 72rem; }
+    .supply-queue-order-layout { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px 40px; }
+    .supply-queue-order-col--info { flex: 1 1 17rem; min-width: 0; max-width: 22rem; }
+    .supply-queue-order-col--cargo { flex: 1 1 20rem; min-width: 0; }
+    @media (max-width: 720px) {
+        .supply-queue-order-layout { flex-direction: column; }
+        .supply-queue-order-col--info { max-width: none; }
+    }
+    .supply-queue-order-page h1 { margin-bottom: 8px; font-size: 1.35rem; }
+    .supply-queue-order-back { margin-bottom: 16px; font-size: 0.95rem; }
+    .supply-queue-order-back a { color: var(--link-color, #2563eb); }
+    .supply-queue-order-meta { display: grid; gap: 10px 24px; margin-bottom: 20px; font-size: 0.95rem; }
+    .supply-queue-order-meta dt { color: var(--text-muted); font-weight: 500; margin: 0; }
+    .supply-queue-order-meta dd { margin: 0 0 8px 0; }
+    .supply-queue-order-actions { margin-bottom: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .supply-queue-order-actions .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+    .supply-queue-order-ts { font-size: 0.85rem; color: var(--text-muted); }
+    .supply-queue-order-cargo-heading { font-size: 1.05rem; margin: 0 0 12px 0; }
+    .supply-list-cargo-stack { display: flex; flex-direction: column; gap: 10px; }
+    .supply-list-cargo-block { padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg, #fafafa); font-size: 0.9rem; line-height: 1.45; }
+    .supply-list-cargo-block .supply-list-cargo-id { font-weight: 600; margin-right: 6px; }
+    .supply-list-cargo-block .supply-list-cargo-meta { color: var(--text-muted, #666); font-size: 0.82rem; display: block; margin-top: 6px; }
+    .supply-cargo-head-row { display: flex; align-items: center; gap: 8px; }
+    .supply-cargo-head-row .supply-list-cargo-meta { margin-top: 0; }
+    .supply-cargo-print-btn {
+        margin-left: auto;
+        width: 24px;
+        height: 24px;
+        border: none;
+        background: transparent;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+    .supply-cargo-print-btn img { width: 24px; height: 24px; object-fit: contain; display: block; }
+    .supply-cargo-item-print-btn {
+        width: 24px;
+        height: 24px;
+        margin-left: auto;
+        border: none;
+        background: transparent;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex: 0 0 24px;
+    }
+    .supply-cargo-item-print-btn img { width: 24px; height: 24px; object-fit: contain; display: block; }
+    .supply-list-cargo-items { margin: 10px 0 0 0; padding: 0; list-style: none; font-size: 0.85rem; }
+    .supply-line-item-row { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+    .supply-line-item-row:last-child { margin-bottom: 0; }
+    .supply-line-item-thumb { flex-shrink: 0; width: 60px; height: 60px; border-radius: 6px; overflow: hidden; background: #e5e7eb; border: 1px solid var(--border); box-sizing: border-box; }
+    .supply-line-item-thumb img { width: 60px; height: 60px; object-fit: cover; display: block; vertical-align: top; }
+    .supply-line-item-thumb-placeholder { width: 60px; height: 60px; background: linear-gradient(145deg, #e8e8e8, #f4f4f4); }
+    .supply-line-item-text { flex: 1; min-width: 0; padding-top: 2px; line-height: 1.4; }
+    .supply-state-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.82rem; font-weight: 500; }
+    .supply-state--muted { background: #e5e7eb; color: #374151; }
+    .supply-state--info { background: #dbeafe; color: #1e40af; }
+    .supply-state--success { background: #d1fae5; color: #065f46; }
+    .supply-state--teal { background: #ccfbf1; color: #0f766e; }
+    .supply-state--transit { background: #e0e7ff; color: #3730a3; }
+    .supply-state--warehouse { background: #ede9fe; color: #5b21b6; }
+    .supply-state--awaiting { background: #fef3c7; color: #92400e; }
+    .supply-state--dispute { background: #ffedd5; color: #9a3412; }
+    .supply-state--done { background: #f3f4f6; color: #4b5563; }
+    .supply-state--rejected { background: #fee2e2; color: #991b1b; }
+    .supply-state--cancelled { background: #f3f4f6; color: #6b7280; text-decoration: line-through; }
+    .supply-state--overdue { background: #fecaca; color: #7f1d1d; }
+    .supply-state--unknown { background: #e5e7eb; color: #1f2937; }
+    .supply-queue-order-progress { display: none; margin-top: 12px; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; }
+    .supply-queue-order-progress.is-visible { display: block; }
+    .supply-queue-order-progress-bar { height: 100%; width: 40%; background: #2563eb; animation: sq-order-ind 1s ease-in-out infinite; }
+    @keyframes sq-order-ind { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+    .sq-order-toast {
+        position: fixed;
+        left: 50%;
+        bottom: 20px;
+        transform: translateX(-50%) translateY(12px);
+        min-width: 260px;
+        max-width: min(90vw, 560px);
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #111827;
+        color: #f9fafb;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+        font-size: 0.9rem;
+        line-height: 1.35;
+        z-index: 1200;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .sq-order-toast.is-visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .sq-order-toast.is-success { background: #166534; border-color: #22c55e; }
+    .sq-order-toast.is-error { background: #991b1b; border-color: #ef4444; }
+</style>
+{% endblock %}
+{% block content %}
+<div
+    class="supply-queue-order-page"
+    data-primary-supply-id="{{ sq_row.get('primary_supply_id', '')|default('', true) }}"
+    data-order-id="{{ sq_order_id }}"
+>
+    <p class="supply-queue-order-back"><a href="/supply-queue">← К очереди поставок</a></p>
+    <div class="supply-queue-order-layout">
+        <div class="supply-queue-order-col supply-queue-order-col--info">
+            <h1>Заявка {{ sq_row.order_number|default(sq_order_id) }}</h1>
+            <p style="margin: 0 0 16px 0; font-size: 0.95rem;">
+                <a href="https://seller.ozon.ru/app/supply/orders/{{ sq_order_id }}" target="_blank" rel="noopener noreferrer">Открыть в кабинете Ozon</a>
+            </p>
+            <dl class="supply-queue-order-meta">
+                <div>
+                    <dt>Склад хранения</dt>
+                    <dd>
+                        {% set scl = sq_row.storage_cluster_line|default('—') %}
+                        {% set swl = sq_row.storage_warehouse_line|default('—') %}
+                        {% if scl != '—' %}<strong>{{ scl }}</strong>{% if swl != '—' %}<br>{% endif %}{% endif %}
+                        {% if swl != '—' %}{{ swl }}{% elif scl == '—' %}—{% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt>Дата и время отгрузки</dt>
+                    <dd>{% if sq_row.shipment_at == '—' or not sq_row.shipment_at %}—{% else %}{{ sq_row.shipment_at }}{% endif %}</dd>
+                </div>
+                <div>
+                    <dt>Статус</dt>
+                    <dd>
+                        {% if sq_row.state_label_ru is defined and sq_row.state_label_ru != '—' %}
+                        <span class="supply-state-badge {{ sq_row.state_badge_class }}" title="{{ sq_row.state_code }}">{{ sq_row.state_label_ru }}</span>
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+            </dl>
+            <div class="supply-queue-order-actions">
+                <button type="button" class="btn" id="sq-load-composition-btn">
+                    {% if has_composition_loaded %}Обновить товарный состав{% else %}Загрузить товарный состав{% endif %}
+                </button>
+                {% if composition_updated_at %}
+                <span class="supply-queue-order-ts">Состав сохранён: {{ composition_updated_at }}</span>
+                {% endif %}
+            </div>
+            <div class="supply-queue-order-progress" id="sq-order-composition-progress" aria-hidden="true"><div class="supply-queue-order-progress-bar"></div></div>
+        </div>
+        <div class="supply-queue-order-col supply-queue-order-col--cargo">
+            <section aria-label="Грузоместа">
+                <h2 class="supply-queue-order-cargo-heading">Грузоместа и товары</h2>
+                {% set cargo_units = sq_row.cargo_units|default([]) %}
+                {% if cargo_units and cargo_units|length > 0 %}
+                <div class="supply-list-cargo-stack">
+                    {% for cu in cargo_units %}
+                    {% set _cargo_id = cu.get('cargo_id') %}
+                    <div class="supply-list-cargo-block" data-cargo-id="{{ _cargo_id if _cargo_id is not none else '' }}">
+                        <div class="supply-cargo-head-row">
+                            <span class="supply-list-cargo-id">#{% if cu['cargo_id'] is not none %}{{ cu['cargo_id'] }}{% else %}—{% endif %}</span>
+                            <span class="supply-list-cargo-meta">{{ cu['type']|default('') }}{% if cu['content_type']|default('') and cu['content_type'] != 'UNSPECIFIED' %} · {{ cu['content_type'] }}{% endif %}{% if cu['tracking_status']|default('') and cu['tracking_status'] != 'UNSPECIFIED' %} · {{ cu['tracking_status'] }}{% endif %}</span>
+                            <button type="button" class="supply-cargo-print-btn" data-cargo-print-btn data-cargo-id="{{ _cargo_id if _cargo_id is not none else '' }}" title="Печать ШК грузоместа" aria-label="Печать ШК грузоместа">
+                                <img src="/static/site/cargo_barcode.png" alt="ШК грузоместа">
+                            </button>
+                        </div>
+                        {% set line_items = cu.get('line_items', cu.get('items', [])) %}
+                        {% if line_items and line_items|length > 0 %}
+                        <ul class="supply-list-cargo-items">
+                            {% for it in line_items %}
+                            {% set ip = ((it.get('icon_path') or it.get('iconPath') or '')|trim) %}
+                            <li class="supply-line-item-row">
+                                <div class="supply-line-item-thumb">
+                                    {% if ip %}
+                                    <img src="{{ ip }}" alt="" width="60" height="60" loading="lazy" decoding="async" />
+                                    {% else %}
+                                    <div class="supply-line-item-thumb-placeholder" aria-hidden="true"></div>
+                                    {% endif %}
+                                </div>
+                                <div class="supply-line-item-text">
+                                    {% if it['name'] %}{{ it['name'] }}{% else %}—{% endif %}{% if it['offer_id'] %} ({{ it['offer_id'] }}){% endif %} — {{ it['quantity'] }} шт.
+                                </div>
+                                {% set _sku = it.get('sku') %}
+                                <button
+                                    type="button"
+                                    class="supply-cargo-item-print-btn"
+                                    data-sku-print-btn
+                                    data-sku="{{ _sku if _sku is not none else '' }}"
+                                    data-qty="{{ it.get('quantity', 1) }}"
+                                    title="Печать ШК товара"
+                                    aria-label="Печать ШК товара"
+                                >
+                                    <img src="/static/site/product_barcode.png" alt="ШК товара">
+                                </button>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p style="margin: 10px 0 0 0; font-size: 0.85rem; color: var(--text-muted);">Товарный состав не загружен — нажмите кнопку слева.</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p style="color: var(--text-muted); margin: 0;">Грузоместа появятся после обновления списка заявок на главной странице очереди.</p>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</div>
+<div id="sq-order-toast" class="sq-order-toast" hidden></div>
+<script>
+(function () {
+    var btn = document.getElementById('sq-load-composition-btn');
+    var bar = document.getElementById('sq-order-composition-progress');
+    var orderRoot = document.querySelector('.supply-queue-order-page');
+    var toastEl = document.getElementById('sq-order-toast');
+    var toastTimerId = null;
+    var supplyIdRaw = orderRoot ? (orderRoot.getAttribute('data-primary-supply-id') || '') : '';
+    var supplyId = Number(supplyIdRaw || 0);
+    var orderIdRaw = orderRoot ? (orderRoot.getAttribute('data-order-id') || '') : '';
+
+    function showToast(message, tone, ttlMs) {
+        if (!toastEl) return;
+        var text = String(message || '').trim();
+        if (!text) return;
+        if (toastTimerId) {
+            window.clearTimeout(toastTimerId);
+            toastTimerId = null;
+        }
+        toastEl.textContent = text;
+        toastEl.hidden = false;
+        toastEl.classList.remove('is-success', 'is-error');
+        toastEl.classList.add(tone === 'error' ? 'is-error' : 'is-success');
+        void toastEl.offsetWidth;
+        toastEl.classList.add('is-visible');
+        toastTimerId = window.setTimeout(function () {
+            toastEl.classList.remove('is-visible');
+            window.setTimeout(function () {
+                toastEl.hidden = true;
+                toastEl.textContent = '';
+            }, 220);
+            toastTimerId = null;
+        }, Math.max(1200, Number(ttlMs) || 2600));
+    }
+
+    function openSkuPrint(sku, qty) {
+        if (!Number.isInteger(sku) || sku <= 0) {
+            showToast('Нет SKU для печати.', 'error', 3200);
+            return;
+        }
+        var q = Number.isInteger(qty) && qty > 0 ? qty : 1;
+        window.open('/supply-queue/print/sku-item/' + sku + '?qty=' + q, '_blank', 'noopener,noreferrer');
+    }
+
+    async function openCargoLabelPrint(cargoId) {
+        if (!Number.isInteger(supplyId) || supplyId <= 0) {
+            showToast('Не удалось определить supply_id для печати грузоместа.', 'error', 3200);
+            return;
+        }
+        if (!Number.isInteger(cargoId) || cargoId <= 0) {
+            showToast('Нет cargo_id для печати.', 'error', 3200);
+            return;
+        }
+        var resp = await fetch('/api/supplies/' + supplyId + '/cargo-labels/request', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cargo_ids: [cargoId] })
+        });
+        var data = await resp.json();
+        if (!resp.ok || !data || !data.ok) {
+            var msg = (data && data.error) ? data.error : 'Не удалось сформировать этикетку грузоместа.';
+            showToast(msg, 'error', 3200);
+            return;
+        }
+        showToast('Этикетка грузоместа готова.', 'success', 1400);
+        window.open('/supply-queue/cargo-label-pdf/' + supplyId + '/' + cargoId, '_blank', 'noopener,noreferrer');
+    }
+
+    if (orderRoot) {
+        orderRoot.addEventListener('click', function (ev) {
+            var skuBtn = ev.target.closest('[data-sku-print-btn]');
+            if (skuBtn) {
+                var sku = Number(skuBtn.getAttribute('data-sku') || 0);
+                var qty = Number(skuBtn.getAttribute('data-qty') || 1);
+                openSkuPrint(sku, qty);
+                return;
+            }
+            var cargoBtn = ev.target.closest('[data-cargo-print-btn]');
+            if (cargoBtn) {
+                var cargoId = Number(cargoBtn.getAttribute('data-cargo-id') || 0);
+                openCargoLabelPrint(cargoId);
+            }
+        });
+    }
+
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        btn.disabled = true;
+        if (bar) { bar.classList.add('is-visible'); bar.setAttribute('aria-hidden', 'false'); }
+        fetch('/api/supply-queue/load-composition', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: orderIdRaw })
+        }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (x) {
+            if (x.ok && x.body && x.body.ok) {
+                window.location.reload();
+                return;
+            }
+            var msg = (x.body && x.body.error) ? x.body.error : 'Ошибка загрузки';
+            showToast(msg, 'error', 3200);
+            btn.disabled = false;
+            if (bar) { bar.classList.remove('is-visible'); bar.setAttribute('aria-hidden', 'true'); }
+        }).catch(function () {
+            showToast('Не удалось выполнить запрос', 'error', 3200);
+            btn.disabled = false;
+            if (bar) { bar.classList.remove('is-visible'); bar.setAttribute('aria-hidden', 'true'); }
+        });
+    });
+})();
+</script>
+{% endblock %}

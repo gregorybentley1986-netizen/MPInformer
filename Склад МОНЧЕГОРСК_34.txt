@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "request": {
+    "method": "POST",
+    "url": "https://api-seller.ozon.ru/v1/warehouse/fbo/list",
+    "body": {
+      "filter_by_supply_type": [
+        "CREATE_TYPE_CROSSDOCK"
+      ],
+      "search": "МОНЧЕГОРСК_34"
+    }
+  },
+  "data": {
+    "search": [
+      {
+        "warehouse_id": 1020005000295764,
+        "warehouse_type": "WAREHOUSE_TYPE_DELIVERY_POINT",
+        "coordinates": {
+          "latitude": 67.938438,
+          "longitude": 32.959547
+        },
+        "address": "Россия, Мурманская Область, Мончегорск, проспект Металлургов, 47",
+        "name": "МОНЧЕГОРСК_34"
+      }
+    ]
+  }
+}
+
+ID МОЙ СКЛАД: 1020005008005660

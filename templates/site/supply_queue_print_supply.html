@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>ШК поставки {{ (supply.posting_number or supply.ozon_supply_id) or supply.id }}</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; margin: 0; }
+        .copy-block { page-break-after: always; text-align: center; padding: 24px; }
+        .copy-block:last-child { page-break-after: auto; }
+        .supply-id { font-size: 28px; font-weight: bold; margin: 16px 0; letter-spacing: 2px; }
+        .qr { margin: 16px auto; display: block; }
+        @media print {
+            body { padding: 0; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="margin-bottom: 16px;">
+        <button type="button" onclick="window.print();">Печать</button>
+        <button type="button" onclick="window.close();">Закрыть</button>
+    </div>
+    {% for i in range(copies) %}
+    <div class="copy-block">
+        <div>Штрихкод поставки</div>
+        <div class="supply-id">{{ (supply.posting_number or supply.ozon_supply_id) or supply.id }}</div>
+        {% if qr_data_url %}
+        <img class="qr" src="{{ qr_data_url }}" alt="QR {{ (supply.posting_number or supply.ozon_supply_id) or supply.id }}" width="120" height="120">
+        {% endif %}
+    </div>
+    {% endfor %}
+    <script>
+        try { window.print(); } catch (e) {}
+    </script>
+</body>
+</html>

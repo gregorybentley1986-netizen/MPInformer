@@ -1,0 +1,61 @@
+{% extends "site/base.html" %}
+{% block title %}{% if is_edit %}Редактирование пользователя{% else %}Новый пользователь{% endif %}{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}
+<a href="/" class="btn-header">Сайт</a>
+{% endblock %}
+{% block sidebar %}
+<a href="/admin" class="btn">Главная</a>
+<a href="/admin/reference" class="btn">Справочники</a>
+<a href="/admin/users" class="btn">Пользователи</a>
+<a href="/admin/settings" class="btn">Настройки</a>
+<a href="/admin/logs" class="btn">Логи</a>
+<a href="/admin/logout" class="btn">Выход</a>
+{% endblock %}
+{% block extra_css %}
+<style>
+    .alert { padding: 16px; margin-bottom: 20px; border: 1px solid transparent; }
+    .alert-error { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-weight: 700; color: var(--main-text); margin-bottom: 6px; font-size: 0.9rem; }
+    .form-group input { width: 100%; max-width: 320px; padding: 10px 12px; border: 2px solid var(--border); font-size: 1rem; box-sizing: border-box; }
+    .form-group input:focus { outline: none; border-color: var(--accent); }
+    .form-actions { margin-top: 24px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{% if is_edit %}Редактирование пользователя{% else %}Новый пользователь{% endif %}</h1>
+
+{% if request.query_params.get("error") == "empty" %}
+<div class="alert alert-error">Заполните логин и пароль.</div>
+{% elif request.query_params.get("error") == "exists" %}
+<div class="alert alert-error">Пользователь с таким логином уже существует.</div>
+{% endif %}
+
+<form method="POST" action="{% if is_edit %}/admin/users/{{ user.id }}/edit{% else %}/admin/users/new{% endif %}">
+    <div class="form-group">
+        <label for="username">Логин</label>
+        <input type="text" id="username" name="username" required
+               value="{{ user.username if user else '' }}"
+               autocomplete="username">
+    </div>
+    {% if is_edit %}
+    <div class="form-group">
+        <label for="new_password">Новый пароль</label>
+        <input type="password" id="new_password" name="new_password"
+               placeholder="Оставьте пустым, чтобы не менять"
+               autocomplete="new-password">
+    </div>
+    {% else %}
+    <div class="form-group">
+        <label for="password">Пароль</label>
+        <input type="password" id="password" name="password" required
+               autocomplete="new-password">
+    </div>
+    {% endif %}
+    <div class="form-actions">
+        <button type="submit" class="btn">{% if is_edit %}Сохранить{% else %}Создать{% endif %}</button>
+        <a href="/admin/users" class="btn" style="margin-left:12px;">Отмена</a>
+    </div>
+</form>
+{% endblock %}

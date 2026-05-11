@@ -1,0 +1,673 @@
+{% extends "base.html" %}
+{% block title %}План печати{% endblock %}
+{% block extra_css %}
+<style>
+    .pp-section { margin-bottom: 28px; }
+    .pp-section h2 {
+        font-family: 'Russo One', sans-serif;
+        font-size: 1.2rem;
+        font-weight: normal;
+        color: var(--main-text);
+        margin-bottom: 12px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid var(--accent);
+    }
+    .pp-section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .pp-section-header h2 { margin-bottom: 0; padding-bottom: 6px; }
+    /* Стили таблиц как в Справочнике */
+    .pp-table-wrap { overflow-x: auto; margin-bottom: 16px; }
+    .pp-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    .pp-table th,
+    .pp-table td {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    .pp-table th {
+        font-family: 'Russo One', sans-serif;
+        font-weight: 500;
+        background: #f0f0f0;
+    }
+    .pp-table tbody tr:hover { background: #f5f5f5; }
+    .pp-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pp-table .col-num { width: 5%; text-align: center; }
+    .pp-table .col-qty { width: 120px; }
+    .pp-table .col-actions { width: 100px; text-align: right; }
+    .pp-table select,
+    .pp-table input[type="number"] {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        box-sizing: border-box;
+        font-family: 'Play', sans-serif;
+    }
+    .pp-color-sq {
+        width: 22px;
+        height: 22px;
+        border: 1px solid rgba(0,0,0,0.2);
+        border-radius: 4px;
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 8px;
+    }
+    .pp-btn-add { padding: 8px 16px; background: var(--accent); color: #2a2a2a; border: none; border-radius: 4px; cursor: pointer; font-family: 'Russo One', sans-serif; font-size: 0.9rem; }
+    .pp-btn-add:hover { background: var(--accent-dark); }
+    .pp-btn-transfer { padding: 8px 16px; background: #1976d2; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-family: 'Russo One', sans-serif; font-size: 0.9rem; }
+    .pp-btn-transfer:hover { background: #1565c0; }
+    .pp-btn-transfer:disabled { opacity: 0.6; cursor: not-allowed; }
+    .pp-btn-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        border-radius: 4px;
+        color: #c62828;
+    }
+    .pp-btn-remove:hover { background: #ffebee; }
+    .pp-btn-remove svg { width: 18px; height: 18px; fill: currentColor; }
+    .pp-extras-list { list-style: none; padding: 0; margin: 0; }
+    .pp-extras-list li {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.9rem;
+    }
+    .pp-extras-list li:hover { background: #f5f5f5; }
+    .pp-extras-list .pp-extras-qty { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .pp-subnav { display: flex; gap: 8px; margin-bottom: 20px; flex-shrink: 0; }
+    .pp-subnav a {
+        display: block;
+        padding: 10px 16px;
+        text-decoration: none;
+        color: var(--main-text);
+        background: #f0f0f0;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        font-family: 'Russo One', sans-serif;
+        font-size: 0.9rem;
+    }
+    .pp-subnav a:hover { background: #e8e8e8; }
+    .pp-subnav a.active { background: var(--accent); color: #2a2a2a; border-color: var(--accent); }
+    .pp-week-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .pp-week-toolbar .pp-week-nav { padding: 8px 14px; background: #e8e8e8; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-family: 'Play', sans-serif; font-size: 0.9rem; flex-shrink: 0; }
+    .pp-week-toolbar .pp-week-nav:hover { background: #ddd; }
+    .pp-week-toolbar .pp-week-center {
+        flex: 1;
+        min-width: 200px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.95rem;
+        padding: 10px 16px;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+    .pp-week-toolbar .pp-week-center.pp-week-current {
+        background: #c8e6c9;
+        color: #1b5e20;
+    }
+    .pp-two-cols { display: flex; gap: 24px; align-items: flex-start; margin-bottom: 28px; }
+    .pp-col-plan { width: 40%; min-width: 0; flex-shrink: 0; }
+    .pp-col-calc { width: 60%; min-width: 0; flex-shrink: 0; }
+    @media (max-width: 900px) { .pp-two-cols { flex-direction: column; } .pp-col-plan, .pp-col-calc { width: 100%; } }
+    .pp-save-wrap { margin-top: 8px; }
+    .pp-save-wrap .pp-msg-wrap { margin-top: 8px; font-size: 0.9rem; display: flex; align-items: flex-start; gap: 10px; }
+    .pp-save-wrap .pp-msg-wrap .pp-msg-text { flex: 1; min-width: 0; }
+    .pp-save-wrap .pp-msg-wrap.success .pp-msg-text { color: #2e7d32; }
+    .pp-save-wrap .pp-msg-wrap.error .pp-msg-text { color: #c62828; }
+    .pp-save-wrap .pp-msg-wrap .pp-msg-close { flex-shrink: 0; padding: 2px 8px; cursor: pointer; font-size: 1rem; line-height: 1.4; color: var(--text-muted, #666); background: none; border: none; border-radius: 4px; }
+    .pp-save-wrap .pp-msg-wrap .pp-msg-close:hover { color: var(--main-text, #2a2a2a); background: rgba(0,0,0,0.06); }
+    /* Модальное окно выбора заданий — в стиле сайта */
+    .pp-modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10000;
+        background: rgba(42, 42, 42, 0.55);
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+    .pp-modal-overlay.pp-modal-open {
+        display: flex !important;
+    }
+    .pp-modal {
+        background: var(--main-bg, #fff);
+        color: var(--main-text, #2a2a2a);
+        border: 2px solid var(--accent, #f5c842);
+        border-radius: 0;
+        clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+        max-width: 560px;
+        width: 100%;
+        max-height: 90vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        font-family: 'Play', sans-serif;
+    }
+    .pp-modal-header {
+        padding: 18px 22px;
+        border-bottom: 2px solid var(--accent, #f5c842);
+        font-family: 'Russo One', sans-serif;
+        font-size: 1.15rem;
+        color: var(--main-text, #2a2a2a);
+        background: var(--header-bg, #e5e5e5);
+    }
+    .pp-modal-body {
+        padding: 18px 22px;
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+    }
+    .pp-modal-body p { color: var(--text-muted, #666); }
+    .pp-modal-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .pp-modal-table th, .pp-modal-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border, #e0e0e0); }
+    .pp-modal-table th { background: var(--header-bg, #e5e5e5); font-family: 'Russo One', sans-serif; font-weight: 500; }
+    .pp-modal-table .col-cb { width: 44px; text-align: center; }
+    .pp-modal-table .col-runs { width: 100px; text-align: right; }
+    .pp-modal-footer {
+        padding: 14px 22px;
+        border-top: 1px solid var(--border, #e0e0e0);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 12px;
+        background: #fafafa;
+    }
+    .pp-transfer-status {
+        width: 100%;
+        margin-top: 6px;
+        font-size: 0.85rem;
+        color: var(--text-muted, #666);
+    }
+    .pp-modal-btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 0;
+        clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+        cursor: pointer;
+        font-family: 'Russo One', sans-serif;
+        font-size: 0.9rem;
+        background: #e0e0e0;
+        color: var(--main-text, #2a2a2a);
+    }
+    .pp-modal-btn:hover { background: #d0d0d0; }
+    .pp-modal-btn.primary {
+        background: var(--accent, #f5c842);
+        color: #2a2a2a;
+    }
+    .pp-modal-btn.primary:hover { background: var(--accent-dark, #c9a227); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="pp-section">
+    <h1>План печати</h1>
+    <div class="pp-subnav">
+        <a href="/print-plan" class="active">План печати</a>
+        <a href="/print-queue">Очередь печати</a>
+    </div>
+
+    <div class="pp-section">
+        <div class="pp-week-toolbar">
+            <button type="button" class="pp-week-nav" id="pp-btn-week-prev" title="Предыдущая неделя">← Назад</button>
+            <div class="pp-week-center" id="pp-week-center">
+                <span id="pp-week-label">Неделя:</span> <span id="pp-week-dates">—</span>
+            </div>
+            <button type="button" class="pp-week-nav" id="pp-btn-week-next" title="Следующая неделя">Вперёд →</button>
+        </div>
+
+        <div class="pp-two-cols">
+            <div class="pp-col-plan">
+                <div class="pp-section-header">
+                    <h2>План на неделю</h2>
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <button type="button" class="pp-btn-transfer" id="pp-btn-transfer-algo" title="Перенести план в очередь печати">Перенести план в задачи</button>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
+                    <button type="button" class="pp-btn-add" id="pp-btn-add-row">Добавить позицию</button>
+                    <button type="button" class="pp-btn-add" id="pp-btn-save">Сохранить</button>
+                </div>
+                <div class="pp-save-wrap">
+                    <div class="pp-msg-wrap" id="pp-save-msg-wrap" style="display: none;">
+                        <span class="pp-msg-text" id="pp-save-msg"></span>
+                        <button type="button" class="pp-msg-close" id="pp-msg-close-btn" aria-label="Закрыть">×</button>
+                    </div>
+                </div>
+                <div class="pp-table-wrap">
+                    <table class="pp-table" id="pp-plan-table">
+                        <colgroup>
+                            <col class="col-num" style="width: 5%">
+                            <col style="width: 55%">
+                            <col class="col-qty" style="width: 15%">
+                            <col class="col-actions" style="width: 100px">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th class="col-num">№</th>
+                                <th>Изделие</th>
+                                <th class="col-qty">Количество</th>
+                                <th class="col-actions">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pp-plan-tbody">
+                            <!-- Строки добавляются JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="pp-col-calc">
+                <h2>Подсчёт деталей и материалов</h2>
+                <p style="margin-bottom: 12px; color: var(--text-muted); font-size: 0.9rem;">По данным из Справочника изделий по выбранному плану.</p>
+                <div class="pp-table-wrap">
+                    <table class="pp-table" id="pp-parts-table">
+                        <thead>
+                            <tr>
+                                <th>Деталь / материал</th>
+                                <th style="width: 60px;">Цвет</th>
+                                <th class="num" style="width: 140px;">Общее количество</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pp-parts-tbody">
+                            <tr><td colspan="3" style="color: var(--text-muted);">Добавьте изделия в план слева</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <h3 style="font-family: 'Russo One', sans-serif; font-size: 1rem; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border);">Дополнительные материалы</h3>
+                <ul class="pp-extras-list" id="pp-extras-list">
+                    <li style="color: var(--text-muted);">—</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="pp-modal-overlay" id="pp-transfer-modal" aria-hidden="true">
+    <div class="pp-modal" role="dialog" aria-labelledby="pp-transfer-modal-title">
+        <div class="pp-modal-header" id="pp-transfer-modal-title">Задания для переноса в очередь</div>
+        <div class="pp-modal-body">
+            <p style="margin-bottom: 12px; color: var(--text-muted); font-size: 0.9rem;">Отметьте задания, которые нужно добавить в очередь на выбранную неделю.</p>
+            <div class="pp-table-wrap">
+                <table class="pp-modal-table" id="pp-transfer-jobs-table">
+                    <thead>
+                        <tr>
+                            <th class="col-cb"><input type="checkbox" id="pp-transfer-select-all" title="Выбрать все" aria-label="Выбрать все"></th>
+                            <th>Задание</th>
+                            <th class="col-runs">Запусков</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pp-transfer-jobs-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="pp-modal-footer">
+            <button type="button" class="pp-modal-btn" id="pp-transfer-modal-cancel">Отмена</button>
+            <button type="button" class="pp-modal-btn primary" id="pp-transfer-modal-confirm">Создать в очереди</button>
+            <div class="pp-transfer-status" id="pp-transfer-status" aria-live="polite"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function() {
+    var products = [];
+    var composition = {};
+    var planRows = [];
+    var rowIdCounter = 0;
+    var currentWeekStart = '';  // YYYY-MM-DD (понедельник)
+
+    function getRowId() { return 'row-' + (++rowIdCounter); }
+
+    function getMondayOfWeek(d) {
+        var dt = new Date(d);
+        var day = dt.getDay();
+        var diff = day === 0 ? 6 : day - 1;
+        dt.setDate(dt.getDate() - diff);
+        return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+    }
+
+    function formatWeekRangeLabel(weekStart) {
+        var m = new Date(weekStart + 'T12:00:00');
+        var end = new Date(m);
+        end.setDate(end.getDate() + 6);
+        var fmtStart = function(d) { return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0'); };
+        var fmtEnd = function(d) { return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear(); };
+        return 'с ' + fmtStart(m) + ' по ' + fmtEnd(end);
+    }
+
+    var STORAGE_KEY_WEEK = 'printPlanWeek';
+    function loadStoredWeek() {
+        try {
+            var w = localStorage.getItem(STORAGE_KEY_WEEK);
+            if (w && /^\d{4}-\d{2}-\d{2}$/.test(w)) return w;
+        } catch (e) {}
+        return null;
+    }
+    function saveStoredWeek(weekStart) {
+        try { localStorage.setItem(STORAGE_KEY_WEEK, weekStart); } catch (e) {}
+    }
+
+    function isCurrentWeek(weekStart) {
+        var today = getMondayOfWeek(new Date());
+        return weekStart === today;
+    }
+
+    function setWeek(weekStart) {
+        currentWeekStart = weekStart;
+        document.getElementById('pp-week-label').textContent = isCurrentWeek(weekStart) ? 'Текущая неделя:' : 'Неделя:';
+        document.getElementById('pp-week-dates').textContent = formatWeekRangeLabel(weekStart);
+        var centerEl = document.getElementById('pp-week-center');
+        if (isCurrentWeek(weekStart)) centerEl.classList.add('pp-week-current');
+        else centerEl.classList.remove('pp-week-current');
+    }
+
+    function loadData() {
+        Promise.all([
+            fetch('/api/print-plan/products').then(function(r) { return r.json(); }),
+            fetch('/api/print-plan/composition').then(function(r) { return r.json(); })
+        ]).then(function(results) {
+            products = results[0] || [];
+            composition = results[1] || {};
+            if (!currentWeekStart) {
+                currentWeekStart = loadStoredWeek() || getMondayOfWeek(new Date());
+                setWeek(currentWeekStart);
+                saveStoredWeek(currentWeekStart);
+            }
+            loadPlan();
+        });
+    }
+
+    function loadPlan() {
+        fetch('/api/print-plan/plan?week_start=' + encodeURIComponent(currentWeekStart)).then(function(r) { return r.json(); }).then(function(data) {
+            var items = data.items || [];
+            planRows = items.map(function(it) { return { rowId: getRowId(), product_id: it.product_id, quantity: it.quantity || 1 }; });
+            if (planRows.length === 0) planRows = [{ rowId: getRowId(), product_id: null, quantity: 1 }];
+            renderPlanTable();
+            recalcParts();
+        });
+    }
+
+    function renderPlanTable() {
+        var tbody = document.getElementById('pp-plan-tbody');
+        tbody.innerHTML = '';
+        planRows.forEach(function(row, idx) {
+            var tr = document.createElement('tr');
+            tr.dataset.rowId = row.rowId;
+            var productOpts = products.map(function(p) {
+                var label = (p.article ? p.article + ' — ' : '') + (p.name || '');
+                var sel = row.product_id === p.id ? ' selected' : '';
+                return '<option value="' + p.id + '"' + sel + '>' + (label.replace(/</g, '&lt;')) + '</option>';
+            }).join('');
+            tr.innerHTML =
+                '<td class="col-num">' + (idx + 1) + '</td>' +
+                '<td><select class="pp-plan-product" data-row-id="' + row.rowId + '"><option value="">— выберите изделие</option>' + productOpts + '</select></td>' +
+                '<td><input type="number" class="pp-plan-qty" data-row-id="' + row.rowId + '" min="1" value="' + (row.quantity || 1) + '"></td>' +
+                '<td class="col-actions"><button type="button" class="pp-btn-remove pp-remove-row" data-row-id="' + row.rowId + '" title="Удалить" aria-label="Удалить"><svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button></td>';
+            tbody.appendChild(tr);
+        });
+        bindPlanRowEvents();
+    }
+
+    function bindPlanRowEvents() {
+        document.querySelectorAll('.pp-plan-product').forEach(function(sel) {
+            sel.addEventListener('change', function() {
+                var rowId = this.dataset.rowId;
+                var row = planRows.find(function(r) { return r.rowId === rowId; });
+                if (row) { row.product_id = this.value ? parseInt(this.value, 10) : null; recalcParts(); }
+            });
+        });
+        document.querySelectorAll('.pp-plan-qty').forEach(function(inp) {
+            inp.addEventListener('input', function() {
+                var rowId = this.dataset.rowId;
+                var row = planRows.find(function(r) { return r.rowId === rowId; });
+                if (row) { row.quantity = parseInt(this.value, 10) || 0; recalcParts(); }
+            });
+        });
+        document.querySelectorAll('.pp-remove-row').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var rowId = this.dataset.rowId;
+                planRows = planRows.filter(function(r) { return r.rowId !== rowId; });
+                renderPlanTable();
+                recalcParts();
+            });
+        });
+    }
+
+    function addRow() {
+        planRows.push({ rowId: getRowId(), product_id: null, quantity: 1 });
+        renderPlanTable();
+    }
+
+    function recalcParts() {
+        var partsAgg = {};  // key = part_name + '|' + material_hex + '|' + material_name -> { total, hex }
+        var extrasAgg = {}; // extra_name -> total
+
+        planRows.forEach(function(row) {
+            if (!row.product_id || row.quantity <= 0) return;
+            var comp = composition[row.product_id];
+            if (!comp) return;
+            var qty = row.quantity;
+            (comp.parts || []).forEach(function(p) {
+                var key = (p.part_name || '') + '|' + (p.material_hex || '') + '|' + (p.material_name || '');
+                if (!partsAgg[key]) partsAgg[key] = { part_name: p.part_name, material_name: p.material_name, material_hex: p.material_hex || '#888', total: 0 };
+                partsAgg[key].total += (p.quantity || 1) * qty;
+            });
+            (comp.extras || []).forEach(function(e) {
+                var name = e.extra_name || '';
+                extrasAgg[name] = (extrasAgg[name] || 0) + (e.quantity || 1) * qty;
+            });
+        });
+
+        var partsTbody = document.getElementById('pp-parts-tbody');
+        var partKeys = Object.keys(partsAgg);
+        if (partKeys.length === 0) {
+            partsTbody.innerHTML = '<tr><td colspan="3" style="color: var(--text-muted);">Добавьте изделия в план выше</td></tr>';
+        } else {
+            partsTbody.innerHTML = partKeys.sort().map(function(key) {
+                var p = partsAgg[key];
+                var label = (p.part_name || '') + (p.material_name ? ' — ' + p.material_name : '');
+                return '<tr><td>' + (label.replace(/</g, '&lt;')) + '</td><td><span class="pp-color-sq" style="background-color:' + (p.material_hex || '#888') + '"></span></td><td class="num">' + p.total + '</td></tr>';
+            }).join('');
+        }
+
+        var extrasList = document.getElementById('pp-extras-list');
+        var extraNames = Object.keys(extrasAgg).filter(Boolean).sort();
+        if (extraNames.length === 0) {
+            extrasList.innerHTML = '<li style="color: var(--text-muted);">—</li>';
+        } else {
+            extrasList.innerHTML = extraNames.map(function(name) {
+                return '<li><span>' + (name.replace(/</g, '&lt;')) + '</span><span class="pp-extras-qty">' + extrasAgg[name] + '</span></li>';
+            }).join('');
+        }
+    }
+
+    function showMsg(text, isError) {
+        var textEl = document.getElementById('pp-save-msg');
+        var wrapEl = document.getElementById('pp-save-msg-wrap');
+        if (!textEl || !wrapEl) return;
+        textEl.textContent = text;
+        wrapEl.className = 'pp-msg-wrap ' + (isError ? 'error' : 'success');
+        wrapEl.style.display = 'flex';
+    }
+
+    function savePlan() {
+        var items = planRows.filter(function(r) { return r.product_id && r.quantity > 0; }).map(function(r) { return { product_id: r.product_id, quantity: r.quantity }; });
+        fetch('/api/print-plan/plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ week_start: currentWeekStart, items: items })
+        }).then(function(r) {
+            if (r.ok) { showMsg('План сохранён.'); return r.json(); }
+            return r.json().then(function(err) { throw new Error(err.detail || 'Ошибка'); });
+        }).catch(function(e) { showMsg(e.message || 'Ошибка сохранения', true); });
+    }
+
+    var transferPreviewItems = [];
+
+    function openTransferModal(jobs) {
+        var overlay = document.getElementById('pp-transfer-modal');
+        if (!overlay) return;
+        var tbody = document.getElementById('pp-transfer-jobs-tbody');
+        var selectAll = document.getElementById('pp-transfer-select-all');
+        if (tbody) tbody.innerHTML = '';
+        jobs.forEach(function(j) {
+            var tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td class="col-cb"><input type="checkbox" class="pp-transfer-job-cb" data-job-id="' + j.job_id + '" checked></td>' +
+                '<td>' + (j.job_name || '').replace(/</g, '&lt;') + '</td>' +
+                '<td class="col-runs">' + (j.runs || 0) + '</td>';
+            if (tbody) tbody.appendChild(tr);
+        });
+        if (selectAll) { selectAll.checked = true; selectAll.indeterminate = false; }
+        setTransferStatus('');
+        overlay.classList.add('pp-modal-open');
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeTransferModal() {
+        var overlay = document.getElementById('pp-transfer-modal');
+        if (overlay) {
+            overlay.classList.remove('pp-modal-open');
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+        var confirmBtn = document.getElementById('pp-transfer-modal-confirm');
+        if (confirmBtn) confirmBtn.textContent = 'Создать в очереди';
+        setTransferStatus('');
+    }
+
+    function getSelectedTransferJobIds() {
+        var ids = [];
+        document.querySelectorAll('.pp-transfer-job-cb:checked').forEach(function(cb) {
+            var id = parseInt(cb.dataset.jobId, 10);
+            if (!isNaN(id)) ids.push(id);
+        });
+        return ids;
+    }
+
+    function transferPlan() {
+        var items = planRows.filter(function(r) { return r.product_id && r.quantity > 0; }).map(function(r) { return { product_id: r.product_id, quantity: r.quantity }; });
+        if (items.length === 0) {
+            showMsg('Добавьте изделия в план и укажите количество.', true);
+            return;
+        }
+        transferPreviewItems = items;
+        var btnAlgo = document.getElementById('pp-btn-transfer-algo');
+        if (btnAlgo) btnAlgo.disabled = true;
+        fetch('/api/print-plan/transfer-preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: items })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            var jobs = data.jobs || [];
+            if (jobs.length === 0) {
+                showMsg('Нет заданий на печать с указанными принтерами для выбранных деталей.', true);
+                return;
+            }
+            openTransferModal(jobs);
+        }).catch(function(e) {
+            showMsg(e.message || 'Ошибка загрузки превью', true);
+        }).finally(function() {
+            if (btnAlgo) btnAlgo.disabled = false;
+        });
+    }
+
+    function setTransferStatus(text) {
+        var el = document.getElementById('pp-transfer-status');
+        if (el) el.textContent = text || '';
+    }
+
+    function doTransferToQueue() {
+        var selectedIds = getSelectedTransferJobIds();
+        if (selectedIds.length === 0) {
+            showMsg('Выберите хотя бы одно задание.', true);
+            return;
+        }
+        var btn = document.getElementById('pp-transfer-modal-confirm');
+        btn.disabled = true;
+        fetch('/api/print-plan/transfer-to-queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                week_start: currentWeekStart,
+                items: transferPreviewItems,
+                selected_job_ids: selectedIds
+            })
+        }).then(function(r) {
+            return r.json().then(function(data) {
+                if (r.ok) {
+                    closeTransferModal();
+                    var msg = 'Создано заданий: ' + (data.created || 0) + '. Можно открыть «Очередь печати».';
+                    showMsg(msg);
+                } else {
+                    throw new Error(data.detail || 'Ошибка');
+                }
+            });
+        }).catch(function(e) {
+            setTransferStatus('Ошибка.');
+            showMsg(e.message || 'Ошибка переноса плана в задачи', true);
+        }).finally(function() {
+            btn.disabled = false;
+            setTimeout(function() { setTransferStatus(''); }, 2000);
+        });
+    }
+
+    function bindTransferModalEvents() {
+        document.getElementById('pp-transfer-select-all').addEventListener('change', function() {
+            document.querySelectorAll('.pp-transfer-job-cb').forEach(function(cb) { cb.checked = this.checked; }, this);
+            this.indeterminate = false;
+        });
+        // Закрытие по клику на фон убрано: закрывать только кнопкой/крестиком.
+        document.getElementById('pp-transfer-modal-cancel').addEventListener('click', closeTransferModal);
+        document.getElementById('pp-transfer-modal-confirm').addEventListener('click', doTransferToQueue);
+    }
+
+    function weekPrev() {
+        var m = new Date(currentWeekStart + 'T12:00:00');
+        m.setDate(m.getDate() - 7);
+        currentWeekStart = m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0') + '-' + String(m.getDate()).padStart(2, '0');
+        setWeek(currentWeekStart);
+        saveStoredWeek(currentWeekStart);
+        loadPlan();
+    }
+    function weekNext() {
+        var m = new Date(currentWeekStart + 'T12:00:00');
+        m.setDate(m.getDate() + 7);
+        currentWeekStart = m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0') + '-' + String(m.getDate()).padStart(2, '0');
+        setWeek(currentWeekStart);
+        saveStoredWeek(currentWeekStart);
+        loadPlan();
+    }
+
+    document.getElementById('pp-btn-add-row').addEventListener('click', addRow);
+    document.getElementById('pp-btn-save').addEventListener('click', savePlan);
+    document.getElementById('pp-btn-transfer-algo').addEventListener('click', function() { transferPlan(); });
+    document.getElementById('pp-btn-week-prev').addEventListener('click', weekPrev);
+    document.getElementById('pp-btn-week-next').addEventListener('click', weekNext);
+    var closeMsgBtn = document.getElementById('pp-msg-close-btn');
+    if (closeMsgBtn) closeMsgBtn.addEventListener('click', function() {
+        var w = document.getElementById('pp-save-msg-wrap');
+        if (w) w.style.display = 'none';
+    });
+    bindTransferModalEvents();
+    loadData();
+})();
+</script>
+{% endblock %}

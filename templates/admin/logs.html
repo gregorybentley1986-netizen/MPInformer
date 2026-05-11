@@ -1,0 +1,78 @@
+{% extends "site/base.html" %}
+{% block title %}Логи — Админка{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}
+<a href="/" class="btn-header">Сайт</a>
+{% endblock %}
+{% block sidebar %}
+<a href="/admin" class="btn">Главная</a>
+<a href="/admin/reference" class="btn">Справочники</a>
+<a href="/admin/users" class="btn">Пользователи</a>
+<a href="/admin/settings" class="btn">Настройки</a>
+<a href="/admin/logs" class="btn">Логи</a>
+<a href="/admin/logout" class="btn">Выход</a>
+{% endblock %}
+{% block main_content_class %}main-content--fullheight{% endblock %}
+{% block extra_css %}
+<style>
+    .logs-page {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+    .logs-page .logs-toolbar {
+        flex-shrink: 0;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .logs-page .logs-card {
+        flex: 1;
+        min-height: 0;
+        margin-bottom: 0;
+    }
+    .logs-wrapper {
+        overflow-y: auto;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        max-height: min(55vh, calc(100vh - 280px));
+        min-height: 300px;
+    }
+    .logs-content {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 16px;
+        border: 1px solid var(--border);
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 0.8rem;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+    .logs-content.empty { color: var(--text-muted); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="logs-page">
+    <h1>Логи приложения</h1>
+    <div class="logs-toolbar">
+        <div class="last-updated" style="color: var(--text-muted); font-size: 0.9rem;">
+            Показаны последние 2000 строк.
+            {% if log_mtime_str %}Последняя запись в файле: {{ log_mtime_str }} (МСК).{% endif %}
+            {% if log_path %}<br><span style="font-size: 0.85rem;">Файл: {{ log_path }}</span>{% endif %}
+            Запись в файл идёт автоматически при работе приложения (см. LOG_FILE в .env). Обновите страницу для актуальных записей.
+        </div>
+        <a href="/admin/logs" class="btn">Обновить логи</a>
+    </div>
+    <div class="card logs-card">
+        <div class="logs-wrapper">
+            <div class="logs-content {% if not log_ok %}empty{% endif %}">{{ log_content | e }}</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

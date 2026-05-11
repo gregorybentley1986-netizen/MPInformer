@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="ru" class="{% block html_class %}{% endblock %}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MPI{% endblock %} — mpi.laprinta.ru</title>
+    <link rel="icon" type="image/png" href="/uploads/favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Play:wght@400;700&family=Russo+One&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-bg: #2a2a2a;
+            --sidebar-text: #e8e8e8;
+            --sidebar-text-muted: #b0b0b0;
+            --main-bg: #ffffff;
+            --main-text: #2a2a2a;
+            --border: #e0e0e0;
+            /* Акцентный цвет админки — #8AB0A5 (мягкий зелёно-голубой) */
+            --accent: #8AB0A5;
+            --accent-dark: #6f9288;
+            --header-bg: #e5e5e5;
+            --header-text: #2a2a2a;
+            --text-muted: #666;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            font-family: 'Play', sans-serif;
+            background: var(--main-bg);
+            color: var(--main-text);
+            min-height: 100vh;
+            line-height: 1.5;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            flex-shrink: 0;
+            background: var(--header-bg);
+            border-bottom: 2px solid var(--border);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+        .logo {
+            font-family: 'Russo One', sans-serif;
+            font-size: 1.5rem;
+            font-weight: normal;
+            color: var(--header-text);
+        }
+        .logo a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .btn-header {
+            font-family: 'Russo One', sans-serif;
+            font-size: 0.85rem;
+            padding: 8px 16px;
+            background: var(--accent);
+            color: #2a2a2a;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+            transition: background 0.2s;
+        }
+        .btn-header:hover {
+            background: var(--accent-dark);
+        }
+        .page-wrap {
+            display: flex;
+            flex: 1;
+            width: 100%;
+            min-height: 0;
+        }
+        .sidebar {
+            flex-shrink: 0;
+            width: auto;
+            min-width: 200px;
+            background: var(--sidebar-bg);
+            color: var(--sidebar-text);
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .sidebar-inner {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+        .sidebar nav {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
+            min-height: 0;
+        }
+        .sidebar-user {
+            margin-top: auto;
+            padding-top: 20px;
+            padding-bottom: 20px;
+            border-top: 1px solid rgba(255,255,255,0.15);
+        }
+        .sidebar-user .greeting {
+            color: var(--sidebar-text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+        .sidebar .btn {
+            display: block;
+            text-align: left;
+            width: 100%;
+            white-space: nowrap;
+        }
+        .btn {
+            display: inline-block;
+            font-family: 'Russo One', sans-serif;
+            font-size: 0.9rem;
+            font-weight: normal;
+            padding: 10px 20px;
+            background: var(--accent);
+            color: #2a2a2a;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+            transition: background 0.2s;
+        }
+        .btn:hover {
+            background: var(--accent-dark);
+        }
+        .sidebar .btn {
+            background: var(--accent);
+            color: #2a2a2a;
+        }
+        .sidebar .btn:hover {
+            background: var(--accent-dark);
+        }
+        .sidebar .btn { font-size: 0.85rem; padding: 10px 16px; }
+        .sidebar .btn.qr-open-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .global-qr-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .global-qr-modal.visible { display: flex; }
+        .global-qr-dialog {
+            background: var(--main-bg);
+            width: 100%;
+            max-width: 560px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 16px;
+        }
+        .global-qr-title { font-family: 'Russo One', sans-serif; margin-bottom: 10px; }
+        .global-qr-box {
+            border: 2px dashed var(--border);
+            border-radius: 10px;
+            min-height: 220px;
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .global-qr-box.active { border-color: var(--accent); background: #000; }
+        .global-qr-box video { width: 100%; max-height: 320px; display: none; }
+        .global-qr-box.active video { display: block; }
+        .global-qr-box canvas { position: absolute; left: -9999px; }
+        .global-qr-placeholder { color: var(--text-muted); text-align: center; padding: 14px; }
+        .global-qr-controls { margin-top: 10px; display: none; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .global-qr-controls.visible { display: flex; }
+        .global-qr-controls select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
+        .global-qr-controls .torch-btn {
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #fff;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .global-qr-controls .torch-btn:hover { background: #eee; }
+        .global-qr-controls .torch-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .global-qr-controls .torch-btn.hidden { display: none; }
+        .global-qr-actions { margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; }
+        .global-qr-result { margin-top: 10px; font-size: 0.9rem; color: var(--main-text); word-break: break-all; }
+        .global-printed-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 2100;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .global-printed-modal.visible { display: flex; }
+        .global-printed-dialog {
+            background: var(--main-bg);
+            width: 100%;
+            max-width: 460px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 16px;
+        }
+        .global-printed-title { font-family: 'Russo One', sans-serif; margin-bottom: 10px; }
+        .global-printed-meta { margin-bottom: 14px; color: var(--main-text); }
+        .global-printed-balance { margin-bottom: 12px; font-size: 0.95rem; }
+        .global-printed-balance .stock {
+            display: inline-block;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #111;
+            margin-left: 6px;
+            vertical-align: baseline;
+        }
+        @keyframes global-printed-stock-tick {
+            0% { transform: scale(1); }
+            40% { transform: scale(1.14); color: #0d47a1; text-shadow: 0 0 12px rgba(13, 71, 161, 0.35); }
+            100% { transform: scale(1); color: #111; text-shadow: none; }
+        }
+        .global-printed-balance .stock.global-printed-stock--tick {
+            animation: global-printed-stock-tick 0.32s ease-out;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .global-printed-balance .stock.global-printed-stock--tick { animation: none; }
+        }
+        .global-printed-balance .defect { margin-left: 10px; color: #7a1d1d; font-weight: 700; }
+        .global-printed-form-grid {
+            display: grid;
+            grid-template-columns: auto 1fr minmax(9.5rem, max-content);
+            gap: 8px;
+            align-items: stretch;
+            margin-bottom: 14px;
+        }
+        .global-printed-form-grid .global-printed-cell-remove {
+            grid-row: 1 / span 2;
+            align-self: center;
+        }
+        .global-printed-form-grid input[type="number"] {
+            min-width: 0;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+        }
+        .global-printed-form-grid .global-printed-cell-action {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .global-printed-form-grid .btn-remove { background: #e57373; border-color: #d06161; color: #2a2a2a; }
+        .global-printed-form-grid .btn-add { background: #81c784; border-color: #70b274; color: #2a2a2a; }
+        .global-printed-form-grid .btn-remove:hover { background: #dc6666; }
+        .global-printed-form-grid .btn-add:hover { background: #74bb77; }
+        .global-printed-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+        .global-printed-actions .btn { width: 100%; box-sizing: border-box; }
+        .global-printed-feedback { margin-top: 10px; font-size: 0.95rem; line-height: 1.45; }
+        .global-printed-feedback-log { min-height: 0; }
+        .global-printed-feedback-hint { margin-top: 6px; min-height: 0; }
+        .global-printed-feedback .msg-add { color: #2e7d32; }
+        .global-printed-feedback .msg-remove { color: #c62828; }
+        .global-printed-feedback .msg-defect { color: #b71c1c; font-weight: 700; }
+        .global-printed-feedback .msg-hint { color: var(--muted-text, #666); }
+        .global-assembly-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 2100;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .global-assembly-modal.visible { display: flex; }
+        .global-assembly-dialog {
+            background: var(--main-bg);
+            width: 100%;
+            max-width: 460px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 16px;
+        }
+        .global-assembly-title { font-family: 'Russo One', sans-serif; margin-bottom: 10px; }
+        .global-assembly-meta { margin-bottom: 12px; color: var(--main-text); }
+        .global-assembly-form { display: flex; flex-direction: column; gap: 10px; }
+        .global-assembly-form label { display: flex; flex-direction: column; gap: 6px; font-size: 0.92rem; }
+        .global-assembly-form select,
+        .global-assembly-form textarea { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
+        .global-assembly-form textarea { min-height: 74px; resize: vertical; }
+        .global-assembly-actions { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+        .global-assembly-feedback { margin-top: 10px; font-size: 0.92rem; color: #065f46; min-height: 1.2em; }
+        .global-printed-defect-btn { background: #f0b7b7; border-color: #d38f8f; }
+        .sidebar-section {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--sidebar-text-muted);
+            padding: 8px 16px 4px;
+            margin-top: 8px;
+        }
+        .main-content {
+            flex: 1;
+            min-width: 0;
+            background: var(--main-bg);
+            padding: 24px 32px 48px;
+            overflow: auto;
+            scrollbar-gutter: stable;
+            -webkit-overflow-scrolling: touch;
+        }
+        .main-content.main-content--fullheight {
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            flex: 1 1 0;
+        }
+        h1 {
+            font-family: 'Russo One', sans-serif;
+            font-size: 1.75rem;
+            font-weight: normal;
+            color: var(--main-text);
+            margin-bottom: 24px;
+        }
+        .card {
+            background: var(--main-bg);
+            border: 1px solid var(--border);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .card.card--white {
+            background: var(--main-bg);
+            border-color: var(--border);
+        }
+        .card h2 {
+            font-family: 'Russo One', sans-serif;
+            font-size: 1.2rem;
+            font-weight: normal;
+            color: var(--main-text);
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--accent);
+        }
+        footer {
+            flex-shrink: 0;
+            padding: 14px 24px;
+            border-top: 1px solid var(--border);
+            color: var(--sidebar-text-muted);
+            font-size: 0.9rem;
+            background: var(--header-bg);
+        }
+        /* Мобильное меню: кнопка-гамбургер */
+        .menu-toggle {
+            display: none;
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 1002;
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border: none;
+            background: var(--sidebar-bg);
+            color: var(--sidebar-text);
+            cursor: pointer;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+        }
+        .menu-toggle span {
+            display: block;
+            width: 20px;
+            height: 2px;
+            background: currentColor;
+            border-radius: 1px;
+        }
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+        }
+        @media (max-width: 768px) {
+            .menu-toggle { display: flex; }
+            .header {
+                padding-left: 62px;
+            }
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                width: 260px;
+                min-width: 260px;
+                max-width: 85vw;
+                z-index: 1000;
+                transform: translateX(-100%);
+                transition: transform 0.25s ease;
+                overflow-y: auto;
+                padding-top: 70px;
+            }
+            .sidebar-inner { position: static; }
+            body.sidebar-open .sidebar {
+                transform: translateX(0);
+            }
+            .sidebar-overlay {
+                display: block;
+            }
+            body.sidebar-open .sidebar-overlay {
+                opacity: 1;
+                pointer-events: auto;
+            }
+            .main-content {
+                padding-left: 20px;
+                padding-right: 20px;
+            }
+        }
+        /* Загрузочная заставка */
+        .loader-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--main-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.35s ease-out;
+        }
+        .loader-overlay.loader-hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .loader-squares {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .loader-squares span {
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            animation: loader-pulse 2s ease-in-out infinite both;
+        }
+        .loader-squares span:nth-child(1) { animation-delay: 0s; }
+        .loader-squares span:nth-child(2) { animation-delay: 0.5s; }
+        .loader-squares span:nth-child(3) { animation-delay: 1s; }
+        .loader-squares span:nth-child(4) { animation-delay: 1.5s; }
+        @keyframes loader-pulse {
+            0% { opacity: 0; transform: scale(0.85); }
+            10% { opacity: 1; transform: scale(1); }
+            15% { opacity: 1; transform: scale(1); }
+            25% { opacity: 0; transform: scale(0.85); }
+            100% { opacity: 0; transform: scale(0.85); }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <div class="loader-overlay" id="loader-overlay" aria-hidden="false">
+        <div class="loader-squares">
+            <span></span><span></span><span></span><span></span>
+        </div>
+    </div>
+    <button type="button" class="menu-toggle" id="menu-toggle" aria-label="Открыть меню">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+    <div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+    <header class="header">
+        <div class="logo">{% block logo %}<a href="/">MPI</a>{% endblock %}</div>
+        <div class="header-actions">
+            {% block header_right %}
+            <a href="/admin" class="btn-header">Админка</a>
+            {% endblock %}
+        </div>
+    </header>
+    <div class="page-wrap">
+        <aside class="sidebar">
+            <div class="sidebar-inner">
+                <nav>
+                    {% block sidebar %}
+                    <a href="/" class="btn">Главная</a>
+                    <a href="/print-plan" class="btn">Печать</a>
+                    <a href="/supply-queue" class="btn">Очередь поставок</a>
+                    <a href="/warehouse" class="btn">Склад</a>
+                    <a href="/packaging-tasks" class="btn">Упаковочные задания</a>
+                    {% endblock %}
+                    <button type="button" class="btn qr-open-btn" id="global-qr-open-btn" title="Открыть сканер QR-кодов" aria-label="Открыть сканер QR-кодов">QR-сканер</button>
+                    {% if site_username is defined and site_username %}
+                    <div class="sidebar-user">
+                        <p class="greeting">Привет, {{ site_username }}!</p>
+                        <a href="/logout" class="btn">Выйти</a>
+                    </div>
+                    {% endif %}
+                </nav>
+            </div>
+        </aside>
+        <main class="main-content {% block main_content_class %}{% endblock %}">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <footer>mpi.laprinta.ru</footer>
+    <div class="global-qr-modal" id="global-qr-modal" aria-hidden="true">
+        <div class="global-qr-dialog" role="dialog" aria-modal="true">
+            <div class="global-qr-title">Сканер QR-кодов</div>
+            <div class="global-qr-box" id="global-qr-box" tabindex="0" role="button" aria-label="Включить камеру для сканирования QR-кода">
+                <div class="global-qr-placeholder" id="global-qr-placeholder">Нажмите, чтобы включить камеру</div>
+                <video id="global-qr-video" playsinline muted></video>
+                <canvas id="global-qr-canvas"></canvas>
+            </div>
+            <div class="global-qr-controls" id="global-qr-controls">
+                <label>Камера: <select id="global-qr-camera-select" aria-label="Выбор камеры"></select></label>
+                <button type="button" class="torch-btn hidden" id="global-qr-torch-btn" aria-pressed="false" title="Включить фонарик">🔦 Фонарик</button>
+            </div>
+            <div class="global-qr-result" id="global-qr-result"></div>
+            <div class="global-qr-actions">
+                <button type="button" class="btn" id="global-qr-close-btn">Закрыть</button>
+            </div>
+        </div>
+    </div>
+    <div class="global-printed-modal" id="global-printed-modal" aria-hidden="true">
+        <div class="global-printed-dialog" role="dialog" aria-modal="true">
+            <div class="global-printed-title">Коррекция остатка детали</div>
+            <div class="global-printed-meta" id="global-printed-meta">—</div>
+            <div class="global-printed-balance">
+                Остаток:<span class="stock" id="global-printed-stock">0</span>
+                <span class="defect" id="global-printed-defect">Брак: 0</span>
+            </div>
+            <div class="global-printed-form-grid">
+                <button type="button" class="btn btn-remove global-printed-cell-remove" id="global-printed-remove-btn">Изъять</button>
+                <input type="number" id="global-printed-qty" min="1" step="1" inputmode="numeric" placeholder="" value="">
+                <button type="button" class="btn btn-add global-printed-cell-action" id="global-printed-add-btn">Добавить</button>
+                <input type="number" id="global-printed-defect-qty" min="1" step="1" inputmode="numeric" placeholder="" value="">
+                <button type="button" class="btn global-printed-defect-btn global-printed-cell-action" id="global-printed-defect-btn">Брак!</button>
+            </div>
+            <div class="global-printed-actions">
+                <button type="button" class="btn" id="global-printed-close-btn">Закрыть</button>
+            </div>
+            <div class="global-printed-feedback" id="global-printed-feedback" aria-live="polite">
+                <div class="global-printed-feedback-log" id="global-printed-feedback-log"></div>
+                <div class="global-printed-feedback-hint msg-hint" id="global-printed-feedback-hint"></div>
+            </div>
+        </div>
+    </div>
+    <div class="global-assembly-modal" id="global-assembly-modal" aria-hidden="true">
+        <div class="global-assembly-dialog" role="dialog" aria-modal="true">
+            <div class="global-assembly-title">Партия сборки</div>
+            <div class="global-assembly-meta" id="global-assembly-meta">—</div>
+            <div class="global-assembly-form">
+                <label>
+                    Новый статус
+                    <select id="global-assembly-status-select"></select>
+                </label>
+                <div class="global-assembly-actions">
+                    <button type="button" class="btn" id="global-assembly-save-btn">Изменить статус</button>
+                </div>
+                <label>
+                    Комментарий
+                    <textarea id="global-assembly-comment-input" placeholder="Комментарий к партии"></textarea>
+                </label>
+                <button type="button" class="btn" id="global-assembly-save-comment-btn">Сохранить комментарий</button>
+                <button type="button" class="btn" id="global-assembly-close-btn">Закрыть</button>
+            </div>
+            <div class="global-assembly-feedback" id="global-assembly-feedback" aria-live="polite"></div>
+        </div>
+    </div>
+    {% block extra_js %}{% endblock %}
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" crossorigin="anonymous"></script>
+    <script>
+        (function() {
+            var loader = document.getElementById('loader-overlay');
+            if (loader) {
+                function hideLoader() {
+                    loader.classList.add('loader-hidden');
+                    loader.setAttribute('aria-hidden', 'true');
+                    setTimeout(function() { loader.remove(); }, 350);
+                }
+                if (document.readyState === 'complete') {
+                    hideLoader();
+                } else {
+                    window.addEventListener('load', hideLoader);
+                }
+            }
+        })();
+        (function() {
+            var toggle = document.getElementById('menu-toggle');
+            var overlay = document.getElementById('sidebar-overlay');
+            if (!toggle || !overlay) return;
+            function openMenu() {
+                document.body.classList.add('sidebar-open');
+                overlay.setAttribute('aria-hidden', 'false');
+            }
+            function closeMenu() {
+                document.body.classList.remove('sidebar-open');
+                overlay.setAttribute('aria-hidden', 'true');
+            }
+            toggle.addEventListener('click', function() {
+                document.body.classList.toggle('sidebar-open');
+                overlay.setAttribute('aria-hidden', document.body.classList.contains('sidebar-open') ? 'false' : 'true');
+            });
+            overlay.addEventListener('click', closeMenu);
+            document.querySelectorAll('.sidebar a').forEach(function(link) {
+                link.addEventListener('click', closeMenu);
+            });
+        })();
+        (function() {
+            var openBtn = document.getElementById('global-qr-open-btn');
+            var modal = document.getElementById('global-qr-modal');
+            var closeBtn = document.getElementById('global-qr-close-btn');
+            var box = document.getElementById('global-qr-box');
+            var placeholder = document.getElementById('global-qr-placeholder');
+            var video = document.getElementById('global-qr-video');
+            var canvas = document.getElementById('global-qr-canvas');
+            var controls = document.getElementById('global-qr-controls');
+            var cameraSelect = document.getElementById('global-qr-camera-select');
+            var torchBtn = document.getElementById('global-qr-torch-btn');
+            var resultEl = document.getElementById('global-qr-result');
+            var printedModal = document.getElementById('global-printed-modal');
+            var printedMeta = document.getElementById('global-printed-meta');
+            var printedQty = document.getElementById('global-printed-qty');
+            var printedDefectQty = document.getElementById('global-printed-defect-qty');
+            var printedAddBtn = document.getElementById('global-printed-add-btn');
+            var printedRemoveBtn = document.getElementById('global-printed-remove-btn');
+            var printedDefectBtn = document.getElementById('global-printed-defect-btn');
+            var printedCloseBtn = document.getElementById('global-printed-close-btn');
+            var printedFeedbackLogEl = document.getElementById('global-printed-feedback-log');
+            var printedFeedbackHintEl = document.getElementById('global-printed-feedback-hint');
+            var printedStockEl = document.getElementById('global-printed-stock');
+            var printedDefectEl = document.getElementById('global-printed-defect');
+            var assemblyModal = document.getElementById('global-assembly-modal');
+            var assemblyMeta = document.getElementById('global-assembly-meta');
+            var assemblyStatusSelect = document.getElementById('global-assembly-status-select');
+            var assemblySaveBtn = document.getElementById('global-assembly-save-btn');
+            var assemblyCommentInput = document.getElementById('global-assembly-comment-input');
+            var assemblySaveCommentBtn = document.getElementById('global-assembly-save-comment-btn');
+            var assemblyCloseBtn = document.getElementById('global-assembly-close-btn');
+            var assemblyFeedbackEl = document.getElementById('global-assembly-feedback');
+            var currentPrintedStockId = null;
+            var currentAssemblyBatchId = null;
+            var shouldRedirectToPrintedOnClose = false;
+            var printedSessionLog = [];
+            if (!openBtn || !modal || !box || !video || !canvas) return;
+            var ctx = canvas.getContext('2d');
+            var stream = null;
+            var animationId = null;
+            var torchOn = false;
+            var STORAGE_CAMERA_KEY = 'mpinformer_global_qr_camera_id';
+
+            function releaseStream() {
+                if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
+                if (stream) {
+                    stream.getTracks().forEach(function(t) { t.stop(); });
+                    stream = null;
+                }
+                video.srcObject = null;
+            }
+            function closeModal() {
+                releaseStream();
+                modal.classList.remove('visible');
+                modal.setAttribute('aria-hidden', 'true');
+                box.classList.remove('active');
+                if (placeholder) placeholder.style.display = '';
+                if (controls) controls.classList.remove('visible');
+                torchOn = false;
+                if (torchBtn) {
+                    torchBtn.classList.remove('on');
+                    torchBtn.classList.add('hidden');
+                    torchBtn.textContent = '🔦 Фонарик';
+                    torchBtn.setAttribute('aria-pressed', 'false');
+                }
+            }
+            function setTorch(on) {
+                if (!stream) return;
+                var track = stream.getVideoTracks()[0];
+                if (!track || !track.getCapabilities) return;
+                var caps = track.getCapabilities();
+                if (typeof caps.torch !== 'boolean' || !caps.torch) return;
+                torchOn = !!on;
+                track.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(function() {});
+                if (torchBtn) {
+                    torchBtn.classList.toggle('on', torchOn);
+                    torchBtn.setAttribute('aria-pressed', torchOn ? 'true' : 'false');
+                    torchBtn.textContent = torchOn ? '🔦 Фонарик вкл' : '🔦 Фонарик';
+                }
+            }
+            function updateTorchButtonVisibility() {
+                if (!torchBtn) return;
+                if (!stream) {
+                    torchBtn.classList.add('hidden');
+                    return;
+                }
+                var track = stream.getVideoTracks()[0];
+                if (!track || !track.getCapabilities) {
+                    torchBtn.classList.add('hidden');
+                    return;
+                }
+                var caps = track.getCapabilities();
+                if (typeof caps.torch === 'boolean' && caps.torch) {
+                    torchBtn.classList.remove('hidden');
+                    torchBtn.classList.toggle('on', torchOn);
+                    torchBtn.textContent = torchOn ? '🔦 Фонарик вкл' : '🔦 Фонарик';
+                    torchBtn.setAttribute('aria-pressed', torchOn ? 'true' : 'false');
+                } else {
+                    torchBtn.classList.add('hidden');
+                }
+            }
+            function clearPrintedModalFeedback() {
+                printedSessionLog = [];
+                if (printedFeedbackLogEl) printedFeedbackLogEl.innerHTML = '';
+                if (printedFeedbackHintEl) printedFeedbackHintEl.innerHTML = '';
+            }
+            function renderPrintedSessionLog() {
+                if (!printedFeedbackLogEl) return;
+                if (!printedSessionLog.length) {
+                    printedFeedbackLogEl.innerHTML = '';
+                    return;
+                }
+                var parts = printedSessionLog.map(function(entry) {
+                    if (entry.type === 'add') return '<span class="msg-add">+' + entry.qty + ' ед.</span>';
+                    if (entry.type === 'remove') return '<span class="msg-remove">-' + entry.qty + ' ед.</span>';
+                    return '<span class="msg-defect">' + entry.qty + ' ед.</span>';
+                });
+                printedFeedbackLogEl.innerHTML = parts.join(', ');
+            }
+            function pushPrintedSessionEntry(type, qty) {
+                printedSessionLog.push({ type: type, qty: qty });
+                if (printedFeedbackHintEl) printedFeedbackHintEl.innerHTML = '';
+                renderPrintedSessionLog();
+            }
+            function setPrintedHint(html) {
+                if (printedFeedbackHintEl) printedFeedbackHintEl.innerHTML = html || '';
+            }
+            function feedbackOnPrintedStockChanged(prevText, nextQuantity) {
+                var prev = parseInt(String(prevText).trim(), 10);
+                var next = parseInt(String(nextQuantity), 10);
+                if (isNaN(prev) || isNaN(next) || prev === next) return;
+                if (printedStockEl) {
+                    printedStockEl.classList.remove('global-printed-stock--tick');
+                    void printedStockEl.offsetWidth;
+                    printedStockEl.classList.add('global-printed-stock--tick');
+                    window.clearTimeout(printedStockEl._stockTickTimer);
+                    printedStockEl._stockTickTimer = window.setTimeout(function() {
+                        printedStockEl.classList.remove('global-printed-stock--tick');
+                    }, 400);
+                }
+                if (typeof navigator.vibrate === 'function') {
+                    try { navigator.vibrate(12); } catch (e) {}
+                }
+            }
+            function closePrintedModal() {
+                if (!printedModal) return;
+                printedModal.classList.remove('visible');
+                printedModal.setAttribute('aria-hidden', 'true');
+                currentPrintedStockId = null;
+                clearPrintedModalFeedback();
+                var mustRedirect = shouldRedirectToPrintedOnClose;
+                shouldRedirectToPrintedOnClose = false;
+                if (mustRedirect) {
+                    window.location.href = '/warehouse?tab=printed';
+                }
+            }
+            function openPrintedModal(data) {
+                if (!printedModal || !printedMeta) return;
+                currentPrintedStockId = data.stock_id;
+                shouldRedirectToPrintedOnClose = true;
+                printedMeta.textContent = (data.part_name || '—') + ' | ' + (data.material_name || '—');
+                if (printedQty) printedQty.value = '';
+                if (printedDefectQty) printedDefectQty.value = '';
+                clearPrintedModalFeedback();
+                if (printedStockEl) printedStockEl.textContent = String(data.quantity || 0);
+                if (printedDefectEl) printedDefectEl.textContent = 'Брак: ' + String(data.defect_quantity || 0);
+                printedModal.classList.add('visible');
+                printedModal.setAttribute('aria-hidden', 'false');
+            }
+            function closeAssemblyModal() {
+                if (!assemblyModal) return;
+                assemblyModal.classList.remove('visible');
+                assemblyModal.setAttribute('aria-hidden', 'true');
+                currentAssemblyBatchId = null;
+                if (assemblyFeedbackEl) assemblyFeedbackEl.textContent = '';
+            }
+            function openAssemblyModal(data) {
+                if (!assemblyModal || !assemblyMeta || !assemblyStatusSelect) return;
+                currentAssemblyBatchId = data.batch_id;
+                assemblyMeta.textContent = 'Партия №' + String(data.display_batch_no || '—');
+                if (assemblyFeedbackEl) assemblyFeedbackEl.textContent = '';
+                if (assemblyCommentInput) assemblyCommentInput.value = String(data.comment || '');
+                assemblyStatusSelect.innerHTML = '';
+                var opts = Array.isArray(data.status_options) ? data.status_options : [];
+                opts.forEach(function(opt) {
+                    if (!opt || !opt.value) return;
+                    var optionEl = document.createElement('option');
+                    optionEl.value = String(opt.value);
+                    optionEl.textContent = String(opt.label || opt.value);
+                    if (String(opt.value) === String(data.status || '')) optionEl.selected = true;
+                    assemblyStatusSelect.appendChild(optionEl);
+                });
+                assemblyModal.classList.add('visible');
+                assemblyModal.setAttribute('aria-hidden', 'false');
+            }
+            function saveAssemblyStatus() {
+                if (!currentAssemblyBatchId || !assemblyStatusSelect) return;
+                var newStatus = String(assemblyStatusSelect.value || '').trim();
+                if (!newStatus) return;
+                var body = new URLSearchParams();
+                body.set('batch_id', String(currentAssemblyBatchId));
+                body.set('status', newStatus);
+                fetch('/api/warehouse/assembly/batch/update-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                    body: body.toString(),
+                    credentials: 'same-origin'
+                }).then(function(r) { return r.json().then(function(j){ return { ok: r.ok, body: j }; }); })
+                  .then(function(x) {
+                      if (!x.ok || !x.body || !x.body.ok) {
+                          alert('Не удалось изменить статус партии');
+                          return;
+                      }
+                      if (assemblyFeedbackEl) {
+                          assemblyFeedbackEl.textContent = 'Статус партии изменен на ' + String(x.body.status_label || newStatus);
+                      }
+                  })
+                  .catch(function() { alert('Ошибка запроса'); });
+            }
+            function saveAssemblyComment() {
+                if (!currentAssemblyBatchId || !assemblyCommentInput) return;
+                var comment = String(assemblyCommentInput.value || '');
+                var body = new URLSearchParams();
+                body.set('batch_id', String(currentAssemblyBatchId));
+                body.set('comment', comment);
+                fetch('/api/warehouse/assembly/batch/update-comment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                    body: body.toString(),
+                    credentials: 'same-origin'
+                }).then(function(r) { return r.json().then(function(j){ return { ok: r.ok, body: j }; }); })
+                  .then(function(x) {
+                      if (!x.ok || !x.body || !x.body.ok) {
+                          alert('Не удалось сохранить комментарий');
+                          return;
+                      }
+                      if (assemblyCommentInput) assemblyCommentInput.value = String(x.body.comment || '');
+                      if (assemblyFeedbackEl) assemblyFeedbackEl.textContent = 'Комментарий сохранен';
+                  })
+                  .catch(function() { alert('Ошибка запроса'); });
+            }
+            function adjustPrinted(action) {
+                if (!currentPrintedStockId) return;
+                var raw = printedQty ? String(printedQty.value).trim() : '';
+                var qty = parseInt(raw, 10);
+                if (raw === '' || isNaN(qty) || qty < 1) {
+                    setPrintedHint('Укажите количество в верхнем поле ввода');
+                    return;
+                }
+                var body = new URLSearchParams();
+                body.set('stock_id', String(currentPrintedStockId));
+                body.set('qty', String(qty));
+                body.set('action', action);
+                fetch('/api/warehouse/printed/adjust', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                    body: body.toString(),
+                    credentials: 'same-origin'
+                }).then(function(r) { return r.json().then(function(j){ return { ok: r.ok, body: j }; }); })
+                  .then(function(x) {
+                      if (!x.ok || !x.body || !x.body.ok) {
+                          alert('Не удалось изменить остаток детали');
+                          return;
+                      }
+                      var prevStockText = printedStockEl ? printedStockEl.textContent : '0';
+                      var newStock = x.body.quantity || 0;
+                      if (printedStockEl) printedStockEl.textContent = String(newStock);
+                      feedbackOnPrintedStockChanged(prevStockText, newStock);
+                      if (printedDefectEl) printedDefectEl.textContent = 'Брак: ' + String(x.body.defect_quantity || 0);
+                      pushPrintedSessionEntry(action === 'add' ? 'add' : 'remove', qty);
+                  })
+                  .catch(function() { alert('Ошибка запроса'); });
+            }
+            function addPrintedDefect() {
+                if (!currentPrintedStockId) return;
+                var raw = printedDefectQty ? String(printedDefectQty.value).trim() : '';
+                var qty = parseInt(raw, 10);
+                if (raw === '' || isNaN(qty) || qty < 1) {
+                    setPrintedHint('Укажите количество брака в нижнем поле ввода');
+                    return;
+                }
+                var body = new URLSearchParams();
+                body.set('stock_id', String(currentPrintedStockId));
+                body.set('defect_qty', String(qty));
+                fetch('/api/warehouse/printed/defect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                    body: body.toString(),
+                    credentials: 'same-origin'
+                }).then(function(r) { return r.json().then(function(j){ return { ok: r.ok, body: j }; }); })
+                  .then(function(x) {
+                      if (!x.ok || !x.body || !x.body.ok) {
+                          if (x.body && x.body.error === 'not_enough') alert('Недостаточно количества на складе');
+                          else alert('Не удалось добавить брак');
+                          return;
+                      }
+                      var prevStockTextDef = printedStockEl ? printedStockEl.textContent : '0';
+                      var newStockDef = x.body.quantity || 0;
+                      if (printedStockEl) printedStockEl.textContent = String(newStockDef);
+                      feedbackOnPrintedStockChanged(prevStockTextDef, newStockDef);
+                      if (printedDefectEl) printedDefectEl.textContent = 'Брак: ' + String(x.body.defect_quantity || 0);
+                      pushPrintedSessionEntry('defect', qty);
+                  })
+                  .catch(function() { alert('Ошибка запроса'); });
+            }
+            function fillCameraSelect(selectedId) {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices || !cameraSelect) return;
+                navigator.mediaDevices.enumerateDevices().then(function(devices) {
+                    var cams = devices.filter(function(d) { return d.kind === 'videoinput'; });
+                    cameraSelect.innerHTML = '';
+                    cams.forEach(function(c, i) {
+                        var opt = document.createElement('option');
+                        opt.value = c.deviceId;
+                        opt.textContent = c.label || ('Камера ' + (i + 1));
+                        if (selectedId && c.deviceId === selectedId) opt.selected = true;
+                        cameraSelect.appendChild(opt);
+                    });
+                }).catch(function() {});
+            }
+            function scanTick() {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0);
+                    var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    if (typeof jsQR === 'function') {
+                        var code = jsQR(imageData.data, imageData.width, imageData.height);
+                        if (code && code.data) {
+                            var m = code.data.match(/^Деталь\/(\d+)$/i);
+                            if (m && m[1]) {
+                                var stockId = parseInt(m[1], 10);
+                                fetch('/api/warehouse/printed/' + stockId, { credentials: 'same-origin' })
+                                    .then(function(r) { return r.json().then(function(j){ return { ok: r.ok, body: j }; }); })
+                                    .then(function(x) {
+                                        if (!x.ok || !x.body || !x.body.ok) {
+                                            alert('Деталь по QR не найдена');
+                                            return;
+                                        }
+                                        closeModal();
+                                        openPrintedModal(x.body);
+                                    })
+                                    .catch(function() { alert('Ошибка получения данных детали'); });
+                                return;
+                            }
+                            var mb = code.data.match(/^ПартияСборки\/(\d+)$/i);
+                            if (mb && mb[1]) {
+                                var batchId = parseInt(mb[1], 10);
+                                fetch('/api/warehouse/assembly/batch/' + batchId, { credentials: 'same-origin' })
+                                    .then(function(r) { return r.json().then(function(j){ return { ok: r.ok, body: j }; }); })
+                                    .then(function(x) {
+                                        if (!x.ok || !x.body || !x.body.ok) {
+                                            alert('Партия сборки по QR не найдена');
+                                            return;
+                                        }
+                                        closeModal();
+                                        openAssemblyModal(x.body);
+                                    })
+                                    .catch(function() { alert('Ошибка получения данных партии'); });
+                                return;
+                            }
+                            if (resultEl) resultEl.textContent = 'Считано: ' + code.data;
+                            closeModal();
+                            return;
+                        }
+                    }
+                }
+                animationId = requestAnimationFrame(scanTick);
+            }
+            function startWith(constraints) {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    alert('Камера недоступна');
+                    return;
+                }
+                releaseStream();
+                navigator.mediaDevices.getUserMedia(constraints).then(function(s) {
+                    stream = s;
+                    video.srcObject = s;
+                    video.setAttribute('playsinline', true);
+                    video.play();
+                    box.classList.add('active');
+                    if (placeholder) placeholder.style.display = 'none';
+                    if (controls) controls.classList.add('visible');
+                    var track = s.getVideoTracks()[0];
+                    var selectedId = track && track.getSettings ? (track.getSettings().deviceId || '') : '';
+                    fillCameraSelect(selectedId);
+                    updateTorchButtonVisibility();
+                    video.onloadedmetadata = function() { scanTick(); };
+                }).catch(function(err) {
+                    alert('Не удалось включить камеру: ' + (err && err.message ? err.message : String(err)));
+                });
+            }
+            function openModal() {
+                modal.classList.add('visible');
+                modal.setAttribute('aria-hidden', 'false');
+                if (resultEl) resultEl.textContent = '';
+                var savedId = '';
+                try { savedId = localStorage.getItem(STORAGE_CAMERA_KEY) || ''; } catch (e) {}
+                if (savedId) startWith({ video: { deviceId: { exact: savedId } } });
+                else startWith({ video: { facingMode: 'environment' } });
+            }
+            openBtn.addEventListener('click', openModal);
+            if (closeBtn) closeBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) closeModal();
+            });
+            box.addEventListener('click', function() {
+                if (!box.classList.contains('active')) openModal();
+            });
+            if (cameraSelect) {
+                cameraSelect.addEventListener('change', function() {
+                    var id = cameraSelect.value;
+                    if (!id) return;
+                    try { localStorage.setItem(STORAGE_CAMERA_KEY, id); } catch (e) {}
+                    startWith({ video: { deviceId: { exact: id } } });
+                });
+            }
+            if (torchBtn) {
+                torchBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setTorch(!torchOn);
+                });
+            }
+            if (printedAddBtn) printedAddBtn.addEventListener('click', function() { adjustPrinted('add'); });
+            if (printedRemoveBtn) printedRemoveBtn.addEventListener('click', function() { adjustPrinted('remove'); });
+            if (printedDefectBtn) printedDefectBtn.addEventListener('click', addPrintedDefect);
+            if (printedCloseBtn) printedCloseBtn.addEventListener('click', closePrintedModal);
+            if (assemblySaveBtn) assemblySaveBtn.addEventListener('click', saveAssemblyStatus);
+            if (assemblySaveCommentBtn) assemblySaveCommentBtn.addEventListener('click', saveAssemblyComment);
+            if (assemblyCloseBtn) assemblyCloseBtn.addEventListener('click', closeAssemblyModal);
+            if (printedModal) {
+                printedModal.addEventListener('click', function(e) {
+                    if (e.target === printedModal) closePrintedModal();
+                });
+            }
+            if (assemblyModal) {
+                assemblyModal.addEventListener('click', function(e) {
+                    if (e.target === assemblyModal) closeAssemblyModal();
+                });
+            }
+        })();
+    </script>
+</body>
+</html>

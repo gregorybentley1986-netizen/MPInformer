@@ -1,0 +1,421 @@
+{% extends "site/base.html" %}
+{% block title %}Проверка API — Админка{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}
+<a href="/" class="btn-header">Сайт</a>
+{% endblock %}
+{% block sidebar %}
+{% include "admin/_sidebar.html" %}
+{% endblock %}
+{% block extra_css %}
+<style>
+    .api-check-page {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 0;
+        min-height: 0;
+        overflow-y: auto;
+    }
+    .api-check-logs {
+        display: flex;
+        gap: 16px;
+        flex: 0 0 auto;
+        margin-top: 12px;
+        margin-bottom: 16px;
+    }
+    .api-check-log {
+        flex: 1 1 0;
+        min-width: 0;
+        height: 500px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #1e1e1e;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .api-check-log-title {
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        color: #d4d4d4;
+        font-weight: 700;
+        font-size: 0.95rem;
+        flex: 0 0 auto;
+    }
+    .api-check-log pre {
+        margin: 0;
+        padding: 12px 14px;
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: auto;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 0.82rem;
+        line-height: 1.35;
+        color: #d4d4d4;
+        white-space: pre-wrap;
+        word-break: break-word;
+        box-sizing: border-box;
+        background: transparent;
+    }
+    .api-check-blocks {
+        overflow-y: auto;
+        min-height: 0;
+    }
+    .api-check-block {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 12px;
+        margin-bottom: 12px;
+        background: var(--main-bg);
+    }
+    .api-check-block h3 {
+        margin: 0 0 8px 0;
+        font-size: 1rem;
+    }
+    .api-check-block pre {
+        margin: 0 0 12px 0;
+        padding: 10px 12px;
+        border: 1px dashed var(--border);
+        border-radius: 6px;
+        font-size: 0.85rem;
+        max-width: 100%;
+        overflow-x: auto;
+        background: #fafafa;
+    }
+
+    .api-check-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .api-check-form .api-check-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: flex-end;
+    }
+    .api-check-form .api-check-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .api-check-form label {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--main-text);
+    }
+    .api-check-form input[type="text"] {
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        background: var(--main-bg);
+        color: var(--main-text);
+        border-radius: 6px;
+        min-width: 240px;
+        box-sizing: border-box;
+    }
+    .api-check-checkbox {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        user-select: none;
+        font-size: 0.9rem;
+        color: var(--main-text);
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="api-check-page">
+    <h1>Проверка API</h1>
+
+    <div class="api-check-logs">
+        <div class="api-check-log">
+            <div class="api-check-log-title">Запрос API</div>
+            <pre id="api-check-request-log">Нет данных</pre>
+        </div>
+        <div class="api-check-log">
+            <div class="api-check-log-title">Ответ API</div>
+            <pre id="api-check-response-log">Нет данных</pre>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 16px;">
+        <div style="padding: 16px;">
+            {% if request_blocks and request_blocks|length > 0 %}
+                <h2 style="margin: 0 0 12px 0;">Поставки</h2>
+                <div id="api-check-blocks" class="api-check-blocks">
+                    {% for b in request_blocks %}
+                        <details style="margin-bottom: 12px;">
+                            <summary style="font-weight: 700; cursor: pointer; margin-bottom: 8px;">
+                                {{ b.title|default('Запрос') }}
+                            </summary>
+                            <div class="api-check-block">
+                                <h3>{{ b.title|default('Запрос') }}</h3>
+                                <pre>{{ b.input|default({})|tojson }}</pre>
+                                <button type="button"
+                                        class="btn api-check-run-btn"
+                                        data-endpoint="{{ b.endpoint|default('') }}"
+                                        data-title="{{ b.title|default('Запрос') }}"
+                                        data-body="{{ b.body|default({})|tojson }}">
+                                    Активировать запрос
+                                </button>
+                            </div>
+                        </details>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <h2 style="margin: 0 0 12px 0;">Отправления</h2>
+                <div id="api-check-blocks" class="api-check-blocks">
+                    <details style="margin-bottom: 12px;">
+                        <summary style="font-weight: 700; cursor: pointer; margin-bottom: 8px;">
+                            Информация об отправлении: POST /v2/posting/fbo/get
+                        </summary>
+                        <div class="api-check-block">
+                            <h3>Информация об отправлении</h3>
+                            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 0.9rem;">
+                                Метод запроса (Озон): <code style="font-family: inherit;">POST /v2/posting/fbo/get</code> (application/json)
+                            </p>
+                            <div class="api-check-form" id="api-check-posting-fbo-form">
+                                <div class="api-check-row">
+                                    <div class="api-check-field">
+                                        <label for="posting-fbo-posting-number">posting_number</label>
+                                        <input id="posting-fbo-posting-number" type="text" placeholder="50520644-0012-7" value="">
+                                    </div>
+                                    <label class="api-check-checkbox" title="translit">
+                                        <input id="posting-fbo-translit" type="checkbox" checked>
+                                        translit
+                                    </label>
+                                </div>
+
+                                <div class="api-check-row">
+                                    <label class="api-check-checkbox">
+                                        <input id="posting-fbo-analytics-data" type="checkbox" checked>
+                                        analytics_data
+                                    </label>
+                                    <label class="api-check-checkbox">
+                                        <input id="posting-fbo-financial-data" type="checkbox" checked>
+                                        financial_data
+                                    </label>
+                                    <label class="api-check-checkbox">
+                                        <input id="posting-fbo-legal-info" type="checkbox">
+                                        legal_info
+                                    </label>
+                                </div>
+
+                                <button type="button" class="btn" id="posting-fbo-get-btn" style="width: 260px;">
+                                    Активировать запрос
+                                </button>
+                            </div>
+                        </div>
+                    </details>
+
+                    <details style="margin-bottom: 12px;">
+                        <summary style="font-weight: 700; cursor: pointer; margin-bottom: 8px;">
+                            Список отправлений (FBO): POST /v2/posting/fbo/list
+                        </summary>
+                        <div class="api-check-block">
+                            <h3>Список отправлений (FBO)</h3>
+                            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 0.9rem;">
+                                Метод запроса (Озон): <code style="font-family: inherit;">POST /v2/posting/fbo/list</code> (application/json)
+                            </p>
+                            <div class="api-check-form" id="api-check-posting-fbo-list-form">
+                                <div class="api-check-row">
+                                    <div class="api-check-field">
+                                        <label for="posting-fbo-list-dir">dir</label>
+                                        <input id="posting-fbo-list-dir" type="text" placeholder="ASC" value="ASC">
+                                    </div>
+                                    <div class="api-check-field">
+                                        <label for="posting-fbo-list-since">since</label>
+                                        <input id="posting-fbo-list-since" type="text" placeholder="2021-09-01T00:00:00.000Z" value="">
+                                    </div>
+                                    <div class="api-check-field">
+                                        <label for="posting-fbo-list-to">to</label>
+                                        <input id="posting-fbo-list-to" type="text" placeholder="2021-11-17T10:44:12.828Z" value="">
+                                    </div>
+                                </div>
+
+                                <div class="api-check-row">
+                                    <div class="api-check-field">
+                                        <label for="posting-fbo-list-status">status</label>
+                                        <input id="posting-fbo-list-status" type="text" placeholder="" value="">
+                                    </div>
+                                    <div class="api-check-field">
+                                        <label for="posting-fbo-list-limit">limit</label>
+                                        <input id="posting-fbo-list-limit" type="text" placeholder="5" value="5">
+                                    </div>
+                                    <div class="api-check-field">
+                                        <label for="posting-fbo-list-offset">offset</label>
+                                        <input id="posting-fbo-list-offset" type="text" placeholder="0" value="0">
+                                    </div>
+                                    <label class="api-check-checkbox" title="translit">
+                                        <input id="posting-fbo-list-translit" type="checkbox" checked>
+                                        translit
+                                    </label>
+                                </div>
+
+                                <div class="api-check-row">
+                                    <label class="api-check-checkbox">
+                                        <input id="posting-fbo-list-analytics-data" type="checkbox" checked>
+                                        analytics_data
+                                    </label>
+                                    <label class="api-check-checkbox">
+                                        <input id="posting-fbo-list-financial-data" type="checkbox" checked>
+                                        financial_data
+                                    </label>
+                                    <label class="api-check-checkbox">
+                                        <input id="posting-fbo-list-legal-info" type="checkbox">
+                                        legal_info
+                                    </label>
+                                </div>
+
+                                <button type="button" class="btn" id="posting-fbo-list-btn" style="width: 320px;">
+                                    Активировать запрос
+                                </button>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <h2 style="margin: 16px 0 12px 0;">Поставки</h2>
+                <div id="api-check-supplies-placeholder" style="color: var(--text-muted);">
+                    Пока пусто.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var blocks = document.getElementById('api-check-blocks');
+    if (!blocks) return;
+
+    blocks.addEventListener('click', function(e) {
+        var btn = e.target.closest('.api-check-run-btn');
+        if (!btn) return;
+
+        var title = btn.getAttribute('data-title') || 'Запрос';
+        var requestEl = document.getElementById('api-check-request-log');
+        var responseEl = document.getElementById('api-check-response-log');
+        if (requestEl) requestEl.textContent = 'Запрос не исполняется (пока нет обработчика).\\n' + title;
+        if (responseEl) responseEl.textContent = 'Скоро здесь будет ответ API.';
+    });
+})();
+
+(function() {
+    var btn = document.getElementById('posting-fbo-get-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', async function() {
+        var requestEl = document.getElementById('api-check-request-log');
+        var responseEl = document.getElementById('api-check-response-log');
+
+        var postingNumber = (document.getElementById('posting-fbo-posting-number') || {}).value || '';
+        postingNumber = String(postingNumber).trim();
+        var translit = (document.getElementById('posting-fbo-translit') || {}).checked;
+        var analyticsData = (document.getElementById('posting-fbo-analytics-data') || {}).checked;
+        var financialData = (document.getElementById('posting-fbo-financial-data') || {}).checked;
+        var legalInfo = (document.getElementById('posting-fbo-legal-info') || {}).checked;
+
+        var payload = {
+            posting_number: postingNumber,
+            translit: !!translit,
+            with: {
+                analytics_data: !!analyticsData,
+                financial_data: !!financialData,
+                legal_info: !!legalInfo
+            }
+        };
+
+        if (requestEl) requestEl.textContent = JSON.stringify(payload, null, 2);
+        if (responseEl) responseEl.textContent = 'Запрос выполняется...';
+
+        try {
+            var r = await fetch('/admin/api-check/posting-fbo-get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
+            });
+            var data = await r.json().catch(function() { return { ok: false, error: 'Invalid JSON response' }; });
+            if (responseEl) responseEl.textContent = JSON.stringify(data, null, 2);
+        } catch (e) {
+            if (responseEl) responseEl.textContent = 'Ошибка запроса: ' + (e && e.message ? e.message : String(e));
+        }
+    });
+})();
+
+(function() {
+    var btn = document.getElementById('posting-fbo-list-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', async function() {
+        var requestEl = document.getElementById('api-check-request-log');
+        var responseEl = document.getElementById('api-check-response-log');
+
+        function getVal(id) {
+            var el = document.getElementById(id);
+            return el ? String(el.value || '') : '';
+        }
+        function getChecked(id) {
+            var el = document.getElementById(id);
+            return !!(el && el.checked);
+        }
+        function parseIntSafe(v, defVal) {
+            var n = parseInt(v, 10);
+            return isNaN(n) ? defVal : n;
+        }
+
+        var dirVal = String(getVal('posting-fbo-list-dir') || 'ASC').trim().toUpperCase() || 'ASC';
+        var since = getVal('posting-fbo-list-since').trim();
+        var to = getVal('posting-fbo-list-to').trim();
+        var status = getVal('posting-fbo-list-status').trim();
+
+        var limit = parseIntSafe(getVal('posting-fbo-list-limit').trim(), 5);
+        var offset = parseIntSafe(getVal('posting-fbo-list-offset').trim(), 0);
+
+        var translit = getChecked('posting-fbo-list-translit');
+        var analyticsData = getChecked('posting-fbo-list-analytics-data');
+        var financialData = getChecked('posting-fbo-list-financial-data');
+        var legalInfo = getChecked('posting-fbo-list-legal-info');
+
+        var payload = {
+            dir: dirVal,
+            filter: {
+                since: since,
+                status: status,
+                to: to
+            },
+            limit: limit,
+            offset: offset,
+            translit: translit,
+            with: {
+                analytics_data: analyticsData,
+                financial_data: financialData,
+                legal_info: legalInfo
+            }
+        };
+
+        if (requestEl) requestEl.textContent = JSON.stringify(payload, null, 2);
+        if (responseEl) responseEl.textContent = 'Запрос выполняется...';
+
+        try {
+            var r = await fetch('/admin/api-check/posting-fbo-list', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
+            });
+            var data = await r.json().catch(function() { return { ok: false, error: 'Invalid JSON response' }; });
+            if (responseEl) responseEl.textContent = JSON.stringify(data, null, 2);
+        } catch (e) {
+            if (responseEl) responseEl.textContent = 'Ошибка запроса: ' + (e && e.message ? e.message : String(e));
+        }
+    });
+})();
+</script>
+{% endblock %}
+

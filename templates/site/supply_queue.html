@@ -1,0 +1,513 @@
+{% extends "base.html" %}
+{% block title %}Очередь поставок{% endblock %}
+{# Документация логики: docs/supply_queue_flow.md #}
+{% block extra_css %}
+<style>
+    .supply-queue-page { padding: 24px 0; }
+    .supply-queue-page h1 { margin-bottom: 16px; }
+    .supply-queue-meta { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px; }
+    /* Таблица по ширине контента (склады + колонки дней), не на всю ширину */
+    .supply-queue-table { width: max-content; border-collapse: collapse; border: 1px solid var(--border); }
+    .supply-queue-table th, .supply-queue-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .supply-queue-table th { background: var(--header-bg, #e5e5e5); font-weight: 600; }
+    .supply-queue-table .supply-queue-warehouse-col { white-space: nowrap; }
+    .supply-queue-table tr:hover { background: rgba(0,0,0,0.03); }
+    .supply-queue-empty { color: var(--text-muted); padding: 24px; }
+
+    /* Колонки дней: квадратные ячейки */
+    .supply-queue-table .supply-queue-day-col { width: 40px; min-width: 40px; max-width: 40px; padding: 4px; text-align: center; box-sizing: border-box; }
+    /* Ячейки заголовка с датой — высокая специфичность */
+    table.supply-queue-table thead tr th.supply-queue-day-col {
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        width: 40px !important;
+        min-width: 40px !important;
+        max-width: 40px !important;
+        height: 70px !important;
+        padding: 0 !important;
+        vertical-align: middle !important;
+        text-align: center !important;
+        position: relative !important;
+        overflow: visible !important;
+    }
+    /* Текст даты: поворот на 90° — селектор максимально специфичный */
+    table.supply-queue-table thead tr th.supply-queue-day-col span.supply-queue-date-label {
+        position: absolute !important;
+        left: 50% !important;
+        top: 50% !important;
+        display: block !important;
+        white-space: nowrap !important;
+        margin-left: -18px !important;
+        margin-top: -7px !important;
+        transform-origin: center center !important;
+        -webkit-transform: rotate(-90deg) translateZ(0) !important;
+        transform: rotate(-90deg) translateZ(0) !important;
+    }
+    /* Выходные (сб/вс) в шапке таблицы кластеров */
+    table.supply-queue-table thead tr th.supply-queue-day-col span.supply-queue-date-label.weekend {
+        color: #c00 !important;
+    }
+    /* Выходные колонки целиком — светло-серый фон */
+    table.supply-queue-table thead tr th.supply-queue-day-col.weekend-col,
+    table.supply-queue-table tbody td.supply-queue-day-col.weekend-col {
+        background: #e5e5e5 !important;
+    }
+    /* В этот день/кластер уже создана поставка — толстая зелёная рамка */
+    table.supply-queue-table tbody td.supply-queue-day-col.supply-created .supply-queue-cell {
+        outline: 3px solid #166534 !important;
+        outline-offset: 0 !important;
+        border-radius: 6px;
+    }
+    .supply-queue-table tbody td.supply-queue-day-col { height: 40px; vertical-align: middle; }
+    .supply-queue-cell { width: 32px; height: 32px; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+    .supply-queue-dot { width: 100%; height: 100%; border-radius: 4px; flex-shrink: 0; }
+    /* Дни без слотов — светлосерые */
+    .supply-queue-dot--empty { background: #f7f7f7 !important; border: 1px solid #d0d0d0; }
+    /* RGB: красный 232,51,51 | жёлтый 223,235,52 | зелёный 52,235,140 */
+    .supply-queue-dot--red { background: rgb(201, 131, 64) !important; }
+    .supply-queue-dot--yellow { background: rgb(223, 235, 52) !important; }
+    .supply-queue-dot--green { background: rgb(52, 235, 140) !important; }
+    .supply-queue-dot--error { background: #ffe0e0 !important; position: relative; }
+    .supply-queue-dot--error::before,
+    .supply-queue-dot--error::after { content: ''; position: absolute; left: 50%; top: 50%; width: 2px; height: 110%; background: #c00; transform: translate(-50%, -50%) rotate(45deg); }
+    .supply-queue-dot--error::after { transform: translate(-50%, -50%) rotate(-45deg); }
+    /* Спойлер для таблицы кластеров */
+    .supply-queue-spoiler { margin-top: 12px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .supply-queue-spoiler summary { padding: 10px 14px; background: var(--header-bg, #f0f0f0); cursor: pointer; font-weight: 500; list-style: none; }
+    .supply-queue-spoiler summary::-webkit-details-marker { display: none; }
+    .supply-queue-spoiler summary::before { content: '▶'; display: inline-block; margin-right: 8px; font-size: 0.7rem; transition: transform 0.2s; }
+    .supply-queue-spoiler[open] summary::before { transform: rotate(90deg); }
+    .supply-queue-spoiler .supply-queue-wrap { padding: 12px; }
+    /* Таблица с горизонтальным скроллом, справа — легенда */
+    .supply-queue-wrap { display: flex; flex-direction: row; align-items: flex-start; gap: 16px; width: 100%; flex-wrap: nowrap; }
+    .supply-queue-table-wrap { overflow-x: auto; flex: 0 1 auto; min-width: 0; }
+    .supply-queue-legend { flex-shrink: 0; padding: 12px 16px; background: var(--header-bg, #f0f0f0); border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; color: var(--text-muted, #666); }
+    .supply-queue-legend h3 { font-size: 0.9rem; font-weight: 600; color: var(--main-text); margin-bottom: 10px; }
+    .supply-queue-legend ul { list-style: none; padding: 0; margin: 0; }
+    .supply-queue-legend li { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .supply-queue-legend li:last-child { margin-bottom: 0; }
+    .supply-queue-legend .legend-swatch { width: 24px; height: 24px; border-radius: 4px; flex-shrink: 0; }
+    .supply-queue-legend .legend-swatch--empty { background: #e8e8e8; border: 1px solid #d0d0d0; }
+    .supply-queue-legend .legend-swatch--red { background: rgb(201, 131, 64); }
+    .supply-queue-legend .legend-swatch--yellow { background: rgb(223, 235, 52); }
+    .supply-queue-legend .legend-swatch--green { background: rgb(52, 235, 140); }
+    .supply-queue-legend .legend-swatch--error { background: #ffe0e0; position: relative; }
+    .supply-queue-legend .legend-swatch--supply { background: #fff; border: 3px solid #166534; box-sizing: border-box; }
+    .supply-queue-legend .legend-swatch--error::before,
+    .supply-queue-legend .legend-swatch--error::after { content: ''; position: absolute; left: 50%; top: 50%; width: 1.5px; height: 120%; background: #c00; transform: translate(-50%, -50%) rotate(45deg); }
+    .supply-queue-legend .legend-swatch--error::after { transform: translate(-50%, -50%) rotate(-45deg); }
+    /* Сверху — таблица кластеров (28 дней), ниже — таблица поставок */
+    .supply-queue-main { display: flex; flex-direction: column; align-items: stretch; gap: 24px; margin-top: 24px; }
+    .supply-queue-supplies h2 { font-size: 1.1rem; margin-bottom: 12px; }
+{% include "_warehouse_stocks_matrix_styles.html" %}
+    .supply-queue-stocks-embed { padding: 12px; }
+    .supply-list-section { width: 100%; }
+    .supply-list-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; font-size: 0.9rem; }
+    .supply-list-filters label { display: inline-flex; align-items: center; gap: 6px; }
+    .supply-list-filters .sq-checkbox input { margin: 0; }
+    .sq-refresh-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; clip-path: none; -webkit-clip-path: none; border-radius: 6px; }
+    .sq-refresh-btn svg { width: 16px; height: 16px; display: block; flex-shrink: 0; overflow: visible; }
+    .sq-clear-btn { display: inline-flex; align-items: center; gap: 8px; background: #b91c1c; border-color: #991b1b; color: #fff; clip-path: none; -webkit-clip-path: none; border-radius: 6px; }
+    .sq-clear-btn:hover { background: #991b1b; border-color: #7f1d1d; }
+    .sq-clear-btn svg { width: 16px; height: 16px; display: block; flex-shrink: 0; }
+    .supply-list-meta { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 10px 0; }
+    .supply-queue-snapshot-at { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 10px 0; }
+    .sq-status-filter-wrap { margin: 12px 0; width: 100%; font-size: 0.86rem; }
+    .sq-status-filter-heading { font-weight: 600; margin: 0 0 8px 0; color: var(--main-text); }
+    .sq-status-filter-chips { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+    label.sq-status-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--header-bg, #f0f0f0); border: 1px solid var(--border); cursor: pointer; }
+    label.sq-status-chip input { margin: 0; }
+    .sq-status-chip-count { font-weight: 600; color: var(--main-text); }
+    .supply-list-warn { font-size: 0.9rem; padding: 8px 10px; border-radius: 6px; margin: 0 0 10px 0; }
+    .supply-list-warn--danger { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .supply-list-warn--muted { background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; }
+    .supply-list-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); font-size: 0.9rem; }
+    .supply-list-table th, .supply-list-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .supply-list-table th { background: var(--header-bg, #e5e5e5); font-weight: 600; }
+    .supply-list-table tr:hover { background: rgba(0,0,0,0.02); }
+    .supply-list-actions-th, .supply-list-actions { white-space: nowrap; text-align: right; }
+    .supply-list-empty { color: var(--text-muted); text-align: center; }
+    .supply-list-ext { margin-left: 6px; font-size: 0.85rem; color: var(--link-color, #2563eb); text-decoration: none; }
+    .supply-state-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.82rem; font-weight: 500; }
+    .supply-state--muted { background: #e5e7eb; color: #374151; }
+    .supply-state--info { background: #dbeafe; color: #1e40af; }
+    .supply-state--success { background: #d1fae5; color: #065f46; }
+    .supply-state--teal { background: #ccfbf1; color: #0f766e; }
+    .supply-state--transit { background: #e0e7ff; color: #3730a3; }
+    .supply-state--warehouse { background: #ede9fe; color: #5b21b6; }
+    .supply-state--awaiting { background: #fef3c7; color: #92400e; }
+    .supply-state--dispute { background: #ffedd5; color: #9a3412; }
+    .supply-state--done { background: #f3f4f6; color: #4b5563; }
+    .supply-state--rejected { background: #fee2e2; color: #991b1b; }
+    .supply-state--cancelled { background: #f3f4f6; color: #6b7280; text-decoration: line-through; }
+    .supply-state--overdue { background: #fecaca; color: #7f1d1d; }
+    .supply-state--unknown { background: #e5e7eb; color: #1f2937; }
+    .supply-list-col-cargo { min-width: 200px; max-width: 400px; vertical-align: top; }
+    .supply-list-cargo-stack { display: flex; flex-direction: column; gap: 8px; }
+    .supply-list-cargo-block { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg, #fafafa); font-size: 0.82rem; line-height: 1.35; }
+    .supply-list-cargo-id { font-weight: 600; margin-right: 6px; }
+    .supply-list-cargo-meta { color: var(--text-muted); font-size: 0.78rem; display: block; margin-top: 4px; }
+    .supply-list-cargo-items { margin: 6px 0 0 0; padding: 0 0 0 1em; list-style: disc; font-size: 0.78rem; color: var(--text-muted); }
+    .supply-list-cargo-items li { margin-bottom: 2px; }
+    .supply-list-cargo-pending { margin: 6px 0 0 0; font-size: 0.78rem; color: var(--text-muted); font-style: italic; }
+    .supply-list-cargo-empty { color: var(--text-muted); }
+    .sq-refresh-overlay { display: none; position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,0.35); align-items: center; justify-content: center; padding: 16px; }
+    .sq-refresh-overlay.is-visible { display: flex; }
+    .sq-refresh-overlay-box { background: var(--main-bg); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; max-width: 420px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+    .sq-refresh-overlay-box p { margin: 0 0 8px 0; font-size: 0.95rem; }
+    .sq-refresh-overlay-hint { font-size: 0.85rem !important; color: var(--text-muted) !important; margin-bottom: 0 !important; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="supply-queue-page">
+    <h1>Очередь поставок</h1>
+    {% if scan %}
+    <p class="supply-queue-meta">Данные сканирования: {{ scanned_at_str }} (автообновление каждый день в 07:00 МСК).</p>
+    {% endif %}
+    <div class="supply-queue-main">
+    {% if scan %}
+    <details class="supply-queue-spoiler">
+        <summary>Таблица кластеров (развернуть)</summary>
+    <div class="supply-queue-wrap">
+    <div class="supply-queue-table-wrap">
+    <table class="supply-queue-table">
+        <thead>
+            <tr>
+                <th class="supply-queue-warehouse-col">Склад (кластер)</th>
+                {% for d in week_dates %}
+                <th class="supply-queue-day-col{% if d.weekday() in (5, 6) %} weekend-col{% endif %}"><span class="supply-queue-date-label{% if d.weekday() in (5, 6) %} weekend{% endif %}" style="position:absolute;left:50%;top:50%;margin-left:-18px;margin-top:-7px;display:block;white-space:nowrap;transform:rotate(-90deg);-webkit-transform:rotate(-90deg);transform-origin:center center;">{{ d.strftime("%d.%m") }}</span></th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results %}
+            <tr>
+                <td class="supply-queue-warehouse-col">{{ r.cluster_name }}</td>
+                {% set counts = r.day_counts or [] %}
+                {% for d in week_dates %}
+                {% set _dt_key = d.strftime('%Y-%m-%d') %}
+                {% set _cell_key_id = (r.cluster_id ~ '') ~ '|' ~ _dt_key %}
+                {% set _cluster_norm = ' '.join(((r.cluster_name or '')|replace('\xa0',' ') ).split())|lower %}
+                {% set _cell_key_name = _cluster_norm ~ '|' ~ _dt_key %}
+                <td class="supply-queue-day-col{% if d.weekday() in (5, 6) %} weekend-col{% endif %}{% if supply_created_cells and (supply_created_cells.get(_cell_key_id) or supply_created_cells.get(_cell_key_name)) %} supply-created{% endif %}">
+                    <div class="supply-queue-cell">
+                        {% if counts and loop.index0 < (counts|length) %}
+                            {% set c = (counts[loop.index0] | int) if counts[loop.index0] is not none else 0 %}
+                            {% if c < 0 %}
+                            <div class="supply-queue-dot supply-queue-dot--error" title="Ошибка"></div>
+                            {% elif c == 0 %}
+                            <div class="supply-queue-dot supply-queue-dot--empty" title="Нет слотов"></div>
+                            {% elif c == 1 %}
+                            <div class="supply-queue-dot supply-queue-dot--red" title="1 слот"></div>
+                            {% elif c <= 6 %}
+                            <div class="supply-queue-dot supply-queue-dot--yellow" title="{{ c }} слотов"></div>
+                            {% else %}
+                            <div class="supply-queue-dot supply-queue-dot--green" title="{{ c }} слотов"></div>
+                            {% endif %}
+                        {% else %}
+                            <div class="supply-queue-dot supply-queue-dot--empty" title="—"></div>
+                        {% endif %}
+                    </div>
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    <div class="supply-queue-legend">
+        <h3>Обозначения</h3>
+        <ul>
+            <li><span class="legend-swatch legend-swatch--empty" aria-hidden="true"></span> Нет слотов</li>
+            <li><span class="legend-swatch legend-swatch--red" aria-hidden="true"></span> 1 слот</li>
+            <li><span class="legend-swatch legend-swatch--yellow" aria-hidden="true"></span> 2–6 слотов</li>
+            <li><span class="legend-swatch legend-swatch--green" aria-hidden="true"></span> Более 6 слотов</li>
+            <li><span class="legend-swatch legend-swatch--supply" aria-hidden="true"></span> Создана поставка</li>
+            <li><span class="legend-swatch legend-swatch--error" aria-hidden="true"></span> Ошибка</li>
+        </ul>
+    </div>
+    </div>
+    </details>
+    <details class="supply-queue-spoiler">
+        <summary>Остатки по складам (Ozon)</summary>
+        <div class="supply-queue-stocks-embed">
+            {% include "_warehouse_stocks_ozon_panel.html" %}
+        </div>
+    </details>
+    {% endif %}
+    {% if not scan %}
+    <p class="supply-queue-empty">Нет данных. Первый скан выполнится автоматически в 07:00 МСК либо запустите его вручную из админки (Тестирование API → Парсер свободных складов).</p>
+    <details class="supply-queue-spoiler">
+        <summary>Остатки по складам (Ozon)</summary>
+        <div class="supply-queue-stocks-embed">
+            {% include "_warehouse_stocks_ozon_panel.html" %}
+        </div>
+    </details>
+    {% endif %}
+
+    <div class="supply-queue-supplies supply-list-section">
+        <h2>Поставки</h2>
+        <p id="supply-just-created-hint" class="supply-just-created-hint" style="display: none; margin-bottom: 10px; color: var(--text-muted, #666); font-size: 0.9rem;">Заявка создана. Нажмите «Обновить данные», чтобы подтянуть список и состав из Ozon.</p>
+        <p class="supply-queue-meta" style="margin-bottom: 10px;"><a href="/supply-queue/create" class="btn">Создать заявку на поставку</a></p>
+        {% if supply_order_list_error %}
+        <p class="supply-list-warn supply-list-warn--danger">{{ supply_order_list_error }}</p>
+        {% endif %}
+        {% if supply_order_get_error %}
+        <p class="supply-list-warn supply-list-warn--muted">{{ supply_order_get_error }}</p>
+        {% endif %}
+        {% if supply_order_never_loaded %}
+        <p class="supply-list-warn supply-list-warn--muted">Снимок списка заявок ещё не загружен. Нажмите «Обновить данные».</p>
+        {% endif %}
+        <form id="sq-filter-form" class="supply-list-filters" method="get" action="/supply-queue">
+            <label>От <input type="date" name="sq_from" value="{{ sq_filter_date_from.isoformat() }}"></label>
+            <label>До <input type="date" name="sq_to" value="{{ sq_filter_date_to.isoformat() }}"></label>
+            <label class="sq-checkbox"><input type="checkbox" name="sq_show_cancelled" value="1" {% if sq_show_cancelled %}checked{% endif %}> Показывать отменённые</label>
+            <div class="sq-status-filter-wrap">
+                <p class="sq-status-filter-heading">Статусы (после фильтра по датам)</p>
+                <div class="sq-status-filter-chips" role="group" aria-label="Фильтр по статусу заявки">
+                    {% for chip in supply_queue_status_filter_chips %}
+                    <label class="sq-status-chip">
+                        <input type="checkbox" name="sq_st" value="{{ chip.code }}" {% if chip.checked %}checked{% endif %}>
+                        <span>{{ chip.label }}</span>
+                        <span class="sq-status-chip-count">({{ chip.count }})</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <button type="submit" class="btn">Применить фильтр</button>
+            <button type="button" class="btn sq-clear-btn" id="sq-clear-snapshot-btn">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 7h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                    <path d="M9 7V5h6v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M7 7l1 12h8l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M10 11v5M14 11v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                </svg>
+                <span>Очистить кеш снимка</span>
+            </button>
+            <button type="button" class="btn btn-primary sq-refresh-btn" id="sq-refresh-btn">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M20 12a8 8 0 0 1-14 5.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                    <path d="M4 12a8 8 0 0 1 14-5.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                    <path d="M6 20v-4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M18 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+                <span>Обновить данные</span>
+            </button>
+        </form>
+        <p class="supply-list-meta">Всего в снимке: {{ supply_order_list_total }} · После дат и отменённых: {{ supply_order_rows_date_filtered_count }} · В таблице: {{ supply_order_list_rows|length }}</p>
+        {% if supply_queue_snapshot_at %}
+        <p class="supply-queue-snapshot-at">Последнее обновление снимка: <strong>{{ supply_queue_snapshot_at }}</strong></p>
+        {% endif %}
+        <table class="supply-list-table">
+            <thead>
+                <tr>
+                    <th>Заявка</th>
+                    <th>Склад хранения</th>
+                    <th>Дата отгрузки</th>
+                    <th>Грузоместа</th>
+                    <th>Статус</th>
+                    <th class="supply-list-actions-th">Действия</th>
+                </tr>
+            </thead>
+            <tbody id="supply-list-tbody">
+                {% for row in supply_order_list_rows %}
+                <tr data-order-id="{{ row.order_id }}">
+                    <td>
+                        <a href="/supply-queue/order/{{ row.order_id }}">{{ row.order_number|default(row.order_id) }}</a>
+                        <a href="https://seller.ozon.ru/app/supply/orders/{{ row.order_id }}" target="_blank" rel="noopener noreferrer" class="supply-list-ext" title="Открыть в Ozon">↗</a>
+                    </td>
+                    <td>
+                        {% set scl = row.storage_cluster_line|default('—') %}
+                        {% set swl = row.storage_warehouse_line|default('—') %}
+                        {% if scl != '—' %}<strong>{{ scl }}</strong>{% if swl != '—' %}<br>{% endif %}{% endif %}
+                        {% if swl != '—' %}{{ swl }}{% elif scl == '—' %}—{% endif %}
+                    </td>
+                    <td>{% if row.shipment_at == '—' or not row.shipment_at %}—{% else %}{{ row.shipment_at }}{% endif %}</td>
+                    <td class="supply-list-col-cargo">
+                        {% set cargo_units = row.cargo_units|default([]) %}
+                        {% if cargo_units and cargo_units|length > 0 %}
+                        <div class="supply-list-cargo-stack">
+                            {% for cu in cargo_units %}
+                            {% if cu is mapping %}
+                            {% set line_items = cu.get('line_items') or cu.get('items') or [] %}
+                            <div class="supply-list-cargo-block">
+                                <span class="supply-list-cargo-id">#{% if cu.get('cargo_id') is not none %}{{ cu.get('cargo_id') }}{% else %}—{% endif %}</span>
+                                <span class="supply-list-cargo-meta">{{ cu.get('type', '') or '' }}{% set ct = cu.get('content_type', '') or '' %}{% if ct and ct != 'UNSPECIFIED' %} · {{ ct }}{% endif %}{% set ts = cu.get('tracking_status', '') or '' %}{% if ts and ts != 'UNSPECIFIED' %} · {{ ts }}{% endif %}</span>
+                                {% if line_items and line_items|length > 0 %}
+                                <ul class="supply-list-cargo-items">
+                                    {% for it in line_items %}
+                                    {% if it is mapping %}
+                                    <li>{% if it.get('name') %}{{ it.get('name') }}{% else %}—{% endif %}{% if it.get('offer_id') %} ({{ it.get('offer_id') }}){% endif %} — {{ it.get('quantity', 0) }} шт.</li>
+                                    {% endif %}
+                                    {% endfor %}
+                                </ul>
+                                {% else %}
+                                <p class="supply-list-cargo-pending">Товарный состав не загружен — нажмите «Обновить данные» на странице или откройте <a href="/supply-queue/order/{{ row.order_id }}">заявку</a>.</p>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span class="supply-list-cargo-empty">—</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="supply-state-badge {{ row.state_badge_class|default('supply-state--muted') }}">{{ row.state_label_ru|default('—') }}</span></td>
+                    <td class="supply-list-actions">
+                        {% if row.can_cancel %}
+                        <button type="button" class="btn sq-cancel-order-btn" data-order-id="{{ row.order_id }}">Отменить</button>
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="supply-list-empty">Нет заявок по фильтру</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    </div>
+    <div id="sq-refresh-overlay" class="sq-refresh-overlay" aria-hidden="true">
+        <div class="sq-refresh-overlay-box" role="status">
+            <p id="sq-refresh-overlay-msg">Обновление…</p>
+            <p class="sq-refresh-overlay-hint">Не закрывайте вкладку — запрос к Ozon может занять несколько минут.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('just_created') === '1') {
+        var hint = document.getElementById('supply-just-created-hint');
+        if (hint) hint.style.display = 'block';
+    }
+
+    function collectSqQueryParams() {
+        var form = document.getElementById('sq-filter-form');
+        if (!form) return new URLSearchParams();
+        var p = new URLSearchParams();
+        var fromEl = form.querySelector('[name="sq_from"]');
+        var toEl = form.querySelector('[name="sq_to"]');
+        var cb = form.querySelector('[name="sq_show_cancelled"]');
+        if (fromEl && fromEl.value) p.set('sq_from', fromEl.value);
+        if (toEl && toEl.value) p.set('sq_to', toEl.value);
+        if (cb && cb.checked) p.set('sq_show_cancelled', '1');
+        form.querySelectorAll('input[name="sq_st"]:checked').forEach(function(inp) {
+            if (inp.value) p.append('sq_st', inp.value);
+        });
+        return p;
+    }
+
+    var refreshBtn = document.getElementById('sq-refresh-btn');
+    var clearBtn = document.getElementById('sq-clear-snapshot-btn');
+    var overlay = document.getElementById('sq-refresh-overlay');
+    var overlayMsg = document.getElementById('sq-refresh-overlay-msg');
+
+    if (refreshBtn && overlay && overlayMsg) {
+        refreshBtn.addEventListener('click', function() {
+            var p = collectSqQueryParams();
+            p.set('sq_refresh', '1');
+            p.set('sq_refresh_json', '1');
+            var url = '/supply-queue?' + p.toString();
+            overlay.classList.add('is-visible');
+            overlay.setAttribute('aria-hidden', 'false');
+            overlayMsg.textContent = 'Запрос к Ozon…';
+            var pollTimer = setInterval(function() {
+                fetch('/api/supply-queue/refresh-progress', { credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data && data.active && data.message) overlayMsg.textContent = data.message;
+                    })
+                    .catch(function() {});
+            }, 400);
+            fetch(url, { credentials: 'same-origin' })
+                .then(function(r) { return r.json().catch(function() { return {}; }); })
+                .then(function(data) {
+                    clearInterval(pollTimer);
+                    if (data && data.redirect) {
+                        window.location.href = data.redirect;
+                        return;
+                    }
+                    if (data && data.ok) {
+                        window.location.reload();
+                        return;
+                    }
+                    overlay.classList.remove('is-visible');
+                    overlay.setAttribute('aria-hidden', 'true');
+                    overlayMsg.textContent = 'Обновление…';
+                    alert('Ошибка обновления. Обновите страницу вручную.');
+                })
+                .catch(function() {
+                    clearInterval(pollTimer);
+                    overlay.classList.remove('is-visible');
+                    overlay.setAttribute('aria-hidden', 'true');
+                    overlayMsg.textContent = 'Обновление…';
+                    alert('Сеть или таймаут. Проверьте вкладку и обновите страницу.');
+                });
+        });
+    }
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+            if (!confirm('Сбросить снимок списка заявок (сессия и файлы на сервере) и очередь фоновой подгрузки состава?')) return;
+            clearBtn.disabled = true;
+            fetch('/api/supply-queue/composition-refresh-clear-cache', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: '{}'
+            })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    clearBtn.disabled = false;
+                    if (data && data.ok) window.location.reload();
+                    else alert((data && data.error) ? data.error : 'Не удалось очистить кеш');
+                })
+                .catch(function(e) {
+                    clearBtn.disabled = false;
+                    alert('Ошибка: ' + (e.message || e));
+                });
+        });
+    }
+
+    var tbody = document.getElementById('supply-list-tbody');
+    if (tbody) {
+        tbody.addEventListener('click', function(e) {
+            var btn = e.target.closest('.sq-cancel-order-btn');
+            if (!btn) return;
+            var oidRaw = btn.getAttribute('data-order-id');
+            var oid = parseInt(oidRaw, 10);
+            if (!oid || isNaN(oid)) {
+                alert('Некорректный номер заявки.');
+                return;
+            }
+            if (!confirm('Отменить заявку ' + oidRaw + ' в Ozon? Доступно только для статусов «Заполнение данных» и «Готова к отгрузке».')) return;
+            var orig = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Отмена…';
+            fetch('/api/supply-queue/cancel-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ order_id: oid })
+            })
+                .then(function(r) { return r.json().catch(function() { return {}; }).then(function(d) { return { ok: r.ok, d: d }; }); })
+                .then(function(res) {
+                    btn.disabled = false;
+                    btn.textContent = orig;
+                    if (res.ok && res.d && res.d.ok) {
+                        window.location.reload();
+                        return;
+                    }
+                    alert((res.d && (res.d.error || res.d.detail)) ? (res.d.error || res.d.detail) : 'Не удалось отменить заявку');
+                })
+                .catch(function(err) {
+                    btn.disabled = false;
+                    btn.textContent = orig;
+                    alert('Ошибка запроса: ' + (err.message || err));
+                });
+        });
+    }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "site/base.html" %}
+{% block title %}Пользователи{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}
+<a href="/" class="btn-header">Сайт</a>
+{% endblock %}
+{% block sidebar %}
+<a href="/admin" class="btn">Главная</a>
+<a href="/admin/reference" class="btn">Справочники</a>
+<a href="/admin/users" class="btn">Пользователи</a>
+<a href="/admin/settings" class="btn">Настройки</a>
+<a href="/admin/logs" class="btn">Логи</a>
+<a href="/admin/logout" class="btn">Выход</a>
+{% endblock %}
+{% block extra_css %}
+<style>
+    .alert { padding: 16px; margin-bottom: 20px; border: 1px solid transparent; }
+    .alert-success { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+    .alert-error { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+    .users-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    .users-table th, .users-table td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    .users-table th { font-family: 'Russo One', sans-serif; font-size: 0.9rem; }
+    .users-actions { display: flex; gap: 10px; }
+    .users-actions a { font-size: 0.85rem; }
+    .btn-danger { background: #dc3545; color: #fff; }
+    .btn-danger:hover { background: #c82333; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Пользователи сайта</h1>
+
+{% if request.query_params.get("success") == "created" %}
+<div class="alert alert-success">Пользователь создан.</div>
+{% elif request.query_params.get("success") == "updated" %}
+<div class="alert alert-success">Пользователь обновлён.</div>
+{% elif request.query_params.get("success") == "deleted" %}
+<div class="alert alert-success">Пользователь удалён.</div>
+{% endif %}
+{% if request.query_params.get("error") == "notfound" %}
+<div class="alert alert-error">Пользователь не найден.</div>
+{% endif %}
+
+<p><a href="/admin/users/new" class="btn">Добавить пользователя</a></p>
+
+<table class="users-table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Логин</th>
+            <th>Действия</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for u in users %}
+        <tr>
+            <td>{{ u.id }}</td>
+            <td>{{ u.username }}</td>
+            <td>
+                <div class="users-actions">
+                    <a href="/admin/users/{{ u.id }}/edit" class="btn">Изменить</a>
+                    <form method="POST" action="/admin/users/{{ u.id }}/delete" style="display:inline;" onsubmit="return confirm('Удалить пользователя {{ u.username }}?');">
+                        <button type="submit" class="btn btn-danger">Удалить</button>
+                    </form>
+                </div>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3">Нет пользователей. <a href="/admin/users/new">Создать первого</a>.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

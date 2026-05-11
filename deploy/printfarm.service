@@ -1,0 +1,34 @@
+# PrintFarm — unit systemd
+#
+# Перед установкой замените пользователя и пути:
+#   User= / Group=  — учётная запись, от которой крутится PrintFarm
+#   WorkingDirectory — каталог PrintFarm/ (отдельная копия приложения)
+#   ExecStart — python из .venv (удобно держать venv внутри PrintFarm/)
+#
+# Установка: unit и код PrintFarm — в отдельном репозитории/каталоге PrintFarm
+# (рядом с MPInformer на ПК: .../Cursor Project/PrintFarm).
+#   sudo cp /path/to/PrintFarm/deploy/printfarm.service /etc/systemd/system/printfarm.service
+#   sudo nano /etc/systemd/system/printfarm.service   # поправить пути при необходимости
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now printfarm
+#   sudo systemctl status printfarm --no-pager
+#
+# Логи: journalctl -u printfarm -f
+
+[Unit]
+Description=PrintFarm (печать, склад, локальная админка)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=esox
+Group=esox
+WorkingDirectory=/home/esox/PrintFarm
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/esox/PrintFarm/.venv/bin/python /home/esox/PrintFarm/run.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

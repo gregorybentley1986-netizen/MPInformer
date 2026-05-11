@@ -1,0 +1,41 @@
+# Web Framework (FastAPI 0.115+ тянет Starlette 0.40+, где есть max_part_size для загрузки STL до 50 МБ)
+fastapi>=0.115.0,<0.117.0
+uvicorn[standard]==0.27.0
+jinja2==3.1.2
+python-multipart==0.0.6
+itsdangerous>=2.1.0  # для SessionMiddleware (сессии админки)
+
+# HTTP Clients
+httpx==0.25.2
+requests==2.31.0
+
+# Telegram Bot
+python-telegram-bot==20.7
+
+# Scheduler
+APScheduler==3.10.4
+
+# Database
+aiosqlite==0.19.0
+sqlalchemy==2.0.25
+
+# Password hashing for site users
+passlib==1.7.4
+
+# Configuration
+python-dotenv==1.0.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Date/Time
+python-dateutil==2.8.2
+
+# QR codes for spool labels
+qrcode[pil]==7.4.2
+
+# Logging
+loguru==0.7.2
+
+# Development (optional)
+pytest==7.4.4
+pytest-asyncio==0.23.3

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>ШК SKU — поставка {{ supply.ozon_supply_id or supply.id }}</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; margin: 0; }
+        .barcode-item { text-align: center; page-break-after: always; }
+        .barcode-item:last-child { page-break-after: auto; }
+        .barcode-item img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+        .no-print { margin-bottom: 16px; }
+        @media print {
+            @page { size: 58mm 40mm; margin: 0; }
+            body {
+                padding: 0;
+                margin: 0;
+                width: 100%;
+            }
+            .no-print { display: none !important; }
+            .barcode-item {
+                break-after: page;
+                page-break-after: always;
+                page-break-inside: avoid;
+                box-sizing: border-box;
+                width: 58mm;
+                height: 40mm;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: relative;
+            }
+            .barcode-item:last-child {
+                break-after: auto;
+                page-break-after: auto;
+            }
+            .barcode-item img {
+                max-width: 56mm;
+                max-height: 38mm;
+                width: auto;
+                height: auto;
+                object-fit: contain;
+                margin: 0 auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button type="button" onclick="window.print();">Печать</button>
+        <button type="button" onclick="window.close();">Закрыть</button>
+    </div>
+    {% if not composition %}
+    <p class="no-items-msg">Нет товаров для печати. Проверьте состав грузоместа или откройте печать из нужного блока.</p>
+    {% endif %}
+    {% for c in composition %}
+    {% set p = products.get(c.product_id) %}
+    {% for _ in range(c.quantity|default(1)|int) %}
+    <div class="barcode-item">
+        {% if p and p.ozon_barcode_filename %}
+        <img src="/uploads/products/barcodes/ozon/{{ p.ozon_barcode_filename }}" alt="">
+        {% else %}
+        <div>{{ c.sku or '—' }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endfor %}
+    <script>
+        (function() {
+            var items = document.querySelectorAll('.barcode-item');
+            if (items && items.length > 0) {
+                try { window.print(); } catch (e) {}
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,3815 @@
+{% extends "base.html" %}
+{% block title %}Создать поставку{% endblock %}
+{% block main_content_class %}main-content--fullheight{% endblock %}
+
+{% block extra_css %}
+<style>
+    .supply-create-page {
+        width: 100%;
+        padding: 24px 0 40px;
+    }
+    .supply-create-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 60%) minmax(0, 40%);
+        gap: 18px;
+        align-items: stretch;
+    }
+    .supply-create-main {
+        min-width: 0;
+    }
+    .supply-create-steps-slider {
+        position: relative;
+        overflow: hidden;
+        width: 100%;
+        min-height: 420px;
+        height: 420px;
+    }
+    .supply-create-steps-track {
+        display: flex;
+        align-items: stretch;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        transition: transform 0.28s ease;
+        will-change: transform;
+    }
+    .supply-create-side {
+        position: sticky;
+        top: 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--main-bg);
+        padding: 12px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    .supply-create-side h3 {
+        margin: 0 0 10px;
+        font-size: 1rem;
+    }
+    .supply-create-side-group {
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px dashed var(--border);
+    }
+    .supply-create-side-group:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: 0;
+    }
+    .supply-create-side-actions {
+        margin-top: 12px;
+        display: flex;
+        justify-content: stretch;
+    }
+    .supply-create-side-actions .btn {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .supply-create-side-cancel-btn {
+        opacity: 0.75;
+        font-size: 0.82rem;
+        padding: 8px 12px;
+    }
+    .supply-create-toast {
+        position: fixed;
+        left: 50%;
+        bottom: 20px;
+        transform: translateX(-50%) translateY(12px);
+        min-width: 260px;
+        max-width: min(90vw, 560px);
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #111827;
+        color: #f9fafb;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+        font-size: 0.9rem;
+        line-height: 1.35;
+        z-index: 1200;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .supply-create-toast.is-visible {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+    .supply-create-toast.is-success {
+        background: #166534;
+        border-color: #22c55e;
+    }
+    .supply-create-toast.is-error {
+        background: #991b1b;
+        border-color: #ef4444;
+    }
+    .supply-create-side-label {
+        margin: 0 0 4px;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+    }
+    .supply-create-side-value {
+        margin: 0;
+        font-size: 0.88rem;
+        line-height: 1.45;
+        white-space: pre-line;
+    }
+    .supply-create-side-cargo-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .supply-create-side-cargo-place {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 8px;
+        background: var(--header-bg, #f5f5f5);
+    }
+    .supply-create-side-cargo-place-head {
+        font-size: 0.84rem;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    .supply-create-side-cargo-print-icons {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 6px 0 10px;
+    }
+    .supply-create-side-cargo-print-btn {
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--main-bg);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+    .supply-create-side-cargo-print-btn:hover {
+        border-color: #93c5fd;
+        background: #eff6ff;
+    }
+    .supply-create-side-cargo-print-btn img {
+        width: 16px;
+        height: 16px;
+        object-fit: contain;
+        display: block;
+    }
+    .supply-create-side-cargo-item-print-btn {
+        width: 24px;
+        height: 24px;
+        margin-left: auto;
+        padding: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex: 0 0 24px;
+    }
+    .supply-create-side-cargo-item-print-btn:hover {
+        background: transparent;
+    }
+    .supply-create-side-cargo-item .supply-create-side-cargo-item-print-btn img {
+        width: 24px;
+        height: 24px;
+        object-fit: contain;
+        display: block;
+        border: none;
+        border-radius: 0;
+        flex: 0 0 24px;
+    }
+    .supply-create-side-cargo-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 4px 0;
+        font-size: 0.82rem;
+        line-height: 1.25;
+    }
+    .supply-create-side-cargo-item img {
+        width: 50px;
+        height: 50px;
+        object-fit: cover;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        flex: 0 0 50px;
+    }
+    .supply-create-side-id-supply {
+        margin: 0 0 4px;
+        font-size: 1.35rem;
+        font-weight: 800;
+        line-height: 1.2;
+        word-break: break-word;
+    }
+    .supply-create-side-id-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .supply-create-side-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        text-decoration: none;
+        font-size: 0.82rem;
+        line-height: 1;
+        color: var(--main-text);
+        background: var(--main-bg);
+    }
+    .supply-create-side-link:hover {
+        border-color: #60a5fa;
+        color: #1d4ed8;
+    }
+    .supply-create-side-id-order {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        line-height: 1.35;
+    }
+    .supply-create-side-cluster-strong {
+        margin: 0 0 4px;
+        font-size: 1.45rem;
+        font-weight: 800;
+        line-height: 1.3;
+    }
+    .supply-create-side-cluster-date {
+        margin: 0;
+        font-size: 0.92rem;
+        line-height: 1.35;
+        color: var(--text-muted);
+    }
+    .supply-create-side-status {
+        margin: 0;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: #f3f4f6;
+        color: #111827;
+        font-size: 0.9rem;
+        line-height: 1.4;
+        white-space: pre-line;
+    }
+    .supply-create-side-status.is-success {
+        border-color: #86efac;
+        background: #dcfce7;
+        color: #166534;
+    }
+    .supply-create-side-status.is-error {
+        border-color: #fca5a5;
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .supply-create-side-status.is-info {
+        border-color: #93c5fd;
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+    .supply-create-side-status.is-warning {
+        border-color: #facc15;
+        background: #fef9c3;
+        color: #854d0e;
+    }
+    .supply-create-side-steps {
+        margin: 0 0 10px;
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 10px;
+        align-items: flex-start;
+        position: relative;
+        overflow-x: auto;
+        padding: 0 0 2px;
+    }
+    .supply-create-side-steps::before {
+        content: "";
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        top: 8px;
+        height: 2px;
+        background: #d1d5db;
+        z-index: 0;
+        pointer-events: none;
+    }
+    .supply-create-step-dot {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.68rem;
+        color: var(--text-muted);
+        border: 0;
+        border-radius: 0;
+        padding: 0 2px;
+        background: transparent;
+        position: relative;
+        z-index: 1;
+        min-width: 64px;
+        justify-content: center;
+        text-align: center;
+        white-space: normal;
+        line-height: 1.1;
+        white-space: pre-line;
+    }
+    .supply-create-step-dot::before {
+        content: "·";
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        border: 1px solid #9ca3af;
+        background: #f3f4f6;
+        color: #6b7280;
+        font-weight: 700;
+    }
+    .supply-create-step-dot.is-ok::before {
+        content: "✓";
+        border-color: #22c55e;
+        background: #22c55e;
+        color: #fff;
+    }
+    .supply-create-step-dot.is-alert::before {
+        content: "!";
+        border-color: #facc15;
+        background: #facc15;
+        color: #111827;
+    }
+    .supply-create-page h1 {
+        margin-bottom: 16px;
+    }
+    .supply-create-step {
+        position: relative;
+        flex: 0 0 100%;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--main-bg);
+        padding: 16px;
+        padding-left: 58px;
+        padding-right: 58px;
+        padding-bottom: 96px;
+        margin-bottom: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    .supply-create-step-prev-btn,
+    .supply-create-step-next-btn {
+        position: absolute;
+        top: 0;
+        width: 44px;
+        height: 100%;
+        border: 0;
+        background: var(--accent);
+        color: #fff;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+    }
+    .supply-create-step-prev-btn {
+        left: 0;
+        border-right: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 8px 0 0 8px;
+    }
+    .supply-create-step-prev-btn::before {
+        content: "◀";
+    }
+    .supply-create-step-next-btn {
+        right: 0;
+        border-left: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 0 8px 8px 0;
+    }
+    .supply-create-step-next-btn::before {
+        content: "▶";
+    }
+    .supply-create-step-prev-btn:hover,
+    .supply-create-step-next-btn:hover {
+        background: var(--accent-dark);
+    }
+    .supply-create-step-prev-btn:disabled,
+    .supply-create-step-next-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+    }
+    .supply-create-step h2 {
+        margin: 0 0 12px;
+        font-size: 1.05rem;
+    }
+    .supply-create-step p {
+        margin: 0 0 12px;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+    .supply-create-rows {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .supply-create-row {
+        width: 100%;
+        display: grid;
+        grid-template-columns: minmax(280px, 1fr) 140px 120px;
+        gap: 10px;
+        align-items: end;
+    }
+    .supply-create-field {
+        min-width: 0;
+    }
+    .supply-create-field label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.86rem;
+        color: var(--text-muted);
+    }
+    .supply-create-product-input,
+    .supply-create-qty-input {
+        width: 100%;
+        height: 38px;
+        box-sizing: border-box;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: var(--main-bg);
+        color: var(--main-text);
+    }
+    .supply-create-input-wrap {
+        position: relative;
+    }
+    .supply-create-product-list {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(100% + 2px);
+        max-height: 240px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--main-bg);
+        z-index: 30;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+    }
+    .supply-create-product-list[hidden] {
+        display: none;
+    }
+    .supply-create-product-option {
+        width: 100%;
+        text-align: left;
+        border: 0;
+        background: transparent;
+        color: var(--main-text);
+        padding: 8px 10px;
+        cursor: pointer;
+    }
+    .supply-create-product-option:hover,
+    .supply-create-product-option:focus {
+        background: rgba(0, 0, 0, 0.05);
+        outline: none;
+    }
+    .supply-create-actions {
+        display: flex;
+        justify-content: flex-start;
+        gap: 10px;
+        margin-top: 14px;
+    }
+    .btn-danger {
+        background: #b91c1c;
+        border-color: #991b1b;
+        color: #fff;
+    }
+    .btn-danger:hover {
+        background: #991b1b;
+        border-color: #7f1d1d;
+    }
+    .supply-create-remove-placeholder {
+        display: block;
+        width: 100%;
+        height: 38px;
+        visibility: hidden;
+    }
+    .supply-create-next-step[hidden] {
+        display: none;
+    }
+    .supply-create-selected-cluster {
+        margin: 10px 0 0;
+        font-size: 0.9rem;
+        color: var(--main-text);
+    }
+    .supply-create-step-hint {
+        margin: 8px 0 0;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+    .supply-create-slots-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+    }
+    .supply-create-cargo-actions {
+        justify-content: flex-end;
+    }
+    .supply-create-slots-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+    }
+    .supply-create-slot-btn {
+        min-width: 130px;
+    }
+    .supply-create-error {
+        margin-top: 10px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid #fecaca;
+        background: #fee2e2;
+        color: #991b1b;
+        font-size: 0.9rem;
+        white-space: pre-line;
+        line-height: 1.45;
+    }
+    .supply-create-selected-slot {
+        margin-top: 10px;
+        font-size: 0.9rem;
+    }
+    .supply-create-draft-line {
+        margin-top: 8px;
+        font-size: 0.9rem;
+    }
+    .supply-create-status-block {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--header-bg, #f5f5f5);
+        font-size: 0.9rem;
+        line-height: 1.45;
+    }
+    .supply-create-warning-strong {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border: 1px solid #fecaca;
+        border-radius: 6px;
+        background: #fee2e2;
+        color: #991b1b;
+        font-size: 0.95rem;
+        font-weight: 700;
+        line-height: 1.5;
+        white-space: pre-line;
+    }
+    .supply-create-wait {
+        position: absolute;
+        left: 58px;
+        right: 58px;
+        bottom: 10px;
+        z-index: 4;
+        margin: 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,1) 100%);
+        box-shadow: 0 8px 24px rgba(17, 24, 39, 0.08);
+    }
+    .supply-create-wait[hidden] {
+        display: none;
+    }
+    .supply-create-wait-text {
+        margin: 0 0 6px 0;
+        font-size: 0.88rem;
+        color: var(--main-text);
+    }
+    .supply-create-wait-track {
+        width: 100%;
+        height: 8px;
+        border-radius: 999px;
+        background: #e5e7eb;
+        overflow: hidden;
+    }
+    .supply-create-wait-fill {
+        width: 0%;
+        height: 100%;
+        background: var(--accent);
+        transition: width 0.22s linear;
+    }
+    .supply-create-cargo-places {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 10px;
+    }
+    .supply-create-cargo-card {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        background: var(--main-bg);
+    }
+    .supply-create-cargo-head {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: end;
+        margin-bottom: 10px;
+    }
+    .supply-create-cargo-head .supply-create-field {
+        min-width: 180px;
+    }
+    .supply-create-cargo-items {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid var(--border);
+        font-size: 0.88rem;
+    }
+    .supply-create-cargo-items th,
+    .supply-create-cargo-items td {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+    }
+    .supply-create-cargo-items th {
+        background: var(--header-bg, #f0f0f0);
+        font-weight: 600;
+    }
+    .supply-create-cargo-items td:last-child {
+        min-width: 160px;
+    }
+    .supply-create-cargo-items input[type="number"] {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .supply-create-cargo-alloc-cell {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .supply-create-cargo-alloc-cell input[type="number"] {
+        flex: 1;
+        min-width: 0;
+    }
+    .supply-create-cargo-fill-icon {
+        flex: 0 0 auto;
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: #111;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+    .supply-create-cargo-fill-icon:hover {
+        background: #f3f4f6;
+    }
+    .supply-create-cargo-fill-icon svg {
+        width: 18px;
+        height: 18px;
+        display: block;
+    }
+    .supply-create-cargo-submit-wrap {
+        margin-top: 14px;
+        display: flex;
+        justify-content: flex-start;
+    }
+    .supply-create-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 2500;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+    }
+    .supply-create-modal[hidden] {
+        display: none;
+    }
+    .supply-create-modal-box {
+        width: min(1100px, 96vw);
+        max-height: 90vh;
+        overflow: auto;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--main-bg);
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.3);
+        padding: 12px;
+    }
+    .supply-create-modal-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+    .supply-create-modal-head h3 {
+        margin: 0;
+        font-size: 1rem;
+    }
+    .supply-create-modal-note {
+        margin: 0 0 10px;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+    .supply-create-edit-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid var(--border);
+        font-size: 0.9rem;
+        margin-top: 10px;
+    }
+    .supply-create-edit-table th,
+    .supply-create-edit-table td {
+        border-bottom: 1px solid var(--border);
+        padding: 8px;
+        text-align: left;
+        vertical-align: middle;
+    }
+    .supply-create-edit-table th {
+        background: var(--header-bg, #f0f0f0);
+        font-weight: 600;
+    }
+    .supply-create-edit-table input[type="number"],
+    .supply-create-edit-table select {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .supply-create-limit-note {
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        white-space: normal;
+        line-height: 1.35;
+    }
+    .supply-create-modal-actions {
+        margin-top: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .supply-create-cluster-table-wrap {
+        overflow: visible;
+        zoom: 0.5;
+    }
+    .supply-create-cluster-table {
+        width: max-content;
+        border-collapse: collapse;
+        border: 1px solid var(--border);
+        font-size: 1.8rem;
+    }
+    .supply-create-cluster-table th,
+    .supply-create-cluster-table td {
+        border-bottom: 1px solid var(--border);
+        padding: 6px 8px;
+        text-align: center;
+    }
+    .supply-create-cluster-table th {
+        background: var(--header-bg, #e5e5e5);
+        font-weight: 600;
+    }
+    .supply-create-cluster-col-name {
+        text-align: left !important;
+        min-width: 220px;
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: var(--main-bg);
+    }
+    .supply-create-cluster-table th.supply-create-cluster-col-name {
+        background: var(--header-bg, #e5e5e5);
+        z-index: 3;
+    }
+    .supply-create-cluster-day-cell {
+        width: 54px;
+        min-width: 54px;
+        height: 50px;
+        padding: 4px !important;
+        position: relative;
+        vertical-align: middle;
+    }
+    .supply-create-cluster-day-head {
+        position: relative;
+        height: 84px;
+        padding: 0 !important;
+    }
+    .supply-create-cluster-day-label {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        display: block;
+        white-space: nowrap;
+        transform: translate(-50%, -50%) rotate(-90deg);
+        transform-origin: center center;
+    }
+    .supply-create-cluster-day-label.weekend {
+        color: #c00;
+    }
+    .supply-create-cluster-pick {
+        width: 42px;
+        height: 42px;
+        border: 1px solid #14532d;
+        border-radius: 4px;
+        background: rgb(52, 235, 140);
+        cursor: pointer;
+    }
+    .supply-create-cluster-pick:hover {
+        filter: brightness(0.92);
+    }
+    .supply-create-cluster-pick[disabled] {
+        cursor: not-allowed;
+        border-color: #d1d5db;
+        background: #f3f4f6;
+    }
+    .supply-create-empty {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin-top: 8px;
+    }
+    @media (max-width: 1180px) {
+        .supply-create-layout {
+            grid-template-columns: 1fr;
+        }
+        .supply-create-side {
+            position: static;
+        }
+    }
+    @media (max-width: 980px) {
+        .supply-create-row {
+            grid-template-columns: 1fr;
+            align-items: stretch;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="supply-create-page">
+    <h1>Создать поставку</h1>
+    <div class="supply-create-layout">
+        <div class="supply-create-main">
+            <div class="supply-create-steps-slider">
+            <div id="supply-create-steps-track" class="supply-create-steps-track">
+            <section class="supply-create-step" id="supply-create-step-products">
+                <h2>Шаг 1. Выбор товаров</h2>
+                <p>Выберите товар, укажите количество и добавьте его в поставку. Уже выбранные товары скрываются из следующих строк.</p>
+                <div id="supply-create-empty-products" class="supply-create-empty" hidden>
+                    Список товаров пуст. Добавьте товары в источник данных для мастера создания поставки.
+                </div>
+                <div id="supply-create-rows" class="supply-create-rows"></div>
+                <div class="supply-create-actions">
+                    <button id="supply-create-add-row-btn" type="button" class="btn">Добавить строку</button>
+                </div>
+                <button type="button" class="supply-create-step-next-btn" data-next-step-id="supply-create-step-cluster" aria-label="Перейти к следующему шагу"></button>
+            </section>
+
+            <section class="supply-create-step supply-create-next-step" id="supply-create-step-cluster" hidden>
+                <h2>Шаг 2. Кластер отгрузки</h2>
+                <p>После выбора товаров можно перейти к выбору кластера отгрузки.</p>
+                <button id="supply-create-open-cluster-modal-btn" type="button" class="btn">Выбрать кластер отгрузки</button>
+                <p id="supply-create-selected-cluster" class="supply-create-selected-cluster" hidden></p>
+                <button type="button" class="supply-create-step-prev-btn" data-prev-step-id="supply-create-step-products" aria-label="Вернуться к предыдущему шагу"></button>
+                <button type="button" class="supply-create-step-next-btn" data-next-step-id="supply-create-step-slots" aria-label="Перейти к следующему шагу"></button>
+            </section>
+
+            <section class="supply-create-step supply-create-next-step" id="supply-create-step-draft" hidden>
+                <h2>Шаг 3. Создание черновика</h2>
+                <div class="supply-create-slots-actions">
+                    <button id="supply-create-create-draft-btn" type="button" class="btn">Создать черновик</button>
+                </div>
+                <div id="supply-create-draft-error" class="supply-create-error" hidden></div>
+                <p id="supply-create-draft-result" class="supply-create-draft-line" hidden></p>
+                <button type="button" class="supply-create-step-prev-btn" data-prev-step-id="supply-create-step-cluster" aria-label="Вернуться к предыдущему шагу"></button>
+                <button type="button" class="supply-create-step-next-btn" data-next-step-id="supply-create-step-slots" aria-label="Перейти к следующему шагу"></button>
+            </section>
+
+            <section class="supply-create-step supply-create-next-step" id="supply-create-step-slots" hidden>
+                <h2>Шаг 4. Запрос слотов</h2>
+                <div class="supply-create-slots-actions">
+                    <button id="supply-create-request-slots-btn" type="button" class="btn">Обновить слоты</button>
+                </div>
+                <div id="supply-create-slots-error" class="supply-create-error" hidden></div>
+                <div id="supply-create-slots-grid" class="supply-create-slots-grid" hidden></div>
+                <p id="supply-create-selected-slot" class="supply-create-selected-slot" hidden></p>
+                <button type="button" class="supply-create-step-prev-btn" data-prev-step-id="supply-create-step-cluster" aria-label="Вернуться к предыдущему шагу"></button>
+                <button type="button" class="supply-create-step-next-btn" data-next-step-id="supply-create-step-supply-create" aria-label="Перейти к следующему шагу"></button>
+            </section>
+
+            <section class="supply-create-step supply-create-next-step" id="supply-create-step-supply-create" hidden>
+                <h2>Шаг 5. Создание заявки на поставку</h2>
+                <div class="supply-create-slots-actions">
+                    <button id="supply-create-supply-submit-btn" type="button" class="btn">Создать заявку</button>
+                    <button id="supply-create-adjust-mismatch-btn" type="button" class="btn" hidden>Скорректировать состав</button>
+                </div>
+                <div id="supply-create-supply-create-error" class="supply-create-error" hidden></div>
+                <div id="supply-create-supply-create-reasons" class="supply-create-status-block" hidden></div>
+                <div id="supply-create-mismatch-warning" class="supply-create-warning-strong" hidden></div>
+                <button type="button" class="supply-create-step-prev-btn" data-prev-step-id="supply-create-step-slots" aria-label="Вернуться к предыдущему шагу"></button>
+                <button type="button" class="supply-create-step-next-btn" data-next-step-id="supply-create-step-cargo" aria-label="Перейти к следующему шагу"></button>
+            </section>
+
+            <section class="supply-create-step supply-create-next-step" id="supply-create-step-cargo" hidden>
+                <h2>Шаг 6. Оформление грузомест</h2>
+                <div class="supply-create-slots-actions supply-create-cargo-actions">
+                    <button id="supply-create-submit-cargo-btn" type="button" class="btn">Сохранить грузоместа</button>
+                </div>
+                <div id="supply-create-cargo-places" class="supply-create-cargo-places"></div>
+                <div class="supply-create-cargo-submit-wrap">
+                    <button id="supply-create-add-cargo-place-btn" type="button" class="btn">Добавить грузоместо</button>
+                </div>
+                <div id="supply-create-cargo-error" class="supply-create-error" hidden></div>
+                <div id="supply-create-cargo-result" class="supply-create-status-block" hidden></div>
+                <button type="button" class="supply-create-step-prev-btn" data-prev-step-id="supply-create-step-supply-create" aria-label="Вернуться к предыдущему шагу"></button>
+            </section>
+            </div>
+            <div id="supply-create-wait" class="supply-create-wait" hidden>
+                <p id="supply-create-wait-text" class="supply-create-wait-text">Выполняем запрос...</p>
+                <div class="supply-create-wait-track">
+                    <div id="supply-create-wait-fill" class="supply-create-wait-fill"></div>
+                </div>
+            </div>
+            </div>
+        </div>
+        <aside class="supply-create-side" id="supply-create-side-summary">
+            <div id="supply-create-side-steps" class="supply-create-side-steps"></div>
+            <h3>Текущее состояние заявки</h3>
+            <div class="supply-create-side-group">
+                <p class="supply-create-side-label">Кластер и дата</p>
+                <p id="supply-create-side-cluster" class="supply-create-side-cluster-strong">—</p>
+                <p id="supply-create-side-cluster-date" class="supply-create-side-cluster-date">Дата: —</p>
+            </div>
+            <div class="supply-create-side-group">
+                <p class="supply-create-side-label">Номер заявки</p>
+                <div class="supply-create-side-id-row">
+                    <p id="supply-create-side-supply-id" class="supply-create-side-id-supply">—</p>
+                    <a id="supply-create-side-supply-link" class="supply-create-side-link" href="#" target="_blank" rel="noopener noreferrer" title="Открыть заявку в Ozon" hidden>↗</a>
+                </div>
+                <p id="supply-create-side-order-id" class="supply-create-side-id-order">Код поставки: —</p>
+            </div>
+            <div class="supply-create-side-group">
+                <p class="supply-create-side-label">Грузоместо № (состав товаров)</p>
+                <div id="supply-create-side-cargo" class="supply-create-side-value">Не оформлены</div>
+            </div>
+            <div class="supply-create-side-group">
+                <p class="supply-create-side-label">Статус составления заявки</p>
+                <p id="supply-create-side-status" class="supply-create-side-status is-info">В процессе заполнения</p>
+            </div>
+            <div class="supply-create-side-actions">
+                <button id="supply-create-side-cancel-order-btn" type="button" class="btn btn-danger supply-create-side-cancel-btn" disabled>Отменить заявку</button>
+            </div>
+        </aside>
+    </div>
+</div>
+<div id="supply-create-toast" class="supply-create-toast" hidden></div>
+<script id="supply-create-products-data" type="application/json">{{ supply_products|default([], true)|tojson }}</script>
+<script id="supply-create-cluster-days-data" type="application/json">{{ supply_cluster_days|default([], true)|tojson }}</script>
+<div id="supply-create-cluster-modal" class="supply-create-modal" hidden>
+    <div class="supply-create-modal-box" role="dialog" aria-modal="true" aria-label="Выбор кластера и даты отгрузки">
+        <div class="supply-create-modal-head">
+            <h3>Выберите кластер и дату отгрузки</h3>
+            <button id="supply-create-cluster-modal-close-btn" type="button" class="btn">Закрыть</button>
+        </div>
+        <p class="supply-create-modal-note">Кликабельны только зелёные квадраты (достаточно слотов).</p>
+        {% if scan and results and week_dates %}
+        <div class="supply-create-cluster-table-wrap">
+            <table class="supply-create-cluster-table">
+                <thead>
+                    <tr>
+                        <th class="supply-create-cluster-col-name">Склад (кластер)</th>
+                        {% for d in week_dates %}
+                        <th class="supply-create-cluster-day-cell supply-create-cluster-day-head">
+                            <span class="supply-create-cluster-day-label{% if d.weekday() in (5, 6) %} weekend{% endif %}">{{ d.strftime("%d.%m") }}</span>
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in results %}
+                    {% set counts = r.day_counts or [] %}
+                    <tr>
+                        <td class="supply-create-cluster-col-name">{{ r.cluster_name }}</td>
+                        {% for d in week_dates %}
+                        {% set c = (counts[loop.index0] | int) if counts and loop.index0 < (counts|length) and counts[loop.index0] is not none else 0 %}
+                        <td class="supply-create-cluster-day-cell">
+                            <button
+                                type="button"
+                                class="supply-create-cluster-pick"
+                                data-cluster="{{ r.cluster_name }}"
+                                data-date="{{ d.strftime('%Y-%m-%d') }}"
+                                data-date-label="{{ d.strftime('%d.%m') }}"
+                                data-slots="{{ c }}"
+                                {% if c <= 6 %}disabled{% endif %}
+                                title="{{ c }} слотов"
+                            ></button>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="supply-create-empty">Нет данных скана кластеров. Откройте страницу очереди поставок и обновите данные.</p>
+        {% endif %}
+    </div>
+</div>
+<div id="supply-create-composition-modal" class="supply-create-modal" hidden>
+    <div class="supply-create-modal-box" role="dialog" aria-modal="true" aria-label="Редактирование состава заявки">
+        <div class="supply-create-modal-head">
+            <h3>Скорректировать товарный состав</h3>
+            <button id="supply-create-composition-modal-close-btn" type="button" class="btn">Закрыть</button>
+        </div>
+        <p class="supply-create-modal-note">
+            Состав загружен с учетом фактических количеств Ozon. Можно изменить количество, добавить или удалить SKU.
+        </p>
+        <div id="supply-create-composition-modal-error" class="supply-create-error" hidden></div>
+        <table class="supply-create-edit-table">
+            <thead>
+                <tr>
+                    <th style="width: 38%;">SKU / товар</th>
+                    <th style="width: 16%;">Количество</th>
+                    <th style="width: 30%;">Макс. приём по заявке</th>
+                    <th style="width: 16%;"></th>
+                </tr>
+            </thead>
+            <tbody id="supply-create-composition-rows"></tbody>
+        </table>
+        <div class="supply-create-modal-actions">
+            <button id="supply-create-composition-add-row-btn" type="button" class="btn">Добавить SKU</button>
+            <button id="supply-create-composition-save-btn" type="button" class="btn">Сохранить состав</button>
+        </div>
+    </div>
+</div>
+<script>
+(() => {
+    const productsDataNode = document.getElementById("supply-create-products-data");
+    const clusterDaysDataNode = document.getElementById("supply-create-cluster-days-data");
+    let suppliedProducts = [];
+    let suppliedClusterDays = [];
+    try {
+        suppliedProducts = JSON.parse(productsDataNode ? productsDataNode.textContent : "[]");
+    } catch (_err) {
+        suppliedProducts = [];
+    }
+    try {
+        suppliedClusterDays = JSON.parse(clusterDaysDataNode ? clusterDaysDataNode.textContent : "[]");
+    } catch (_err) {
+        suppliedClusterDays = [];
+    }
+    const products = Array.isArray(suppliedProducts) ? suppliedProducts : [];
+    const clusterDays = Array.isArray(suppliedClusterDays) ? suppliedClusterDays : [];
+
+    const rowsRoot = document.getElementById("supply-create-rows");
+    const waitBoxEl = document.getElementById("supply-create-wait");
+    const waitTextEl = document.getElementById("supply-create-wait-text");
+    const waitFillEl = document.getElementById("supply-create-wait-fill");
+    const addRowBtn = document.getElementById("supply-create-add-row-btn");
+    const clusterStep = document.getElementById("supply-create-step-cluster");
+    const draftStep = document.getElementById("supply-create-step-draft");
+    const slotsStep = document.getElementById("supply-create-step-slots");
+    const supplyCreateStep = document.getElementById("supply-create-step-supply-create");
+    const cargoStep = document.getElementById("supply-create-step-cargo");
+    const emptyProductsHint = document.getElementById("supply-create-empty-products");
+    const openClusterModalBtn = document.getElementById("supply-create-open-cluster-modal-btn");
+    const clusterModal = document.getElementById("supply-create-cluster-modal");
+    const closeClusterModalBtn = document.getElementById("supply-create-cluster-modal-close-btn");
+    const compositionModal = document.getElementById("supply-create-composition-modal");
+    const compositionModalCloseBtn = document.getElementById("supply-create-composition-modal-close-btn");
+    const compositionRowsRoot = document.getElementById("supply-create-composition-rows");
+    const compositionModalErrorEl = document.getElementById("supply-create-composition-modal-error");
+    const compositionAddRowBtn = document.getElementById("supply-create-composition-add-row-btn");
+    const compositionSaveBtn = document.getElementById("supply-create-composition-save-btn");
+    const selectedClusterTextEl = document.getElementById("supply-create-selected-cluster");
+    const createDraftBtn = document.getElementById("supply-create-create-draft-btn");
+    const draftErrorEl = document.getElementById("supply-create-draft-error");
+    const draftResultEl = document.getElementById("supply-create-draft-result");
+    const requestSlotsBtn = document.getElementById("supply-create-request-slots-btn");
+    const slotsErrorEl = document.getElementById("supply-create-slots-error");
+    const slotsGridEl = document.getElementById("supply-create-slots-grid");
+    const selectedSlotTextEl = document.getElementById("supply-create-selected-slot");
+    const createSupplyBtn = document.getElementById("supply-create-supply-submit-btn");
+    const adjustMismatchBtn = document.getElementById("supply-create-adjust-mismatch-btn");
+    const createSupplyErrorEl = document.getElementById("supply-create-supply-create-error");
+    const createSupplyReasonsEl = document.getElementById("supply-create-supply-create-reasons");
+    const mismatchWarningEl = document.getElementById("supply-create-mismatch-warning");
+    const addCargoPlaceBtn = document.getElementById("supply-create-add-cargo-place-btn");
+    const submitCargoBtn = document.getElementById("supply-create-submit-cargo-btn");
+    const cargoPlacesRoot = document.getElementById("supply-create-cargo-places");
+    const cargoErrorEl = document.getElementById("supply-create-cargo-error");
+    const cargoResultEl = document.getElementById("supply-create-cargo-result");
+    const stepsSliderEl = document.querySelector(".supply-create-steps-slider");
+    const stepsTrackEl = document.getElementById("supply-create-steps-track");
+    const stepNextBtns = Array.from(document.querySelectorAll(".supply-create-step-next-btn"));
+    const stepPrevBtns = Array.from(document.querySelectorAll(".supply-create-step-prev-btn"));
+    const sideSummaryEl = document.getElementById("supply-create-side-summary");
+    const sideSupplyIdEl = document.getElementById("supply-create-side-supply-id");
+    const sideSupplyLinkEl = document.getElementById("supply-create-side-supply-link");
+    const sideOrderIdEl = document.getElementById("supply-create-side-order-id");
+    const sideClusterEl = document.getElementById("supply-create-side-cluster");
+    const sideClusterDateEl = document.getElementById("supply-create-side-cluster-date");
+    const sideCargoEl = document.getElementById("supply-create-side-cargo");
+    const sideStatusEl = document.getElementById("supply-create-side-status");
+    const sideStepsEl = document.getElementById("supply-create-side-steps");
+    const sideCancelOrderBtn = document.getElementById("supply-create-side-cancel-order-btn");
+    const toastEl = document.getElementById("supply-create-toast");
+
+    let toastTimerId = null;
+
+    function showBottomToast(message, tone = "success", ttlMs = 2600) {
+        if (!toastEl) {
+            return;
+        }
+        const text = String(message || "").trim();
+        if (!text) {
+            return;
+        }
+        if (toastTimerId) {
+            window.clearTimeout(toastTimerId);
+            toastTimerId = null;
+        }
+        toastEl.textContent = text;
+        toastEl.hidden = false;
+        toastEl.classList.remove("is-success", "is-error");
+        toastEl.classList.add(tone === "error" ? "is-error" : "is-success");
+        void toastEl.offsetWidth;
+        toastEl.classList.add("is-visible");
+        toastTimerId = window.setTimeout(() => {
+            toastEl.classList.remove("is-visible");
+            window.setTimeout(() => {
+                toastEl.hidden = true;
+                toastEl.textContent = "";
+            }, 220);
+            toastTimerId = null;
+        }, Math.max(1200, Number(ttlMs) || 2600));
+    }
+
+    const state = {
+        rows: [],
+        nextRowId: 1,
+        selectedClusterName: "",
+        selectedShipmentDateIso: "",
+        selectedShipmentDateLabel: "",
+        selectedMacrolocalClusterId: null,
+        selectedStorageWarehouseId: null,
+        selectedSlotFrom: "",
+        selectedSlotTo: "",
+        selectedSlotDate: "",
+        draftId: null,
+        supplyOrderId: null,
+        progressTimerId: null,
+        waitTimerId: null,
+        waitHideTimerId: null,
+        waitProgress: 0,
+        latestCompositionMismatches: [],
+        latestActualBySku: {},
+        ozonAlertMaxBySku: {},
+        validationSkuLimitsBySku: {},
+        compositionDraftRows: [],
+        compositionUpdateInFlight: false,
+        availableSlotsCount: 0,
+        cargoPlaceNextId: 1,
+        cargoPlaces: [],
+        savedCargoPlaces: [],
+        supplyId: "",
+        activeStepId: "supply-create-step-products",
+        hasOzonQtyAlert: false,
+    };
+
+    function normText(raw) {
+        return String(raw || "").trim().toLowerCase();
+    }
+
+    function productLabel(product) {
+        const article = String(product.article || "").trim();
+        const name = String(product.name || "").trim();
+        if (!article && !name) {
+            return "";
+        }
+        return article && name ? `${article} - ${name}` : (article || name);
+    }
+
+    function getProductBySku(rawSku) {
+        const sku = Number(rawSku || 0);
+        if (!Number.isInteger(sku) || sku <= 0) {
+            return null;
+        }
+        for (const p of products) {
+            const pSku = Number(p.ozon_sku || 0);
+            if (Number.isInteger(pSku) && pSku === sku) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    function getProductByArticle(rawArticle) {
+        const art = String(rawArticle || "").trim().toLowerCase();
+        if (!art) {
+            return null;
+        }
+        for (const p of products) {
+            const pa = String(p.article || "").trim().toLowerCase();
+            if (pa && pa === art) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    function normalizeCargoPlaces(rawPlaces) {
+        const src = Array.isArray(rawPlaces) ? rawPlaces : [];
+        const out = [];
+        for (const place of src) {
+            if (!place || typeof place !== "object") {
+                continue;
+            }
+            const val = (place.value && typeof place.value === "object") ? place.value : {};
+            const cargoId = Number(place.cargo_id || place.id || val.cargo_id || val.id || 0);
+            const key = String(place.key || val.key || "").trim();
+            const type = String(place.type || val.type || "BOX").trim() || "BOX";
+            const itemsSource = Array.isArray(place.line_items) ? place.line_items
+                : (Array.isArray(place.items) ? place.items
+                    : (Array.isArray(val.items) ? val.items : []));
+            const lineItems = [];
+            for (const it of itemsSource) {
+                if (!it || typeof it !== "object") {
+                    continue;
+                }
+                const sku = Number(it.sku || it.product_id || 0);
+                const quantity = Number(it.quantity || it.quant || 0);
+                const offerId = String(it.offer_id || it.article || it.barcode || "").trim();
+                const name = String(it.name || "").trim();
+                lineItems.push({
+                    sku: Number.isFinite(sku) ? sku : 0,
+                    quantity: Number.isFinite(quantity) ? quantity : 0,
+                    offer_id: offerId,
+                    name,
+                });
+            }
+            out.push({
+                cargo_id: cargoId > 0 ? cargoId : null,
+                key,
+                type,
+                line_items: lineItems,
+            });
+        }
+        return out;
+    }
+
+    function skuTitle(rawSku) {
+        const sku = Number(rawSku || 0);
+        const p = getProductBySku(sku);
+        if (!p) {
+            return `SKU ${sku}`;
+        }
+        const lbl = productLabel(p);
+        return lbl ? `${lbl} (SKU ${sku})` : `SKU ${sku}`;
+    }
+
+    function isOzonChangedPlannedQuantity(m) {
+        if (!m || typeof m !== "object") {
+            return false;
+        }
+        const planned = Number(m.planned_quantity);
+        const actual = Number(m.actual_quantity);
+        if (!Number.isInteger(planned) || planned <= 0) {
+            return false;
+        }
+        return planned !== actual;
+    }
+
+    const COMPOSITION_OK_SUFFIX = "\n\nСостав заявки успешно изменён в Ozon.";
+
+    function stripCompositionSuccessFromReasons(text) {
+        return String(text || "").replace(
+            /\n\nСостав заявки успешно измен(ен|ён) в Ozon\.?/g,
+            "",
+        );
+    }
+
+    const CONTENT_UPDATE_ERROR_HINT_RU = {
+        SUPPLY_CONTENT_NOT_VALID: "в составе есть позиции, которые склад не принимает; ниже — разбор по validation.",
+        INBOUND_NO_CAPACITY: "недостаточно ёмкости склада для запрошенного объёма.",
+        DEADLINE: "редактирование недоступно менее чем за час до слота.",
+        SUPPLY_LOCKED: "состав сейчас обрабатывается Ozon, повторите позже.",
+        EMPTY_CONTENT: "нельзя передать пустой состав.",
+        SAME_SKU: "состав совпадает с текущим, изменений нет.",
+        INCORRECT_SUPPLY_STATE: "для текущего состояния заявки изменение недоступно.",
+        ORDER_SKU_LIMIT: "в поставке слишком много позиций SKU (лимит Ozon, обычно до 5000).",
+        QUANTITY_OUT_OF_RANGE_BOTTOM: "количество по позиции должно быть больше 0.",
+        QUANTITY_OUT_OF_RANGE_UPPER: "количество по позиции превышает допустимый максимум (до 1 000 000).",
+        UNSPECIFIED: "",
+    };
+
+    const OZON_EDITING_ERROR_RU = {
+        UNSPECIFIED: "",
+        ORDER_SKU_LIMIT: "превышен лимит числа позиций SKU в поставке.",
+        QUANTITY_OUT_OF_RANGE_BOTTOM: "указано нулевое или отрицательное количество.",
+        QUANTITY_OUT_OF_RANGE_UPPER: "количество превышает допустимый максимум.",
+        EMPTY_CONTENT: "пустой состав.",
+        INBOUND_NO_CAPACITY: "недостаточно ёмкости склада.",
+        SAME_SKU: "состав не отличается от текущего.",
+        SUPPLY_LOCKED: "состав временно заблокирован.",
+        DEADLINE: "истёк допустимый срок правок до слота.",
+        SUPPLY_CONTENT_NOT_VALID: "состав не прошёл проверку склада.",
+        INCORRECT_SUPPLY_STATE: "недопустимое состояние заявки для правок.",
+    };
+
+    const OZON_REJECTION_REASON_RU = {
+        UNSPECIFIED: "причина не уточнена",
+        ITEM_NOT_FOUND: "товар не найден в каталоге / по данным Ozon",
+        ITEM_NOT_IN_SUPPLY: "товара нет в этой поставке",
+        QUANTITY_EXCEEDS_LIMIT: "количество больше допустимого лимита по SKU",
+        ITEM_RESTRICTED_BY_OZON: "товар ограничен политикой Ozon",
+        SKU_QUANTITY_LIMIT_EXCEEDED: "превышен лимит количества по SKU",
+        SKU_HAS_NO_SALES: "нет продаж по SKU (ограничение приёмки)",
+    };
+
+    const OZON_REASONS_RESTRICTION_RU = {
+        UNKNOWN: "неизвестное ограничение",
+        UNSPECIFIED: "ограничение не уточнено",
+        SKU_QUANTITY_LIMIT_EXCEEDED: "превышен лимит количества по SKU",
+        SKU_HAS_NO_SALES: "нет продаж по SKU",
+    };
+
+    function translateOzonCodes(codes, dict) {
+        return (Array.isArray(codes) ? codes : [])
+            .map((raw) => {
+                const c = String(raw || "").trim();
+                if (!c || c === "UNSPECIFIED") {
+                    return "";
+                }
+                const ru = dict[c];
+                return ru ? `${c} — ${ru}` : c;
+            })
+            .filter(Boolean);
+    }
+
+    function formatContentUpdateErrorsForUser(errors) {
+        const list = Array.isArray(errors) ? errors : [];
+        if (!list.length) {
+            return "";
+        }
+        return list.map((code) => {
+            const c = String(code || "").trim();
+            const hint = CONTENT_UPDATE_ERROR_HINT_RU[c];
+            if (hint !== undefined && hint !== "") {
+                return `${c}: ${hint}`;
+            }
+            if (c === "UNSPECIFIED") {
+                return c;
+            }
+            return c;
+        }).join(" ");
+    }
+
+    function humanizeSingleCode(code) {
+        const c = String(code || "").trim();
+        if (!c) {
+            return "";
+        }
+        const msg = CONTENT_UPDATE_ERROR_HINT_RU[c] || OZON_EDITING_ERROR_RU[c] || OZON_REJECTION_REASON_RU[c] || OZON_REASONS_RESTRICTION_RU[c];
+        return msg ? `${c}: ${msg}` : c;
+    }
+
+    function humanizeErrorText(raw) {
+        const txt = String(raw || "").trim();
+        if (!txt) {
+            return "Произошла ошибка.";
+        }
+        const codes = txt.match(/\b[A-Z_]{3,}\b/g) || [];
+        if (!codes.length) {
+            return txt;
+        }
+        const explain = codes.map(humanizeSingleCode).filter(Boolean);
+        if (!explain.length) {
+            return txt;
+        }
+        return `${txt}\n${explain.join("\n")}`;
+    }
+
+    function setSupplyCreateError(raw) {
+        createSupplyErrorEl.textContent = humanizeErrorText(raw);
+        createSupplyErrorEl.hidden = false;
+    }
+
+    function clearSupplyCreateError() {
+        createSupplyErrorEl.hidden = true;
+        createSupplyErrorEl.textContent = "";
+    }
+
+    function selectedProductsSnapshot() {
+        const out = [];
+        for (const row of state.rows) {
+            if (!row || !row.productId) {
+                continue;
+            }
+            const p = products.find((x) => String(x.id ?? "") === String(row.productId));
+            if (!p) {
+                continue;
+            }
+            const qty = Number(row.qtyInputEl && row.qtyInputEl.value ? row.qtyInputEl.value : 0);
+            if (!Number.isInteger(qty) || qty <= 0) {
+                continue;
+            }
+            out.push({
+                sku: Number(p.ozon_sku || 0),
+                title: productLabel(p),
+                qty,
+            });
+        }
+        return out;
+    }
+
+    function syncAdjustMismatchButton() {
+        if (!adjustMismatchBtn) {
+            return;
+        }
+        const shouldShow = Boolean(state.hasOzonQtyAlert);
+        adjustMismatchBtn.hidden = !shouldShow;
+        adjustMismatchBtn.style.display = shouldShow ? "" : "none";
+    }
+
+    function updateSidebarSummary() {
+        syncAdjustMismatchButton();
+        sideSupplyIdEl.textContent = state.supplyId ? String(state.supplyId) : "—";
+        sideOrderIdEl.textContent = state.supplyOrderId ? `Код поставки: ${state.supplyOrderId}` : "Код поставки: —";
+        if (sideCancelOrderBtn) {
+            sideCancelOrderBtn.disabled = !(Number.isInteger(Number(state.supplyOrderId || 0)) && Number(state.supplyOrderId || 0) > 0);
+        }
+        if (state.supplyOrderId) {
+            sideSupplyLinkEl.href = `https://seller.ozon.ru/app/supply/orders/${state.supplyOrderId}`;
+            sideSupplyLinkEl.hidden = false;
+        } else {
+            sideSupplyLinkEl.hidden = true;
+            sideSupplyLinkEl.removeAttribute("href");
+        }
+
+        sideClusterEl.textContent = state.selectedClusterName || "—";
+        sideClusterDateEl.textContent = `Дата: ${state.selectedShipmentDateLabel || state.selectedShipmentDateIso || "—"}`;
+
+        const cargoCount = Array.isArray(state.cargoPlaces) ? state.cargoPlaces.length : 0;
+        let cargoText = cargoCount > 0 ? `Грузомест: ${cargoCount}` : "Не оформлены";
+        sideCargoEl.innerHTML = "";
+        const savedCargoPlacesNormalized = normalizeCargoPlaces(state.savedCargoPlaces);
+        if (savedCargoPlacesNormalized.length) {
+            const wrap = document.createElement("div");
+            wrap.className = "supply-create-side-cargo-list";
+            savedCargoPlacesNormalized.forEach((place, idx) => {
+                if (!place || typeof place !== "object") {
+                    return;
+                }
+                const key = String(place.key || "").trim() || `#${idx + 1}`;
+                const type = String(place.type || "").trim() || "BOX";
+                const cargoId = Number(place.cargo_id || 0);
+                const itemsRaw = Array.isArray(place.line_items) ? place.line_items : [];
+                const placeCard = document.createElement("div");
+                placeCard.className = "supply-create-side-cargo-place";
+                const head = document.createElement("div");
+                head.className = "supply-create-side-cargo-place-head";
+                head.textContent = `№ ${cargoId > 0 ? cargoId : "—"} ${key} (${type})`;
+                placeCard.appendChild(head);
+                const printRow = document.createElement("div");
+                printRow.className = "supply-create-side-cargo-print-icons";
+                const sid = Number(state.supplyId || 0);
+
+                const btnCargo = document.createElement("button");
+                btnCargo.type = "button";
+                btnCargo.className = "supply-create-side-cargo-print-btn";
+                btnCargo.title = "ШК грузоместа";
+                btnCargo.setAttribute("aria-label", "Печать ШК грузоместа");
+                btnCargo.innerHTML = `<img src="/static/site/cargo_barcode.png" alt="ШК грузоместа">`;
+                btnCargo.addEventListener("click", async () => {
+                    if (!Number.isInteger(sid) || sid <= 0) {
+                        return;
+                    }
+                    const ccid = Number(cargoId || 0);
+                    if (!Number.isInteger(ccid) || ccid <= 0) {
+                        alert("Нет cargo_id для печати этикетки.");
+                        return;
+                    }
+                    try {
+                        waitStart("Создаем этикетки грузомест...");
+                        const resp = await fetch(`/api/supplies/${sid}/cargo-labels/request`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ cargo_ids: [ccid] }),
+                        });
+                        const data = await resp.json();
+                        if (!resp.ok || !data || !data.ok) {
+                            waitFail("Этикетки не созданы");
+                            alert((data && data.error) ? String(data.error) : "Ошибка генерации этикеток грузомест.");
+                            return;
+                        }
+                        waitDone("Этикетки готовы");
+                    } catch (_e) {
+                        waitFail("Ошибка генерации этикеток");
+                        alert("Не удалось сгенерировать этикетки (сеть/сервер).");
+                        return;
+                    }
+                    const url = `/supply-queue/cargo-label-pdf/${sid}/${ccid}`;
+                    window.open(url, "_blank", "noopener,noreferrer");
+                });
+
+                printRow.appendChild(btnCargo);
+                placeCard.appendChild(printRow);
+                if (!itemsRaw.length) {
+                    const empty = document.createElement("div");
+                    empty.className = "supply-create-side-cargo-item";
+                    empty.textContent = "без состава";
+                    placeCard.appendChild(empty);
+                    wrap.appendChild(placeCard);
+                    return;
+                }
+                itemsRaw.forEach((it) => {
+                    if (!it || typeof it !== "object") {
+                        return;
+                    }
+                    const qty = Number(it.quantity || 0);
+                    const sku = Number(it.sku || 0);
+                    const offerId = String(it.offer_id || it.article || "").trim();
+                    const nameRaw = String(it.name || "").trim();
+                    const bySku = sku > 0 ? getProductBySku(sku) : null;
+                    const byArticle = !bySku && offerId ? getProductByArticle(offerId) : null;
+                    const p = bySku || byArticle;
+                    const title = nameRaw || (p ? productLabel(p) : (offerId || (sku > 0 ? `SKU ${sku}` : "Товар")));
+                    const subtitle = offerId ? ` (${offerId})` : "";
+                    const row = document.createElement("div");
+                    row.className = "supply-create-side-cargo-item";
+                    const img = document.createElement("img");
+                    const imgSrc = (it.photo_url ? String(it.photo_url) : "") || (p && p.photo_url ? String(p.photo_url) : "");
+                    if (imgSrc) {
+                        img.src = imgSrc;
+                        img.alt = title;
+                    } else {
+                        img.alt = "";
+                        img.style.visibility = "hidden";
+                    }
+                    const text = document.createElement("span");
+                    text.textContent = `${title}${subtitle} — ${qty > 0 ? qty : 0} шт.`;
+                    const printBtn = document.createElement("button");
+                    printBtn.type = "button";
+                    printBtn.className = "supply-create-side-cargo-item-print-btn";
+                    printBtn.title = "Печать ШК товара";
+                    printBtn.setAttribute("aria-label", "Печать ШК товара");
+                    printBtn.innerHTML = `<img src="/static/site/product_barcode.png" alt="ШК товара">`;
+                    const skuInt = Number(sku || 0);
+                    const qtyInt = Number.isInteger(qty) && qty > 0 ? qty : 1;
+                    if (!Number.isInteger(skuInt) || skuInt <= 0) {
+                        printBtn.disabled = true;
+                        printBtn.style.opacity = "0.5";
+                        printBtn.style.cursor = "default";
+                    } else {
+                        printBtn.addEventListener("click", () => {
+                            const url = `/supply-queue/print/sku-item/${skuInt}?qty=${qtyInt}`;
+                            window.open(url, "_blank", "noopener,noreferrer");
+                        });
+                    }
+                    row.appendChild(img);
+                    row.appendChild(text);
+                    row.appendChild(printBtn);
+                    placeCard.appendChild(row);
+                });
+                wrap.appendChild(placeCard);
+            });
+            sideCargoEl.appendChild(wrap);
+            cargoText = "";
+        }
+        if (cargoText) {
+            sideCargoEl.textContent = cargoText;
+        }
+
+        let statusClass = "is-info";
+        let currentStep = "Шаг 1";
+        if (cargoStep && !cargoStep.hidden) {
+            currentStep = "Шаг 6";
+        } else if (supplyCreateStep && !supplyCreateStep.hidden) {
+            currentStep = "Шаг 5";
+        } else if (slotsStep && !slotsStep.hidden) {
+            currentStep = "Шаг 4";
+        } else if (draftStep && !draftStep.hidden) {
+            currentStep = "Шаг 3";
+        } else if (clusterStep && !clusterStep.hidden) {
+            currentStep = "Шаг 2";
+        }
+        const hasMismatchAlert = !mismatchWarningEl.hidden && Boolean(mismatchWarningEl.textContent.trim());
+        const s5 = state.supplyOrderId ? (hasMismatchAlert ? "alert" : "ok") : "idle";
+        const hasCargoSaved = savedCargoPlacesNormalized.length > 0;
+        const s6 = hasCargoSaved ? "ok" : "idle";
+        const steps = [
+            { id: "1", title: "Товары", st: state.rows.some((r) => Boolean(r && r.productId)) ? "ok" : "idle" },
+            { id: "2", title: "Кластер", st: state.selectedClusterName ? "ok" : "idle" },
+            { id: "3", title: "Слот", st: (state.selectedSlotFrom && state.selectedSlotTo) ? "ok" : "idle" },
+            { id: "4", title: "Заявка", st: s5 },
+            { id: "5", title: "Грузоместа", st: s6 },
+        ];
+        sideStepsEl.innerHTML = "";
+        steps.forEach((x) => {
+            const el = document.createElement("span");
+            el.className = `supply-create-step-dot ${x.st === "ok" ? "is-ok" : (x.st === "alert" ? "is-alert" : "")}`.trim();
+            el.textContent = `Шаг ${x.id}\n${x.title}`;
+            sideStepsEl.appendChild(el);
+        });
+        let statusText = `Текущий: ${currentStep}`;
+        if (!cargoErrorEl.hidden && cargoErrorEl.textContent.trim()) {
+            statusClass = "is-error";
+            statusText = `Текущий: ${currentStep}\nОшибка грузомест: ${cargoErrorEl.textContent.trim()}`;
+        } else if (!createSupplyErrorEl.hidden && createSupplyErrorEl.textContent.trim()) {
+            statusClass = "is-error";
+            statusText = `Текущий: ${currentStep}\nОшибка заявки: ${createSupplyErrorEl.textContent.trim()}`;
+        } else if (hasCargoSaved || (!cargoResultEl.hidden && cargoResultEl.textContent.trim())) {
+            statusClass = "is-success";
+            const doneText = (!cargoResultEl.hidden && cargoResultEl.textContent.trim()) ? cargoResultEl.textContent.trim() : "Грузоместа успешно сохранены";
+            statusText = `Текущий: ${currentStep}\nЗаявка создана.\n${doneText}`;
+        } else if (hasMismatchAlert) {
+            statusClass = "is-info";
+            statusText = `Текущий: ${currentStep}\nВнимание: Ozon изменил состав/количество. Проверьте предупреждение на шаге 5.`;
+        } else if (state.supplyOrderId) {
+            statusClass = "is-info";
+            statusText = `Текущий: ${currentStep}\nЗаявка создана, грузоместа ещё не сохранены`;
+        }
+        sideStatusEl.className = `supply-create-side-status ${statusClass}`;
+        sideStatusEl.textContent = statusText;
+        syncStepSlider();
+    }
+
+    function getVisibleStepSections() {
+        return [
+            rowsRoot && rowsRoot.closest(".supply-create-step"),
+            clusterStep,
+            draftStep,
+            slotsStep,
+            supplyCreateStep,
+            cargoStep,
+        ].filter((el) => el && !el.hidden);
+    }
+
+    function isStepReady(stepId) {
+        const sid = String(stepId || "");
+        if (sid === "supply-create-step-products") {
+            const selected = state.rows.filter((row) => row && row.productId);
+            if (!selected.length) {
+                return false;
+            }
+            return selected.every((row) => {
+                const qty = Number(row.qtyInputEl && row.qtyInputEl.value ? row.qtyInputEl.value : 0);
+                return Number.isInteger(qty) && qty > 0;
+            });
+        }
+        if (sid === "supply-create-step-cluster") {
+            return Boolean(state.selectedClusterName && state.selectedShipmentDateIso);
+        }
+        if (sid === "supply-create-step-slots") {
+            return Boolean(state.selectedSlotFrom && state.selectedSlotTo);
+        }
+        if (sid === "supply-create-step-supply-create") {
+            return Number.isInteger(Number(state.supplyOrderId || 0)) && Number(state.supplyOrderId || 0) > 0 && !state.hasOzonQtyAlert;
+        }
+        return true;
+    }
+
+    async function ensureDraftForCurrentSelection() {
+        const draftId = Number(state.draftId || 0);
+        if (Number.isInteger(draftId) && draftId > 0) {
+            return true;
+        }
+        const ok = await createDraft();
+        return Boolean(ok);
+    }
+
+    function updateStepNavigationState() {
+        stepNextBtns.forEach((btn) => {
+            const parentStep = btn.closest(".supply-create-step");
+            const nextId = String(btn.getAttribute("data-next-step-id") || "").trim();
+            const nextEl = nextId ? document.getElementById(nextId) : null;
+            const parentId = parentStep ? parentStep.id : "";
+            const ready = isStepReady(parentId);
+            const isClusterAutoDraft = parentId === "supply-create-step-cluster" && nextId === "supply-create-step-slots";
+            const nextVisible = isClusterAutoDraft ? true : Boolean(nextEl && !nextEl.hidden);
+            btn.disabled = !(ready && nextVisible);
+        });
+    }
+
+    function syncStepSlider() {
+        if (!stepsTrackEl) {
+            return;
+        }
+        const visible = getVisibleStepSections();
+        if (!visible.length) {
+            stepsTrackEl.style.transform = "translateX(0)";
+            return;
+        }
+        let active = visible.find((x) => x.id === state.activeStepId) || null;
+        if (!active) {
+            active = visible[visible.length - 1];
+            state.activeStepId = active.id;
+        }
+        const idx = visible.indexOf(active);
+        stepsTrackEl.style.transform = `translateX(-${idx * 100}%)`;
+        if (stepsSliderEl && sideSummaryEl) {
+            const mainContentEl = document.querySelector(".main-content");
+            const titleEl = document.querySelector(".supply-create-page h1");
+            const pageEl = document.querySelector(".supply-create-page");
+            if (!mainContentEl || !titleEl || !pageEl) {
+                updateStepNavigationState();
+                return;
+            }
+            const mainRect = mainContentEl.getBoundingClientRect();
+            const titleRect = titleEl.getBoundingClientRect();
+            const titleStyles = window.getComputedStyle(titleEl);
+            const titleGap = Number.parseFloat(titleStyles.marginBottom || "0") || 0;
+            const titleBottom = Math.max(0, titleRect.bottom + titleGap);
+            const topOffsetInsideMain = Math.max(0, titleBottom - mainRect.top);
+            const mainStyles = window.getComputedStyle(mainContentEl);
+            const mainBottomPadding = Number.parseFloat(mainStyles.paddingBottom || "0") || 0;
+            const pageStyles = pageEl ? window.getComputedStyle(pageEl) : null;
+            const pageBottomPadding = pageStyles ? (Number.parseFloat(pageStyles.paddingBottom || "0") || 0) : 0;
+            const reserveBottomGap = 8;
+            const rawH = Math.floor(mainRect.height - topOffsetInsideMain - mainBottomPadding - pageBottomPadding - reserveBottomGap);
+            const h = Math.max(220, rawH);
+            stepsSliderEl.style.minHeight = `${h}px`;
+            sideSummaryEl.style.minHeight = `${h}px`;
+            stepsSliderEl.style.height = `${h}px`;
+            sideSummaryEl.style.height = `${h}px`;
+            stepsSliderEl.style.maxHeight = `${h}px`;
+            sideSummaryEl.style.maxHeight = `${h}px`;
+        }
+        updateStepNavigationState();
+    }
+
+    function buildValidationReportForUser(data) {
+        if (!data || typeof data !== "object") {
+            return "";
+        }
+        const lines = [];
+        const ee = Array.isArray(data.editing_errors) ? data.editing_errors : [];
+        const eeTr = translateOzonCodes(ee, OZON_EDITING_ERROR_RU);
+        if (eeTr.length) {
+            lines.push("Ошибки редактирования (Ozon):");
+            eeTr.forEach((t) => lines.push(`  • ${t}`));
+        }
+        const va = data.validated_assortment && typeof data.validated_assortment === "object" ? data.validated_assortment : {};
+        const tap = va.total_approved_item_count;
+        const taq = va.total_approved_quantity;
+        const tav = va.total_approved_volume_in_litres;
+        const trj = va.total_rejected_item_count;
+        const trs = va.total_restricted_item_count;
+        const trq = va.total_rejected_quantity;
+        const hasTotals = [tap, taq, trj, trs].some((x) => typeof x === "number");
+
+        if (hasTotals) {
+            lines.push("— Итог проверки нового состава (validation) —");
+            lines.push(
+                `Принято со стороны склада: позиций (SKU) — ${typeof tap === "number" ? tap : "—"}, суммарно единиц товара — ${typeof taq === "number" ? taq : "—"}.`,
+            );
+            if (typeof tav === "number" && !Number.isNaN(tav)) {
+                lines.push(`  Объём принятой части: ${tav} л.`);
+            }
+            const rejParts = [];
+            if (typeof trj === "number" && trj > 0) {
+                rejParts.push(`отклонённых позиций — ${trj}`);
+            }
+            if (typeof trs === "number" && trs > 0) {
+                rejParts.push(`с ограничениями — ${trs}`);
+            }
+            if (typeof trq === "number" && trq > 0) {
+                rejParts.push(`единиц в отклонённой части — ${trq}`);
+            }
+            if (rejParts.length) {
+                lines.push(`Не принято: ${rejParts.join(", ")}.`);
+            } else if ((typeof trj === "number" && trj === 0) && (typeof trs === "number" && trs === 0)) {
+                lines.push("Отклонённых позиций по счётчикам: 0.");
+            }
+        }
+
+        const appr = Array.isArray(va.approved_items) ? va.approved_items : [];
+        if (appr.length) {
+            lines.push("");
+            lines.push("Разрешённая часть нового состава (ориентир для корректировки):");
+            for (const it of appr) {
+                if (!it || typeof it !== "object") {
+                    continue;
+                }
+                const sku = String(it.sku ?? "");
+                const nm = String(it.name || it.offer_id || "").trim();
+                const q = it.quantity;
+                const lim = it.sku_quantity_limit;
+                const qu = it.quant;
+                const title = nm ? ` «${nm}»` : "";
+                const limPart = typeof lim === "number" && !Number.isNaN(lim) ? `, лимит приёмки до ${lim} шт` : "";
+                const quPart = typeof qu === "number" && !Number.isNaN(qu) && qu > 0 ? `, квант ${qu}` : "";
+                lines.push(`  • SKU ${sku}${title}: в проверке quantity=${q ?? "—"}${limPart}${quPart}`);
+            }
+        }
+
+        const rej = Array.isArray(va.rejected_items) ? va.rejected_items : [];
+        if (rej.length) {
+            lines.push("");
+            lines.push("Не принято / отклонено (детализация):");
+            for (const it of rej) {
+                if (!it || typeof it !== "object") {
+                    continue;
+                }
+                const sku = String(it.sku ?? "");
+                const nm = String(it.name || it.offer_id || "").trim();
+                const qty = it.quantity;
+                const title = nm ? ` «${nm}»` : "";
+                lines.push(`  • SKU ${sku}${title}: в новом составе quantity=${qty ?? "—"}`);
+                const rr = translateOzonCodes(it.rejection_reason, OZON_REJECTION_REASON_RU);
+                if (rr.length) {
+                    lines.push(`    причины отклонения: ${rr.join("; ")}`);
+                }
+                const r = it.restrictions && typeof it.restrictions === "object" ? it.restrictions : {};
+                const rs = translateOzonCodes(r.reasons_restrictions, OZON_REASONS_RESTRICTION_RU);
+                if (rs.length) {
+                    lines.push(`    ограничения: ${rs.join("; ")}`);
+                }
+                if (r.sku_quantity_limit !== undefined && r.sku_quantity_limit !== null) {
+                    const lim = Number(r.sku_quantity_limit);
+                    if (!Number.isNaN(lim)) {
+                        lines.push(`    лимит по ограничениям: до ${lim} шт`);
+                    }
+                }
+                if (typeof r.sku_has_no_sales_in_days === "number" && r.sku_has_no_sales_in_days > 0) {
+                    lines.push(`    без продаж, дней: ${r.sku_has_no_sales_in_days}`);
+                }
+            }
+        }
+
+        if (!eeTr.length && !appr.length && !rej.length && !hasTotals) {
+            return "";
+        }
+
+        lines.push("");
+        lines.push(
+            "Рекомендация: нажмите «Скорректировать состав», приведите количества и список SKU к разрешённой части (не больше лимита по строкам выше), удалите или замените отклонённые позиции и сохраните снова.",
+        );
+        return lines.join("\n");
+    }
+
+    function applyValidationSkuLimitsFromResponse(data) {
+        state.validationSkuLimitsBySku = {};
+        if (!data || typeof data !== "object") {
+            return;
+        }
+        const va = data.validated_assortment && typeof data.validated_assortment === "object" ? data.validated_assortment : {};
+        const mergeSkuLimit = (skuRaw, limRaw) => {
+            const sku = Number(skuRaw || 0);
+            const lim = Number(limRaw);
+            if (!Number.isInteger(sku) || sku <= 0 || Number.isNaN(lim) || lim <= 0) {
+                return;
+            }
+            const prev = state.validationSkuLimitsBySku[sku];
+            if (prev === undefined || lim < prev) {
+                state.validationSkuLimitsBySku[sku] = lim;
+            }
+        };
+        for (const it of (va.approved_items || [])) {
+            if (it && typeof it === "object") {
+                mergeSkuLimit(it.sku, it.sku_quantity_limit);
+            }
+        }
+        for (const it of (va.rejected_items || [])) {
+            if (!it || typeof it !== "object") {
+                continue;
+            }
+            const r = it.restrictions && typeof it.restrictions === "object" ? it.restrictions : {};
+            if (r.sku_quantity_limit !== undefined && r.sku_quantity_limit !== null) {
+                mergeSkuLimit(it.sku, r.sku_quantity_limit);
+            }
+        }
+    }
+
+    function compositionOzonLimitText(sku) {
+        const s = Number(sku || 0);
+        const vmap = state.validationSkuLimitsBySku && typeof state.validationSkuLimitsBySku === "object" ? state.validationSkuLimitsBySku : {};
+        if (Number.isInteger(s) && s > 0 && vmap[s] !== undefined && vmap[s] !== null) {
+            const vn = Number(vmap[s]);
+            if (!Number.isNaN(vn)) {
+                return `лимит SKU (Ozon validation): до ${vn} шт`;
+            }
+        }
+        const map = state.ozonAlertMaxBySku && typeof state.ozonAlertMaxBySku === "object" ? state.ozonAlertMaxBySku : {};
+        if (Number.isInteger(s) && s > 0 && map[s] !== undefined && map[s] !== null) {
+            const n = Number(map[s]);
+            if (!Number.isNaN(n)) {
+                return `макс. по данным заявки (как в предупреждении): ${n} шт`;
+            }
+        }
+        return "нет данных из предупреждения; по API до 1 000 000 шт за SKU";
+    }
+
+    function getSelectedProductIds(excludedRowId = null) {
+        const selected = new Set();
+        for (const row of state.rows) {
+            if (row.id === excludedRowId) {
+                continue;
+            }
+            if (row.productId) {
+                selected.add(String(row.productId));
+            }
+        }
+        return selected;
+    }
+
+    function buildFilteredProducts(row, query) {
+        const q = normText(query);
+        const selectedElsewhere = getSelectedProductIds(row.id);
+        return products.filter((item) => {
+            const itemId = String(item.id ?? item.article ?? "");
+            if (!itemId) {
+                return false;
+            }
+            if (selectedElsewhere.has(itemId)) {
+                return false;
+            }
+            if (!q) {
+                return true;
+            }
+            return normText(item.article).includes(q) || normText(item.name).includes(q);
+        });
+    }
+
+    function updateClusterStepVisibility() {
+        const hasAnySelected = state.rows.some((row) => Boolean(row.productId));
+        clusterStep.hidden = !hasAnySelected;
+        if (!hasAnySelected) {
+            state.activeStepId = "supply-create-step-products";
+            draftStep.hidden = true;
+            slotsStep.hidden = true;
+            supplyCreateStep.hidden = true;
+            cargoStep.hidden = true;
+            selectedClusterTextEl.hidden = true;
+            selectedSlotTextEl.hidden = true;
+            slotsGridEl.hidden = true;
+            slotsGridEl.innerHTML = "";
+            slotsErrorEl.hidden = true;
+            draftErrorEl.hidden = true;
+            draftResultEl.hidden = true;
+            resetSupplyApplicationUi();
+            state.selectedClusterName = "";
+            state.selectedShipmentDateIso = "";
+            state.selectedShipmentDateLabel = "";
+            state.selectedMacrolocalClusterId = null;
+            state.selectedStorageWarehouseId = null;
+            state.draftId = null;
+            state.supplyOrderId = null;
+            state.supplyId = "";
+        }
+    }
+
+    function resetSupplyApplicationUi() {
+        clearSupplyCreateError();
+        createSupplyReasonsEl.hidden = true;
+        createSupplyReasonsEl.textContent = "";
+        mismatchWarningEl.hidden = true;
+        mismatchWarningEl.textContent = "";
+        state.latestCompositionMismatches = [];
+        state.latestActualBySku = {};
+        state.ozonAlertMaxBySku = {};
+        state.validationSkuLimitsBySku = {};
+        state.compositionDraftRows = [];
+        state.compositionUpdateInFlight = false;
+        state.supplyOrderId = null;
+        state.supplyId = "";
+        state.hasOzonQtyAlert = false;
+        syncAdjustMismatchButton();
+        closeCompositionModal();
+        stopProgressMessage();
+        waitBoxEl.hidden = true;
+        waitFillEl.style.width = "0%";
+        state.cargoPlaces = [];
+        state.cargoPlaceNextId = 1;
+        state.savedCargoPlaces = [];
+        if (cargoPlacesRoot) {
+            cargoPlacesRoot.innerHTML = "";
+        }
+        if (cargoErrorEl) {
+            cargoErrorEl.hidden = true;
+            cargoErrorEl.textContent = "";
+        }
+        if (cargoResultEl) {
+            cargoResultEl.hidden = true;
+            cargoResultEl.textContent = "";
+        }
+        updateSidebarSummary();
+    }
+
+    function startProgressMessage(baseText) {
+        stopProgressMessage();
+        let dots = 0;
+        createSupplyReasonsEl.hidden = false;
+        createSupplyReasonsEl.textContent = `${baseText}.`;
+        state.progressTimerId = window.setInterval(() => {
+            dots = (dots + 1) % 4;
+            const suffix = dots === 0 ? "" : ".".repeat(dots);
+            createSupplyReasonsEl.textContent = `${baseText}${suffix}`;
+        }, 350);
+    }
+
+    function stopProgressMessage() {
+        if (state.progressTimerId) {
+            window.clearInterval(state.progressTimerId);
+            state.progressTimerId = null;
+        }
+    }
+
+    function waitStart(text) {
+        if (state.waitHideTimerId) {
+            window.clearTimeout(state.waitHideTimerId);
+            state.waitHideTimerId = null;
+        }
+        waitBoxEl.hidden = false;
+        waitTextEl.textContent = text || "Выполняем запрос...";
+        state.waitProgress = 6;
+        waitFillEl.style.width = `${state.waitProgress}%`;
+        if (state.waitTimerId) {
+            window.clearInterval(state.waitTimerId);
+        }
+        state.waitTimerId = window.setInterval(() => {
+            state.waitProgress = Math.min(92, state.waitProgress + 4);
+            waitFillEl.style.width = `${state.waitProgress}%`;
+        }, 300);
+    }
+
+    function waitSetText(text) {
+        if (!waitBoxEl.hidden) {
+            waitTextEl.textContent = text || waitTextEl.textContent;
+        }
+    }
+
+    function waitDone(text) {
+        if (state.waitTimerId) {
+            window.clearInterval(state.waitTimerId);
+            state.waitTimerId = null;
+        }
+        waitFillEl.style.width = "100%";
+        waitTextEl.textContent = text || "Готово";
+        if (state.waitHideTimerId) {
+            window.clearTimeout(state.waitHideTimerId);
+        }
+        state.waitHideTimerId = window.setTimeout(() => {
+            waitBoxEl.hidden = true;
+            waitFillEl.style.width = "0%";
+            state.waitHideTimerId = null;
+        }, 500);
+    }
+
+    function waitFail(text) {
+        if (state.waitTimerId) {
+            window.clearInterval(state.waitTimerId);
+            state.waitTimerId = null;
+        }
+        waitTextEl.textContent = text || "Ошибка";
+        waitFillEl.style.width = "100%";
+        if (state.waitHideTimerId) {
+            window.clearTimeout(state.waitHideTimerId);
+        }
+        state.waitHideTimerId = window.setTimeout(() => {
+            waitBoxEl.hidden = true;
+            waitFillEl.style.width = "0%";
+            state.waitHideTimerId = null;
+        }, 900);
+    }
+
+    function updateAddRowButtonState() {
+        const selectedCount = state.rows.filter((row) => Boolean(row.productId)).length;
+        addRowBtn.disabled = selectedCount >= products.length || products.length === 0;
+    }
+
+    function hideProductDropdown(row) {
+        if (row.dropdownEl) {
+            row.dropdownEl.hidden = true;
+            row.dropdownEl.innerHTML = "";
+        }
+    }
+
+    function renderProductDropdown(row, query = "") {
+        if (!row.dropdownEl) {
+            return;
+        }
+        const allowed = buildFilteredProducts(row, query);
+        row.dropdownEl.innerHTML = "";
+        if (allowed.length === 0) {
+            row.dropdownEl.hidden = true;
+            return;
+        }
+        for (const item of allowed) {
+            const optionBtn = document.createElement("button");
+            optionBtn.type = "button";
+            optionBtn.className = "supply-create-product-option";
+            optionBtn.textContent = productLabel(item);
+            optionBtn.addEventListener("mousedown", (event) => {
+                event.preventDefault();
+                row.productId = String(item.id ?? item.article ?? "");
+                row.productInputEl.value = productLabel(item);
+                hideProductDropdown(row);
+                rerenderAllRows();
+            });
+            row.dropdownEl.appendChild(optionBtn);
+        }
+        row.dropdownEl.hidden = false;
+    }
+
+    function rerenderAllRows() {
+        for (const row of state.rows) {
+            const removeBtn = row.rootEl.querySelector(".supply-create-remove-row-btn");
+            if (removeBtn) {
+                removeBtn.hidden = row.index <= 0;
+            }
+            if (row.productId) {
+                const selectedElsewhere = getSelectedProductIds(row.id);
+                if (selectedElsewhere.has(String(row.productId))) {
+                    row.productId = null;
+                    row.productInputEl.value = "";
+                }
+            }
+            if (!row.productId && row.productInputEl.value.trim()) {
+                renderProductDropdown(row, row.productInputEl.value);
+            } else {
+                hideProductDropdown(row);
+            }
+        }
+        updateClusterStepVisibility();
+        updateAddRowButtonState();
+        updateSidebarSummary();
+    }
+
+    function createRow() {
+        const row = {
+            id: state.nextRowId++,
+            index: state.rows.length,
+            productId: null,
+            qty: "",
+            rootEl: null,
+            productInputEl: null,
+            qtyInputEl: null,
+            dropdownEl: null,
+        };
+
+        const rowEl = document.createElement("div");
+        rowEl.className = "supply-create-row";
+        row.rootEl = rowEl;
+
+        const productField = document.createElement("div");
+        productField.className = "supply-create-field";
+        const productLabelEl = document.createElement("label");
+        productLabelEl.textContent = "Товар (артикул / наименование)";
+        const productInputWrap = document.createElement("div");
+        productInputWrap.className = "supply-create-input-wrap";
+        const productInput = document.createElement("input");
+        productInput.type = "text";
+        productInput.className = "supply-create-product-input";
+        productInput.placeholder = "Начните вводить артикул или название";
+        productInput.autocomplete = "off";
+        row.productInputEl = productInput;
+        const dropdown = document.createElement("div");
+        dropdown.className = "supply-create-product-list";
+        dropdown.hidden = true;
+        row.dropdownEl = dropdown;
+
+        productInput.addEventListener("focus", () => {
+            renderProductDropdown(row, productInput.value);
+        });
+        productInput.addEventListener("input", () => {
+            row.productId = null;
+            renderProductDropdown(row, productInput.value);
+            updateClusterStepVisibility();
+            updateAddRowButtonState();
+        });
+        productInput.addEventListener("blur", () => {
+            setTimeout(() => {
+                hideProductDropdown(row);
+                const label = normText(productInput.value);
+                if (!label) {
+                    row.productId = null;
+                    rerenderAllRows();
+                    return;
+                }
+                const allowed = buildFilteredProducts(row, "");
+                const match = allowed.find((item) => normText(productLabel(item)) === label);
+                if (!match) {
+                    row.productId = null;
+                    productInput.value = "";
+                } else {
+                    row.productId = String(match.id ?? match.article ?? "");
+                    productInput.value = productLabel(match);
+                }
+                rerenderAllRows();
+            }, 120);
+        });
+
+        productField.appendChild(productLabelEl);
+        productInputWrap.appendChild(productInput);
+        productInputWrap.appendChild(dropdown);
+        productField.appendChild(productInputWrap);
+
+        const qtyField = document.createElement("div");
+        qtyField.className = "supply-create-field";
+        const qtyLabelEl = document.createElement("label");
+        qtyLabelEl.textContent = "Количество";
+        const qtyInput = document.createElement("input");
+        qtyInput.type = "number";
+        qtyInput.min = "1";
+        qtyInput.step = "1";
+        qtyInput.placeholder = "";
+        qtyInput.className = "supply-create-qty-input";
+        row.qtyInputEl = qtyInput;
+        qtyInput.addEventListener("input", () => {
+            row.qty = qtyInput.value;
+            updateSidebarSummary();
+        });
+        qtyField.appendChild(qtyLabelEl);
+        qtyField.appendChild(qtyInput);
+
+        const removeField = document.createElement("div");
+        removeField.className = "supply-create-field";
+        const removeStubLabel = document.createElement("label");
+        removeStubLabel.textContent = " ";
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "btn btn-danger supply-create-remove-row-btn";
+        removeBtn.textContent = "Удалить";
+        removeBtn.addEventListener("click", () => {
+            const idx = state.rows.findIndex((r) => r.id === row.id);
+            if (idx < 0) {
+                return;
+            }
+            state.rows.splice(idx, 1);
+            rowEl.remove();
+            for (let i = 0; i < state.rows.length; i += 1) {
+                state.rows[i].index = i;
+            }
+            if (state.rows.length === 0) {
+                createRow();
+            }
+            rerenderAllRows();
+        });
+        removeField.appendChild(removeStubLabel);
+        if (row.index > 0) {
+            removeField.appendChild(removeBtn);
+        } else {
+            const removePlaceholder = document.createElement("span");
+            removePlaceholder.className = "supply-create-remove-placeholder";
+            removePlaceholder.setAttribute("aria-hidden", "true");
+            removeField.appendChild(removePlaceholder);
+        }
+
+        rowEl.appendChild(productField);
+        rowEl.appendChild(qtyField);
+        rowEl.appendChild(removeField);
+
+        rowsRoot.appendChild(rowEl);
+        state.rows.push(row);
+    }
+
+    addRowBtn.addEventListener("click", () => {
+        createRow();
+        rerenderAllRows();
+    });
+
+    function closeClusterModal() {
+        clusterModal.hidden = true;
+    }
+
+    function openClusterModal() {
+        if (clusterStep.hidden) {
+            return;
+        }
+        clusterModal.hidden = false;
+    }
+
+    function applyClusterSelection(clusterName, dateIso, dateLabel) {
+        const key = `${normText(clusterName)}|${dateIso}`;
+        const dayMeta = clusterDays.find((item) => {
+            if (!item || typeof item !== "object") {
+                return false;
+            }
+            return `${normText(item.cluster_name)}|${String(item.date_iso || "")}` === key;
+        }) || null;
+        state.selectedClusterName = clusterName;
+        state.selectedShipmentDateIso = dateIso;
+        state.selectedShipmentDateLabel = dateLabel;
+        state.selectedMacrolocalClusterId = dayMeta && dayMeta.macrolocal_cluster_id ? Number(dayMeta.macrolocal_cluster_id) : null;
+        state.selectedStorageWarehouseId = dayMeta && dayMeta.storage_warehouse_id ? Number(dayMeta.storage_warehouse_id) : null;
+        state.selectedSlotFrom = "";
+        state.selectedSlotTo = "";
+        state.selectedSlotDate = "";
+        state.draftId = null;
+        state.supplyOrderId = null;
+        state.supplyId = "";
+        selectedClusterTextEl.textContent = `Выбран кластер ${clusterName}, дата отгрузки ${dateLabel}.`;
+        selectedClusterTextEl.hidden = false;
+        draftStep.hidden = true;
+        slotsStep.hidden = true;
+        supplyCreateStep.hidden = true;
+        cargoStep.hidden = true;
+        draftErrorEl.hidden = true;
+        draftResultEl.hidden = true;
+        resetSupplyApplicationUi();
+        selectedSlotTextEl.hidden = true;
+        slotsGridEl.hidden = true;
+        slotsGridEl.innerHTML = "";
+        slotsErrorEl.hidden = true;
+        closeClusterModal();
+        state.activeStepId = "supply-create-step-cluster";
+        updateSidebarSummary();
+    }
+
+    function timeFromIso(value) {
+        const txt = String(value || "");
+        const m = txt.match(/T(\d{2}:\d{2})/);
+        if (m) {
+            return m[1];
+        }
+        const m2 = txt.match(/^(\d{2}:\d{2})/);
+        return m2 ? m2[1] : txt;
+    }
+
+    function dateLabelFromIso(value) {
+        const txt = String(value || "");
+        const m = txt.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!m) {
+            return txt;
+        }
+        return `${m[3]}.${m[2]}.${m[1]}`;
+    }
+
+    function dateKeyFromApi(dateVal) {
+        const s = String(dateVal || "");
+        const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+        return m ? m[1] : "";
+    }
+
+    function renderSlotButtons(days) {
+        slotsGridEl.innerHTML = "";
+        let total = 0;
+        const wantDay = String(state.selectedShipmentDateIso || "").trim();
+        for (const day of days || []) {
+            if (!day || typeof day !== "object") {
+                continue;
+            }
+            const rawDay = day.date_in_timezone;
+            const dateIso = dateKeyFromApi(rawDay) || String(rawDay || "").slice(0, 10);
+            if (wantDay && dateIso !== wantDay) {
+                continue;
+            }
+            for (const slot of (day.timeslots || [])) {
+                if (!slot || typeof slot !== "object") {
+                    continue;
+                }
+                const fromTz = String(slot.from_in_timezone || "");
+                const toTz = String(slot.to_in_timezone || "");
+                if (!fromTz || !toTz) {
+                    continue;
+                }
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "btn supply-create-slot-btn";
+                btn.textContent = `${timeFromIso(fromTz)}-${timeFromIso(toTz)}`;
+                btn.addEventListener("click", () => {
+                    state.selectedSlotFrom = fromTz;
+                    state.selectedSlotTo = toTz;
+                    state.selectedSlotDate = dateIso || state.selectedShipmentDateIso;
+                    selectedSlotTextEl.textContent = `Выбран слот с ${timeFromIso(fromTz)} до ${timeFromIso(toTz)} часов ${dateLabelFromIso(state.selectedSlotDate)} и ${state.selectedClusterName}.`;
+                    selectedSlotTextEl.hidden = false;
+                    supplyCreateStep.hidden = false;
+                    cargoStep.hidden = true;
+                    resetSupplyApplicationUi();
+                    updateSidebarSummary();
+                });
+                slotsGridEl.appendChild(btn);
+                total += 1;
+            }
+        }
+        slotsGridEl.hidden = total === 0;
+        state.availableSlotsCount = total;
+        if (total === 0) {
+            slotsErrorEl.textContent = "Слоты не найдены для выбранной даты/кластера.";
+            slotsErrorEl.hidden = false;
+        }
+        updateSidebarSummary();
+    }
+
+    function buildDraftItems() {
+        const byId = new Map();
+        for (const p of products) {
+            const pid = String(p.id ?? "");
+            if (!pid) {
+                continue;
+            }
+            byId.set(pid, p);
+        }
+        const items = [];
+        for (const row of state.rows) {
+            if (!row || !row.productId) {
+                continue;
+            }
+            const p = byId.get(String(row.productId));
+            if (!p) {
+                continue;
+            }
+            const sku = Number(p.ozon_sku || 0);
+            const qty = Number(row.qtyInputEl && row.qtyInputEl.value ? row.qtyInputEl.value : 0);
+            if (!Number.isInteger(sku) || sku <= 0 || !Number.isInteger(qty) || qty <= 0) {
+                continue;
+            }
+            items.push({ sku, quantity: qty });
+        }
+        return items;
+    }
+
+    function plannedItemsForVerification() {
+        const byId = new Map();
+        for (const p of products) {
+            const pid = String(p.id ?? "");
+            if (!pid) {
+                continue;
+            }
+            byId.set(pid, p);
+        }
+        const out = [];
+        for (const row of state.rows) {
+            if (!row || !row.productId) {
+                continue;
+            }
+            const p = byId.get(String(row.productId));
+            if (!p) {
+                continue;
+            }
+            const sku = Number(p.ozon_sku || 0);
+            const qty = Number(row.qtyInputEl && row.qtyInputEl.value ? row.qtyInputEl.value : 0);
+            if (!Number.isInteger(sku) || sku <= 0 || !Number.isInteger(qty) || qty <= 0) {
+                continue;
+            }
+            out.push({
+                sku,
+                quantity: qty,
+                article: String(p.article || ""),
+                name: String(p.name || ""),
+            });
+        }
+        return out;
+    }
+
+    async function verifyCreatedOrderComposition(orderId) {
+        const planned = plannedItemsForVerification();
+        if (!planned.length) {
+            return;
+        }
+        state.latestCompositionMismatches = [];
+        state.latestActualBySku = {};
+        state.ozonAlertMaxBySku = {};
+        state.hasOzonQtyAlert = false;
+        syncAdjustMismatchButton();
+        mismatchWarningEl.hidden = true;
+        mismatchWarningEl.textContent = "";
+        waitSetText("Проверяем фактический состав заявки...");
+        try {
+            const resp = await fetch("/api/supplies/order-composition-verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    order_id: Number(orderId || 0),
+                    planned_items: planned,
+                }),
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data || !data.ok) {
+                // Мягкий режим: не блокируем pipeline, просто информируем.
+                createSupplyReasonsEl.textContent += "\n\nНе удалось автоматически сверить состав заявки.";
+                return;
+            }
+            state.latestActualBySku = (data.actual_by_sku && typeof data.actual_by_sku === "object")
+                ? data.actual_by_sku
+                : {};
+            const mism = Array.isArray(data.mismatches) ? data.mismatches : [];
+            if (!mism.length) {
+                state.hasOzonQtyAlert = false;
+                updateSidebarSummary();
+                return;
+            }
+            state.latestCompositionMismatches = mism;
+            const alertQtyMismatches = mism.filter(isOzonChangedPlannedQuantity);
+            state.ozonAlertMaxBySku = {};
+            for (const m of alertQtyMismatches) {
+                const sku = Number(m.sku || 0);
+                if (!Number.isInteger(sku) || sku <= 0) {
+                    continue;
+                }
+                const aq = Number(m.actual_quantity);
+                if (!Number.isNaN(aq)) {
+                    state.ozonAlertMaxBySku[sku] = aq;
+                }
+            }
+            const lineFor = (m) => {
+                const article = String(m.article || "").trim();
+                const nm = String(m.name || "").trim();
+                const sku = String(m.sku || "");
+                const title = article || nm || `SKU ${sku}`;
+                return `${title}: заявлено ${m.planned_quantity}, в заявке ${m.actual_quantity}`;
+            };
+            if (alertQtyMismatches.length) {
+                state.hasOzonQtyAlert = true;
+                mismatchWarningEl.textContent = `ВНИМАНИЕ: Ozon изменил заявленное количество по товарам.\n${alertQtyMismatches.map(lineFor).join("\n")}`;
+                mismatchWarningEl.hidden = false;
+                syncAdjustMismatchButton();
+                return;
+            }
+            state.hasOzonQtyAlert = false;
+            mismatchWarningEl.textContent = `ВНИМАНИЕ: расхождение состава заявки с планом.\n${mism.map(lineFor).join("\n")}`;
+            mismatchWarningEl.hidden = false;
+            syncAdjustMismatchButton();
+            updateSidebarSummary();
+        } catch (_err) {
+            createSupplyReasonsEl.textContent += "\n\nНе удалось автоматически сверить состав заявки.";
+            updateSidebarSummary();
+        }
+    }
+
+    async function createDraft() {
+        waitStart("Создаем черновик...");
+        draftErrorEl.hidden = true;
+        draftResultEl.hidden = true;
+        slotsStep.hidden = true;
+        supplyCreateStep.hidden = true;
+        cargoStep.hidden = true;
+        selectedSlotTextEl.hidden = true;
+        slotsGridEl.hidden = true;
+        slotsGridEl.innerHTML = "";
+        slotsErrorEl.hidden = true;
+        resetSupplyApplicationUi();
+
+        if (!state.selectedClusterName || !state.selectedShipmentDateIso || !state.selectedMacrolocalClusterId) {
+            waitFail("Черновик не создан");
+            draftErrorEl.textContent = "Сначала выберите кластер и дату отгрузки.";
+            draftErrorEl.hidden = false;
+            return false;
+        }
+        const items = buildDraftItems();
+        if (!items.length) {
+            waitFail("Черновик не создан");
+            draftErrorEl.textContent = "Для создания черновика выберите товары с количеством > 0 и SKU Ozon.";
+            draftErrorEl.hidden = false;
+            return false;
+        }
+
+        const payload = {
+            macrolocal_cluster_id: state.selectedMacrolocalClusterId,
+            delivery_date: state.selectedShipmentDateIso,
+            items,
+        };
+        createDraftBtn.disabled = true;
+        let draftOk = false;
+        try {
+            const resp = await fetch("/api/supplies/create-draft", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data || !data.ok) {
+                waitFail("Черновик не создан");
+                draftErrorEl.textContent = (data && data.error) ? String(data.error) : "Ошибка создания черновика.";
+                draftErrorEl.hidden = false;
+                updateSidebarSummary();
+                return false;
+            }
+            const draftId = Number(data.draft_id || 0);
+            if (!Number.isInteger(draftId) || draftId <= 0) {
+                waitFail("Черновик не создан");
+                draftErrorEl.textContent = "Черновик не создан, попробуйте ещё раз.";
+                draftErrorEl.hidden = false;
+                return false;
+            }
+            state.draftId = draftId;
+            draftResultEl.textContent = "Черновик создан.";
+            draftResultEl.hidden = false;
+            slotsStep.hidden = false;
+            draftOk = true;
+            waitDone("Черновик создан");
+            updateSidebarSummary();
+        } catch (_err) {
+            waitFail("Черновик не создан");
+            draftErrorEl.textContent = "Не удалось создать черновик.";
+            draftErrorEl.hidden = false;
+            updateSidebarSummary();
+            return false;
+        } finally {
+            createDraftBtn.disabled = false;
+        }
+        if (draftOk) {
+            await requestSlots();
+            return true;
+        }
+        return false;
+    }
+
+    async function requestSlots() {
+        waitStart("Запрашиваем слоты...");
+        slotsErrorEl.hidden = true;
+        slotsGridEl.hidden = true;
+        slotsGridEl.innerHTML = "";
+        if (!state.selectedClusterName || !state.selectedShipmentDateIso) {
+            waitFail("Ошибка запроса слотов");
+            slotsErrorEl.textContent = "Сначала выберите кластер и дату отгрузки на шаге 2.";
+            slotsErrorEl.hidden = false;
+            return;
+        }
+        if (!state.selectedMacrolocalClusterId) {
+            waitFail("Ошибка запроса слотов");
+            slotsErrorEl.textContent = "Для выбранного кластера не найден macrolocal_cluster_id.";
+            slotsErrorEl.hidden = false;
+            return;
+        }
+        const draftId = Number(state.draftId || 0);
+        if (!Number.isInteger(draftId) || draftId <= 0) {
+            waitFail("Ошибка запроса слотов");
+            slotsErrorEl.textContent = "Сначала создайте черновик на шаге 3.";
+            slotsErrorEl.hidden = false;
+            return;
+        }
+        const selectedWh = [{ macrolocal_cluster_id: state.selectedMacrolocalClusterId }];
+        const payload = {
+            date_from: state.selectedShipmentDateIso,
+            date_to: state.selectedShipmentDateIso,
+            draft_id: draftId,
+            supply_type: "CROSSDOCK",
+            selected_cluster_warehouses: selectedWh,
+        };
+        requestSlotsBtn.disabled = true;
+        requestSlotsBtn.textContent = "Загрузка...";
+        try {
+            const resp = await fetch("/api/supplies/timeslot-info", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data || !data.ok) {
+                waitFail("Ошибка запроса слотов");
+                slotsErrorEl.textContent = (data && data.error) ? String(data.error) : "Ошибка запроса слотов.";
+                slotsErrorEl.hidden = false;
+                updateSidebarSummary();
+                return;
+            }
+            const result = (data.result && typeof data.result === "object") ? data.result : {};
+            const dropOff = (result.drop_off_warehouse_timeslots && typeof result.drop_off_warehouse_timeslots === "object")
+                ? result.drop_off_warehouse_timeslots
+                : {};
+            const days = Array.isArray(dropOff.days) ? dropOff.days : [];
+            renderSlotButtons(days);
+            waitDone("Слоты получены");
+            updateSidebarSummary();
+        } catch (_err) {
+            waitFail("Ошибка запроса слотов");
+            slotsErrorEl.textContent = "Не удалось выполнить запрос слотов.";
+            slotsErrorEl.hidden = false;
+            updateSidebarSummary();
+        } finally {
+            requestSlotsBtn.disabled = false;
+            requestSlotsBtn.textContent = "Обновить слоты";
+        }
+    }
+
+    function renderReasonsLines(lines) {
+        const arr = Array.isArray(lines) ? lines.filter((x) => x) : [];
+        if (!arr.length) {
+            return "";
+        }
+        return arr.join("\n");
+    }
+
+    function selectedProductsForCargo() {
+        const byId = new Map();
+        for (const p of products) {
+            const pid = String(p.id ?? "");
+            if (pid) {
+                byId.set(pid, p);
+            }
+        }
+        const out = [];
+        for (const row of state.rows) {
+            if (!row || !row.productId) {
+                continue;
+            }
+            const p = byId.get(String(row.productId));
+            if (!p) {
+                continue;
+            }
+            const qty = Number(row.qtyInputEl && row.qtyInputEl.value ? row.qtyInputEl.value : 0);
+            if (!Number.isInteger(qty) || qty <= 0) {
+                continue;
+            }
+            out.push({
+                productId: String(row.productId),
+                article: String(p.article || ""),
+                name: String(p.name || ""),
+                requiredQty: qty,
+            });
+        }
+        return out;
+    }
+
+    function syncRowsFromCompositionItems(items) {
+        const list = Array.isArray(items) ? items : [];
+        const valid = [];
+        for (const it of list) {
+            const sku = Number(it && it.sku ? it.sku : 0);
+            const qty = Number(it && it.quantity ? it.quantity : 0);
+            if (!Number.isInteger(sku) || sku <= 0 || !Number.isInteger(qty) || qty <= 0) {
+                continue;
+            }
+            const prod = getProductBySku(sku);
+            if (!prod) {
+                continue;
+            }
+            const pid = String(prod.id ?? "");
+            if (!pid) {
+                continue;
+            }
+            valid.push({ productId: pid, qty, title: productLabel(prod) });
+        }
+        if (!valid.length) {
+            return;
+        }
+        for (const row of state.rows) {
+            if (row && row.rootEl) {
+                row.rootEl.remove();
+            }
+        }
+        state.rows = [];
+        state.nextRowId = 1;
+        for (let i = 0; i < valid.length; i += 1) {
+            createRow();
+            const row = state.rows[state.rows.length - 1];
+            if (!row) {
+                continue;
+            }
+            row.productId = valid[i].productId;
+            row.productInputEl.value = valid[i].title;
+            row.qtyInputEl.value = String(valid[i].qty);
+            row.qty = row.qtyInputEl.value;
+        }
+        rerenderAllRows();
+    }
+
+    function syncCargoAllocationsToSelectedProducts() {
+        const selected = selectedProductsForCargo();
+        const selectedIds = new Set(selected.map((x) => String(x.productId)));
+        for (const place of state.cargoPlaces) {
+            if (!place || typeof place !== "object") {
+                continue;
+            }
+            if (!place.allocations || typeof place.allocations !== "object") {
+                place.allocations = {};
+            }
+            for (const key of Object.keys(place.allocations)) {
+                if (!selectedIds.has(String(key))) {
+                    delete place.allocations[key];
+                }
+            }
+            for (const pid of selectedIds) {
+                if (!Object.prototype.hasOwnProperty.call(place.allocations, pid)) {
+                    place.allocations[pid] = 0;
+                }
+            }
+        }
+    }
+
+    function ensureCargoUiSeeded() {
+        if (!cargoPlacesRoot) {
+            return;
+        }
+        if (!state.cargoPlaces.length) {
+            state.cargoPlaces.push({
+                id: state.cargoPlaceNextId++,
+                key: `cargo-${Date.now()}`,
+                type: "BOX",
+                allocations: {},
+            });
+        }
+        renderCargoPlacesUi();
+    }
+
+    function allocatedSumForProduct(productId) {
+        const pid = String(productId);
+        let s = 0;
+        for (const p of state.cargoPlaces) {
+            if (!p || !p.allocations) {
+                continue;
+            }
+            s += Number(p.allocations[pid] || 0);
+        }
+        return s;
+    }
+
+    function remainingInOrderForProduct(productId, requiredQty) {
+        const req = Number(requiredQty || 0);
+        const got = allocatedSumForProduct(productId);
+        return Math.max(0, req - got);
+    }
+
+    function maxAllocationForCurrentCell(place, productId, requiredQty) {
+        const cur = Number(place.allocations?.[productId] || 0);
+        const sumAll = allocatedSumForProduct(productId);
+        const others = sumAll - cur;
+        return Math.max(0, Number(requiredQty || 0) - others);
+    }
+
+    function refreshCargoRemainderDisplays() {
+        if (!cargoPlacesRoot) {
+            return;
+        }
+        const selected = selectedProductsForCargo();
+        cargoPlacesRoot.querySelectorAll("[data-cargo-remain]").forEach((td) => {
+            const pid = td.getAttribute("data-cargo-remain");
+            const prod = selected.find((x) => String(x.productId) === String(pid));
+            if (!prod) {
+                return;
+            }
+            td.textContent = String(remainingInOrderForProduct(prod.productId, prod.requiredQty));
+        });
+    }
+
+    function renderCargoPlacesUi() {
+        if (!cargoPlacesRoot) {
+            return;
+        }
+        const selected = selectedProductsForCargo();
+        cargoPlacesRoot.innerHTML = "";
+        for (const place of state.cargoPlaces) {
+            const card = document.createElement("div");
+            card.className = "supply-create-cargo-card";
+
+            const head = document.createElement("div");
+            head.className = "supply-create-cargo-head";
+
+            const keyField = document.createElement("div");
+            keyField.className = "supply-create-field";
+            const keyLabel = document.createElement("label");
+            keyLabel.textContent = "Ключ грузоместа";
+            const keyInput = document.createElement("input");
+            keyInput.type = "text";
+            keyInput.className = "supply-create-product-input";
+            keyInput.value = place.key || "";
+            keyInput.addEventListener("input", () => {
+                place.key = keyInput.value;
+                updateSidebarSummary();
+            });
+            keyField.appendChild(keyLabel);
+            keyField.appendChild(keyInput);
+
+            const typeField = document.createElement("div");
+            typeField.className = "supply-create-field";
+            const typeLabel = document.createElement("label");
+            typeLabel.textContent = "Тип";
+            const typeSelect = document.createElement("select");
+            typeSelect.className = "supply-create-product-input";
+            for (const tp of ["BOX", "PALLET"]) {
+                const opt = document.createElement("option");
+                opt.value = tp;
+                opt.textContent = tp;
+                if (place.type === tp) {
+                    opt.selected = true;
+                }
+                typeSelect.appendChild(opt);
+            }
+            typeSelect.addEventListener("change", () => {
+                place.type = typeSelect.value;
+                updateSidebarSummary();
+            });
+            typeField.appendChild(typeLabel);
+            typeField.appendChild(typeSelect);
+
+            const removeField = document.createElement("div");
+            removeField.className = "supply-create-field";
+            const removeLabel = document.createElement("label");
+            removeLabel.textContent = " ";
+            const removeBtn = document.createElement("button");
+            removeBtn.type = "button";
+            removeBtn.className = "btn btn-danger";
+            removeBtn.textContent = "Удалить";
+            removeBtn.disabled = state.cargoPlaces.length <= 1;
+            removeBtn.addEventListener("click", () => {
+                state.cargoPlaces = state.cargoPlaces.filter((x) => x.id !== place.id);
+                ensureCargoUiSeeded();
+                updateSidebarSummary();
+            });
+            removeField.appendChild(removeLabel);
+            removeField.appendChild(removeBtn);
+
+            head.appendChild(keyField);
+            head.appendChild(typeField);
+            head.appendChild(removeField);
+            card.appendChild(head);
+
+            const table = document.createElement("table");
+            table.className = "supply-create-cargo-items";
+            const thead = document.createElement("thead");
+            thead.innerHTML = "<tr><th>Артикул</th><th>Товар</th><th>Кол-во в заявке</th><th style=\"width:48px\"></th><th>В это грузоместо</th></tr>";
+            table.appendChild(thead);
+            const tbody = document.createElement("tbody");
+            for (const prod of selected) {
+                const tr = document.createElement("tr");
+                const tdArticle = document.createElement("td");
+                tdArticle.textContent = prod.article;
+                const tdName = document.createElement("td");
+                tdName.textContent = prod.name;
+                const tdReq = document.createElement("td");
+                tdReq.setAttribute("data-cargo-remain", String(prod.productId));
+                tdReq.title = "Осталось распределить по заявке (одинаково во всех грузоместах)";
+                tdReq.textContent = String(remainingInOrderForProduct(prod.productId, prod.requiredQty));
+                const tdFill = document.createElement("td");
+                const fillBtn = document.createElement("button");
+                fillBtn.type = "button";
+                fillBtn.className = "supply-create-cargo-fill-icon";
+                fillBtn.setAttribute("aria-label", "Поместить весь остаток по артикулу в это грузоместо");
+                fillBtn.title = "Поместить весь остаток в это грузоместо";
+                fillBtn.innerHTML = "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 7l5 5-5 5z' fill='black'></path><path d='M11 7l5 5-5 5z' fill='black'></path></svg>";
+                const tdAlloc = document.createElement("td");
+                const wrap = document.createElement("div");
+                wrap.className = "supply-create-cargo-alloc-cell";
+                const inp = document.createElement("input");
+                inp.type = "number";
+                inp.min = "0";
+                inp.step = "1";
+                const curAlloc = Number(place.allocations[prod.productId] || 0);
+                inp.value = curAlloc > 0 ? String(curAlloc) : "";
+                const applyAllocFromInput = () => {
+                    let n = Number(inp.value || 0);
+                    if (!Number.isInteger(n) || n < 0) {
+                        n = 0;
+                    }
+                    const maxAllow = maxAllocationForCurrentCell(place, prod.productId, prod.requiredQty);
+                    if (n > maxAllow) {
+                        n = maxAllow;
+                        inp.value = n > 0 ? String(n) : "";
+                    }
+                    place.allocations[prod.productId] = n > 0 ? n : 0;
+                    refreshCargoRemainderDisplays();
+                    updateSidebarSummary();
+                };
+                inp.addEventListener("input", applyAllocFromInput);
+                inp.addEventListener("blur", applyAllocFromInput);
+                fillBtn.addEventListener("click", () => {
+                    const maxAllow = maxAllocationForCurrentCell(place, prod.productId, prod.requiredQty);
+                    place.allocations[prod.productId] = maxAllow;
+                    inp.value = maxAllow > 0 ? String(maxAllow) : "";
+                    refreshCargoRemainderDisplays();
+                    updateSidebarSummary();
+                });
+                tdFill.appendChild(fillBtn);
+                wrap.appendChild(inp);
+                tdAlloc.appendChild(wrap);
+                tr.appendChild(tdArticle);
+                tr.appendChild(tdName);
+                tr.appendChild(tdReq);
+                tr.appendChild(tdFill);
+                tr.appendChild(tdAlloc);
+                tbody.appendChild(tr);
+            }
+            table.appendChild(tbody);
+            card.appendChild(table);
+            cargoPlacesRoot.appendChild(card);
+        }
+    }
+
+    function buildCargoesPayload() {
+        const selected = selectedProductsForCargo();
+        if (!selected.length) {
+            return { error: "Нет товаров для распределения." };
+        }
+        const requiredByProduct = new Map(selected.map((p) => [p.productId, p.requiredQty]));
+        const allocatedByProduct = new Map(selected.map((p) => [p.productId, 0]));
+        const cargoes = [];
+        for (const place of state.cargoPlaces) {
+            const key = String(place.key || "").trim();
+            if (!key) {
+                return { error: "У каждого грузоместа должен быть ключ." };
+            }
+            const type = place.type === "PALLET" ? "PALLET" : "BOX";
+            const items = [];
+            for (const prod of selected) {
+                const qty = Number(place.allocations[prod.productId] || 0);
+                if (!Number.isInteger(qty) || qty <= 0) {
+                    continue;
+                }
+                allocatedByProduct.set(prod.productId, (allocatedByProduct.get(prod.productId) || 0) + qty);
+                items.push({
+                    barcode: "",
+                    offer_id: prod.article,
+                    quantity: qty,
+                    quant: 1,
+                });
+            }
+            if (items.length > 0) {
+                cargoes.push({
+                    key,
+                    value: {
+                        type,
+                        items,
+                    },
+                });
+            }
+        }
+        if (!cargoes.length) {
+            return { error: "Распределите товары по грузоместам (кол-во > 0)." };
+        }
+        for (const prod of selected) {
+            const req = requiredByProduct.get(prod.productId) || 0;
+            const got = allocatedByProduct.get(prod.productId) || 0;
+            if (got !== req) {
+                return { error: `Распределение по товару "${prod.article}" не совпадает: нужно ${req}, распределено ${got}.` };
+            }
+        }
+        return { cargoes };
+    }
+
+    async function submitCargoPlaces() {
+        waitStart("Сохраняем грузоместа...");
+        cargoErrorEl.hidden = true;
+        cargoResultEl.hidden = true;
+        const orderId = Number(state.supplyOrderId || 0);
+        if (!Number.isInteger(orderId) || orderId <= 0) {
+            waitFail("Грузоместа не сохранены");
+            cargoErrorEl.textContent = "Сначала дождитесь получения order_id на шаге 5.";
+            cargoErrorEl.hidden = false;
+            return;
+        }
+        const built = buildCargoesPayload();
+        if (built.error) {
+            waitFail("Грузоместа не сохранены");
+            cargoErrorEl.textContent = built.error;
+            cargoErrorEl.hidden = false;
+            return;
+        }
+        const createCargoRequestBody = {
+            order_id: orderId,
+            delete_current_version: true,
+            cargoes: built.cargoes,
+        };
+        submitCargoBtn.disabled = true;
+        state.savedCargoPlaces = [];
+        try {
+            const resp = await fetch("/api/supplies/cargoes-create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(createCargoRequestBody),
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data || !data.ok) {
+                waitFail("Грузоместа не сохранены");
+                cargoErrorEl.textContent = (data && data.error) ? String(data.error) : "Ошибка сохранения грузомест.";
+                cargoErrorEl.hidden = false;
+                updateSidebarSummary();
+                return;
+            }
+            const op = String(data.operation_id || "");
+            const sid = String(data.supply_id || "");
+            if (sid) {
+                state.supplyId = sid;
+            }
+            if (!op) {
+                cargoResultEl.textContent = "Грузоместа сохранены.";
+                cargoResultEl.style.whiteSpace = "pre-wrap";
+                cargoResultEl.hidden = false;
+                waitDone("Грузоместа отправлены");
+                updateSidebarSummary();
+                return;
+            }
+            waitSetText("Ожидаем регистрацию операции в Ozon...");
+            await new Promise((resolve) => window.setTimeout(resolve, 1600));
+            waitSetText("Проверяем статус сохранения грузомест...");
+            let finalStatus = "";
+            let finalErrors = {};
+            for (let attempt = 1; attempt <= 14; attempt += 1) {
+                const stResp = await fetch("/api/supplies/cargoes-create-status", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ operation_id: op, supply_id: sid }),
+                });
+                const stData = await stResp.json();
+                if (!stResp.ok || !stData || !stData.ok) {
+                    waitFail("Ошибка статуса сохранения грузомест");
+                    cargoErrorEl.textContent = (stData && stData.error) ? String(stData.error) : "Ошибка проверки статуса грузомест.";
+                    cargoErrorEl.hidden = false;
+                    updateSidebarSummary();
+                    return;
+                }
+                finalStatus = String(stData.status || "UNSPECIFIED");
+                finalErrors = (stData.errors && typeof stData.errors === "object") ? stData.errors : {};
+                if (finalStatus === "SUCCESS") {
+                    const cp = normalizeCargoPlaces(stData.cargo_places);
+                    if (cp.length) {
+                        state.savedCargoPlaces = cp;
+                    } else {
+                        state.savedCargoPlaces = normalizeCargoPlaces(
+                            stData.ozon_response && Array.isArray(stData.ozon_response.cargoes)
+                                ? stData.ozon_response.cargoes
+                                : [],
+                        );
+                    }
+                }
+                if (finalStatus === "SUCCESS" || finalStatus === "FAILED") {
+                    break;
+                }
+                await new Promise((resolve) => window.setTimeout(resolve, 1300));
+            }
+            if (finalStatus === "SUCCESS") {
+                cargoResultEl.textContent = "Грузоместа сохранены.";
+                cargoResultEl.style.whiteSpace = "pre-wrap";
+                cargoResultEl.hidden = false;
+                waitDone("Грузоместа успешно сохранены");
+                updateSidebarSummary();
+                return;
+            }
+            if (finalStatus === "FAILED") {
+                const reasons = Array.isArray(finalErrors.error_reasons) ? finalErrors.error_reasons : [];
+                const details = reasons.length ? ` Причины: ${reasons.join(", ")}.` : "";
+                cargoErrorEl.textContent = `Ozon вернул FAILED по операции ${op}.${details}`;
+                cargoErrorEl.hidden = false;
+                waitFail("Грузоместа не сохранены");
+                updateSidebarSummary();
+                return;
+            }
+            cargoErrorEl.textContent = `Статус операции ${op} пока не финальный (${finalStatus || "IN_PROGRESS"}). Повторите проверку позже.`;
+            cargoErrorEl.hidden = false;
+            waitFail("Статус грузомест не финальный");
+            updateSidebarSummary();
+        } catch (_err) {
+            waitFail("Грузоместа не сохранены");
+            cargoErrorEl.textContent = "Не удалось отправить грузоместа.";
+            cargoErrorEl.hidden = false;
+            updateSidebarSummary();
+        } finally {
+            submitCargoBtn.disabled = false;
+        }
+    }
+
+    function closeCompositionModal() {
+        if (compositionModal) {
+            compositionModal.hidden = true;
+        }
+        if (compositionModalErrorEl) {
+            compositionModalErrorEl.hidden = true;
+            compositionModalErrorEl.textContent = "";
+        }
+    }
+
+    function availableSkuProducts(excludedSkus = new Set()) {
+        return products
+            .filter((p) => {
+                const sku = Number(p.ozon_sku || 0);
+                return Number.isInteger(sku) && sku > 0 && !excludedSkus.has(sku);
+            })
+            .sort((a, b) => {
+                const aLbl = productLabel(a).toLowerCase();
+                const bLbl = productLabel(b).toLowerCase();
+                if (aLbl < bLbl) return -1;
+                if (aLbl > bLbl) return 1;
+                return 0;
+            });
+    }
+
+    function compositionRowsToPayload() {
+        const clean = [];
+        const usedSku = new Set();
+        for (const row of state.compositionDraftRows) {
+            const sku = Number(row.sku || 0);
+            const quantity = Number(row.quantity || 0);
+            if (!Number.isInteger(sku) || sku <= 0) {
+                continue;
+            }
+            if (!Number.isInteger(quantity) || quantity <= 0) {
+                continue;
+            }
+            if (usedSku.has(sku)) {
+                continue;
+            }
+            usedSku.add(sku);
+            clean.push({ sku, quantity });
+        }
+        return clean;
+    }
+
+    function renderCompositionRows() {
+        if (!compositionRowsRoot) {
+            return;
+        }
+        compositionRowsRoot.innerHTML = "";
+        const selectedSkus = new Set(
+            state.compositionDraftRows
+                .map((x) => Number(x.sku || 0))
+                .filter((sku) => Number.isInteger(sku) && sku > 0),
+        );
+        state.compositionDraftRows.forEach((row, idx) => {
+            const tr = document.createElement("tr");
+
+            const skuTd = document.createElement("td");
+            const skuSelect = document.createElement("select");
+            const currentSku = Number(row.sku || 0);
+            const usedWithoutCurrent = new Set([...selectedSkus]);
+            if (currentSku > 0) {
+                usedWithoutCurrent.delete(currentSku);
+            }
+            const options = availableSkuProducts(usedWithoutCurrent);
+            const emptyOpt = document.createElement("option");
+            emptyOpt.value = "";
+            emptyOpt.textContent = "Выберите SKU";
+            skuSelect.appendChild(emptyOpt);
+            for (const p of options) {
+                const sku = Number(p.ozon_sku || 0);
+                const opt = document.createElement("option");
+                opt.value = String(sku);
+                opt.textContent = skuTitle(sku);
+                if (sku === currentSku) {
+                    opt.selected = true;
+                }
+                skuSelect.appendChild(opt);
+            }
+            skuSelect.addEventListener("change", () => {
+                row.sku = Number(skuSelect.value || 0) || 0;
+                renderCompositionRows();
+            });
+            skuTd.appendChild(skuSelect);
+
+            const qtyTd = document.createElement("td");
+            const qtyInput = document.createElement("input");
+            qtyInput.type = "number";
+            qtyInput.min = "1";
+            qtyInput.max = "1000000";
+            qtyInput.step = "1";
+            qtyInput.value = String(Number(row.quantity || 1) || 1);
+            qtyInput.addEventListener("input", () => {
+                const v = Number(qtyInput.value || 0);
+                row.quantity = Number.isInteger(v) && v > 0 ? v : 0;
+            });
+            qtyTd.appendChild(qtyInput);
+
+            const limTd = document.createElement("td");
+            const lim = document.createElement("span");
+            lim.className = "supply-create-limit-note";
+            lim.textContent = compositionOzonLimitText(currentSku);
+            limTd.appendChild(lim);
+
+            const actTd = document.createElement("td");
+            const delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.className = "btn";
+            delBtn.textContent = "Удалить";
+            delBtn.disabled = state.compositionDraftRows.length <= 1;
+            delBtn.addEventListener("click", () => {
+                state.compositionDraftRows.splice(idx, 1);
+                if (state.compositionDraftRows.length === 0) {
+                    state.compositionDraftRows.push({ sku: 0, quantity: 1 });
+                }
+                renderCompositionRows();
+            });
+            actTd.appendChild(delBtn);
+
+            tr.appendChild(skuTd);
+            tr.appendChild(qtyTd);
+            tr.appendChild(limTd);
+            tr.appendChild(actTd);
+            compositionRowsRoot.appendChild(tr);
+        });
+    }
+
+    function buildCompositionRowsFromMismatch() {
+        const rows = [];
+        const seen = new Set();
+        const actualBySku = (state.latestActualBySku && typeof state.latestActualBySku === "object")
+            ? state.latestActualBySku
+            : {};
+        for (const [skuRaw, qtyRaw] of Object.entries(actualBySku)) {
+            const sku = Number(skuRaw || 0);
+            const qty = Number(qtyRaw || 0);
+            if (!Number.isInteger(sku) || sku <= 0 || !Number.isInteger(qty) || qty <= 0 || seen.has(sku)) {
+                continue;
+            }
+            seen.add(sku);
+            rows.push({ sku, quantity: qty });
+        }
+        const mism = Array.isArray(state.latestCompositionMismatches) ? state.latestCompositionMismatches : [];
+        for (const m of mism) {
+            const sku = Number(m.sku || 0);
+            const actualQty = Number(m.actual_quantity || 0);
+            if (!Number.isInteger(sku) || sku <= 0 || seen.has(sku)) {
+                continue;
+            }
+            seen.add(sku);
+            if (Number.isInteger(actualQty) && actualQty > 0) {
+                rows.push({ sku, quantity: actualQty });
+            }
+        }
+        if (!rows.length) {
+            for (const row of state.rows) {
+                const p = products.find((x) => String(x.id ?? "") === String(row.productId || ""));
+                const sku = Number(p?.ozon_sku || 0);
+                const qty = Number(row.qty || 0);
+                if (!Number.isInteger(sku) || sku <= 0 || seen.has(sku)) {
+                    continue;
+                }
+                seen.add(sku);
+                rows.push({ sku, quantity: Math.max(1, Number.isInteger(qty) ? qty : 1) });
+            }
+        }
+        if (!rows.length) {
+            rows.push({ sku: 0, quantity: 1 });
+        }
+        return rows;
+    }
+
+    function openCompositionModal() {
+        const oid = Number(state.supplyOrderId || 0);
+        if (!Number.isInteger(oid) || oid <= 0) {
+            createSupplyErrorEl.textContent = "Нет order_id для корректировки состава.";
+            createSupplyErrorEl.hidden = false;
+            return;
+        }
+        state.compositionDraftRows = buildCompositionRowsFromMismatch();
+        renderCompositionRows();
+        compositionModalErrorEl.hidden = true;
+        compositionModalErrorEl.textContent = "";
+        compositionModal.hidden = false;
+    }
+
+    async function saveCompositionUpdate() {
+        const orderId = Number(state.supplyOrderId || 0);
+        if (!Number.isInteger(orderId) || orderId <= 0) {
+            compositionModalErrorEl.textContent = "Не найден order_id для сохранения.";
+            compositionModalErrorEl.hidden = false;
+            return;
+        }
+        const items = compositionRowsToPayload();
+        if (!items.length) {
+            compositionModalErrorEl.textContent = "Добавьте хотя бы один SKU с количеством.";
+            compositionModalErrorEl.hidden = false;
+            return;
+        }
+        if (state.compositionUpdateInFlight) {
+            return;
+        }
+        state.compositionUpdateInFlight = true;
+        closeCompositionModal();
+        waitStart("Сохраняем товарный состав...");
+        compositionSaveBtn.disabled = true;
+        state.validationSkuLimitsBySku = {};
+        clearSupplyCreateError();
+        try {
+            const updResp = await fetch("/api/supplies/order-content-update", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ order_id: orderId, items }),
+            });
+            const updData = await updResp.json();
+            if (!updResp.ok || !updData || !updData.ok) {
+                waitFail("Состав не обновлен");
+                const ozErr = Array.isArray(updData.errors) ? formatContentUpdateErrorsForUser(updData.errors) : "";
+                const base = (updData && updData.error) ? String(updData.error) : "Ошибка при обновлении товарного состава.";
+                setSupplyCreateError(ozErr ? `${base}\n${ozErr}` : base);
+                updateSidebarSummary();
+                return;
+            }
+            const operationId = String(updData.operation_id || "");
+            if (!operationId) {
+                waitFail("Состав не обновлен");
+                setSupplyCreateError("Ozon не вернул operation_id для проверки статуса.");
+                updateSidebarSummary();
+                return;
+            }
+            waitSetText("Проверяем статус изменения состава...");
+            let finalStatus = "UNSPECIFIED";
+            let finalErrors = [];
+            const supplySid = Number(updData.supply_id || 0);
+            let lastNewBundleId = "";
+            for (let attempt = 1; attempt <= 12; attempt += 1) {
+                const stResp = await fetch("/api/supplies/order-content-update-status", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ operation_id: operationId }),
+                });
+                const stData = await stResp.json();
+                if (!stResp.ok || !stData || !stData.ok) {
+                    waitFail("Ошибка статуса состава");
+                    const stOz = Array.isArray(stData.errors) ? formatContentUpdateErrorsForUser(stData.errors) : "";
+                    const stBase = (stData && stData.error)
+                        ? String(stData.error)
+                        : "Не удалось получить статус изменения состава.";
+                    setSupplyCreateError(stOz ? `${stBase}\n${stOz}` : stBase);
+                    updateSidebarSummary();
+                    return;
+                }
+                if (stData.new_bundle_id) {
+                    lastNewBundleId = String(stData.new_bundle_id).trim();
+                }
+                finalStatus = String(stData.status || "UNSPECIFIED");
+                finalErrors = Array.isArray(stData.errors) ? stData.errors : [];
+                if (finalStatus === "SUCCESS" || finalStatus === "IN_PROGRESS") {
+                    if (finalStatus === "SUCCESS") {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+                await new Promise((resolve) => window.setTimeout(resolve, 1400));
+            }
+            if (finalStatus === "SUCCESS") {
+                waitDone("Состав заявки обновлен");
+                clearSupplyCreateError();
+                createSupplyReasonsEl.hidden = false;
+                const base = stripCompositionSuccessFromReasons(createSupplyReasonsEl.textContent);
+                createSupplyReasonsEl.textContent = base + COMPOSITION_OK_SUFFIX;
+                mismatchWarningEl.hidden = true;
+                if (adjustMismatchBtn) {
+                    adjustMismatchBtn.hidden = true;
+                }
+                state.hasOzonQtyAlert = false;
+                syncRowsFromCompositionItems(items);
+                syncCargoAllocationsToSelectedProducts();
+                renderCargoPlacesUi();
+                state.latestCompositionMismatches = [];
+                state.ozonAlertMaxBySku = {};
+                state.validationSkuLimitsBySku = {};
+                updateSidebarSummary();
+                return;
+            }
+            waitFail("Состав не обновлен");
+            const errHuman = formatContentUpdateErrorsForUser(finalErrors);
+            let errorsSuffix = errHuman ? ` ${errHuman}` : (finalErrors.length ? ` Коды: ${finalErrors.join(", ")}.` : "");
+            if (lastNewBundleId && Number.isInteger(supplySid) && supplySid > 0) {
+                waitSetText("Проверяем состав через Ozon validation...");
+                try {
+                    const vResp = await fetch("/api/supplies/order-content-update-validation", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ supply_id: supplySid, new_bundle_id: lastNewBundleId }),
+                    });
+                    const vData = await vResp.json();
+                    if (vResp.ok && vData && vData.ok && vData.data) {
+                        applyValidationSkuLimitsFromResponse(vData.data);
+                        const vText = buildValidationReportForUser(vData.data);
+                        if (vText) {
+                            errorsSuffix += `\n\n${vText}`;
+                            if (adjustMismatchBtn) {
+                                adjustMismatchBtn.hidden = true;
+                            }
+                        }
+                    } else if (vData && vData.error) {
+                        errorsSuffix += `\n\nПроверка validation не выполнена: ${String(vData.error)}`;
+                    }
+                } catch (_vErr) {
+                    errorsSuffix += "\n\nНе удалось вызвать проверку validation (сеть или таймаут).";
+                }
+            } else if (Array.isArray(finalErrors) && finalErrors.some((e) => String(e) === "SUPPLY_CONTENT_NOT_VALID")) {
+                errorsSuffix += "\n\nДля разбора состава нужен new_bundle_id из ответа Ozon на content/update/status; повторите сохранение позже или проверьте состав в личном кабинете Ozon.";
+            }
+            setSupplyCreateError(`Статус изменения состава: ${finalStatus}.${errorsSuffix}`.trim());
+            createSupplyReasonsEl.textContent = stripCompositionSuccessFromReasons(createSupplyReasonsEl.textContent);
+            updateSidebarSummary();
+        } catch (_err) {
+            waitFail("Состав не обновлен");
+            setSupplyCreateError("Не удалось отправить изменение состава.");
+            updateSidebarSummary();
+        } finally {
+            state.compositionUpdateInFlight = false;
+            compositionSaveBtn.disabled = false;
+        }
+    }
+
+    function parseOrderId(raw) {
+        const n = Number(raw);
+        if (!Number.isInteger(n) || n <= 0 || n > 999999999999) {
+            return 0;
+        }
+        return n;
+    }
+
+    async function createSupplyApplication() {
+        waitStart("Создаем заявку...");
+        clearSupplyCreateError();
+        createSupplyReasonsEl.hidden = true;
+        createSupplyReasonsEl.textContent = "";
+        state.hasOzonQtyAlert = false;
+        syncAdjustMismatchButton();
+        mismatchWarningEl.hidden = true;
+        mismatchWarningEl.textContent = "";
+
+        const draftId = Number(state.draftId || 0);
+        if (!Number.isInteger(draftId) || draftId <= 0 || !state.selectedSlotFrom || !state.selectedSlotTo) {
+            waitFail("Заявка не создана");
+            setSupplyCreateError("Нужны черновик и выбранный слот на шаге 4.");
+            updateSidebarSummary();
+            return;
+        }
+        if (!state.selectedMacrolocalClusterId) {
+            waitFail("Заявка не создана");
+            setSupplyCreateError("Не задан кластер отгрузки.");
+            updateSidebarSummary();
+            return;
+        }
+        createSupplyBtn.disabled = true;
+        try {
+            startProgressMessage("Идет запрос на создание заявки");
+            const resp = await fetch("/api/supplies/draft-supply-create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    draft_id: draftId,
+                    from_in_timezone: state.selectedSlotFrom,
+                    to_in_timezone: state.selectedSlotTo,
+                    macrolocal_cluster_id: state.selectedMacrolocalClusterId,
+                }),
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data || !data.ok) {
+                stopProgressMessage();
+                waitFail("Заявка не создана");
+                const reasonsRu = data.error_reasons_ru;
+                if (Array.isArray(reasonsRu) && reasonsRu.length) {
+                    createSupplyReasonsEl.textContent = renderReasonsLines(reasonsRu);
+                    createSupplyReasonsEl.hidden = false;
+                }
+                setSupplyCreateError((data && data.error) ? String(data.error) : "Ошибка создания заявки.");
+                updateSidebarSummary();
+                return;
+            }
+            const ru = data.error_reasons_ru;
+            const raw = data.error_reasons;
+            const meaningful = Array.isArray(raw)
+                && raw.length > 0
+                && !(raw.length === 1 && String(raw[0]) === "UNSPECIFIED");
+            if (meaningful && Array.isArray(ru) && ru.length) {
+                stopProgressMessage();
+                createSupplyReasonsEl.textContent = `Сообщения Ozon:\n${renderReasonsLines(ru)}`;
+                createSupplyReasonsEl.hidden = false;
+            }
+            waitSetText("Подтверждаем статус заявки...");
+            startProgressMessage("Заявка создана, подтверждаем статус");
+            await fetchSupplyApplicationStatus();
+        } catch (_err) {
+            stopProgressMessage();
+            waitFail("Заявка не создана");
+            setSupplyCreateError("Не удалось отправить запрос.");
+            updateSidebarSummary();
+        } finally {
+            createSupplyBtn.disabled = false;
+        }
+    }
+
+    async function fetchSupplyApplicationStatus() {
+        const draftId = Number(state.draftId || 0);
+        if (!Number.isInteger(draftId) || draftId <= 0) {
+            stopProgressMessage();
+            waitFail("Ошибка статуса заявки");
+            setSupplyCreateError("Нет черновика для проверки статуса.");
+            updateSidebarSummary();
+            return;
+        }
+        // Небольшая пауза после create: Ozon не всегда сразу отдаёт финальный статус.
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        for (let attempt = 1; attempt <= 6; attempt += 1) {
+            try {
+                const resp = await fetch("/api/supplies/draft-supply-create-status", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ draft_id: draftId }),
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data || !data.ok) {
+                    stopProgressMessage();
+                    waitFail("Ошибка статуса заявки");
+                    const ru = data.error_reasons_ru;
+                    if (Array.isArray(ru) && ru.length) {
+                        createSupplyReasonsEl.textContent = renderReasonsLines(ru);
+                        createSupplyReasonsEl.hidden = false;
+                    }
+                    setSupplyCreateError((data && data.error) ? String(data.error) : "Ошибка запроса статуса.");
+                    updateSidebarSummary();
+                    return;
+                }
+                const st = String(data.status || "UNSPECIFIED");
+                const stRu = String(data.status_ru || st);
+                const oid = data.order_id;
+                const reasonsRu = data.error_reasons_ru;
+                const orderIdNum = parseOrderId(oid);
+                const hasNonZeroOrderId = orderIdNum > 0;
+                // Даже при SUCCESS ждём order_id != 0.
+                if (st === "SUCCESS" && hasNonZeroOrderId) {
+                    stopProgressMessage();
+                    state.supplyOrderId = orderIdNum;
+                    clearSupplyCreateError();
+                    createSupplyReasonsEl.textContent = `Заявка создана. Статус: ${stRu}\norder_id: ${orderIdNum}`;
+                    createSupplyReasonsEl.hidden = false;
+                    await verifyCreatedOrderComposition(orderIdNum);
+                    cargoStep.hidden = false;
+                    ensureCargoUiSeeded();
+                    waitDone("Заявка подтверждена");
+                    state.activeStepId = "supply-create-step-supply-create";
+                    updateSidebarSummary();
+                    return;
+                }
+                if (st === "FAILED") {
+                    stopProgressMessage();
+                    waitFail("Заявка не создана");
+                    let body = `Статус: ${stRu}`;
+                    if (Array.isArray(reasonsRu) && reasonsRu.length) {
+                        body += `\n\nПричины:\n${renderReasonsLines(reasonsRu)}`;
+                    }
+                    createSupplyReasonsEl.textContent = body;
+                    createSupplyReasonsEl.hidden = false;
+                    setSupplyCreateError("Заявка не была создана.");
+                    updateSidebarSummary();
+                    return;
+                }
+            } catch (_err) {
+                stopProgressMessage();
+                waitFail("Ошибка статуса заявки");
+                setSupplyCreateError("Не удалось получить статус.");
+                updateSidebarSummary();
+                return;
+            }
+            await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        }
+        stopProgressMessage();
+        waitFail("Статус не подтвержден");
+        setSupplyCreateError("Статус получен, но order_id пока 0. Нажмите «Создать заявку» ещё раз.");
+        updateSidebarSummary();
+    }
+
+    openClusterModalBtn.addEventListener("click", openClusterModal);
+    closeClusterModalBtn.addEventListener("click", closeClusterModal);
+    clusterModal.addEventListener("click", (event) => {
+        if (event.target === clusterModal) {
+            closeClusterModal();
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !clusterModal.hidden) {
+            closeClusterModal();
+        }
+        if (event.key === "Escape" && compositionModal && !compositionModal.hidden) {
+            closeCompositionModal();
+        }
+    });
+    window.addEventListener("resize", () => {
+        syncStepSlider();
+    });
+    if (compositionModal) {
+        compositionModal.addEventListener("click", (event) => {
+            if (event.target === compositionModal) {
+                closeCompositionModal();
+            }
+        });
+    }
+    document.querySelectorAll(".supply-create-cluster-pick").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            if (btn.disabled) {
+                return;
+            }
+            const clusterName = String(btn.dataset.cluster || "").trim();
+            const dateIso = String(btn.dataset.date || "").trim();
+            const dateLabel = String(btn.dataset.dateLabel || "").trim() || dateIso;
+            if (!clusterName || !dateIso) {
+                return;
+            }
+            applyClusterSelection(clusterName, dateIso, dateLabel);
+        });
+    });
+    createDraftBtn.addEventListener("click", createDraft);
+    requestSlotsBtn.addEventListener("click", requestSlots);
+    createSupplyBtn.addEventListener("click", createSupplyApplication);
+    syncAdjustMismatchButton();
+    if (adjustMismatchBtn) {
+        adjustMismatchBtn.addEventListener("click", () => {
+            if (!state.hasOzonQtyAlert) {
+                syncAdjustMismatchButton();
+                return;
+            }
+            openCompositionModal();
+        });
+    }
+    if (compositionModalCloseBtn) {
+        compositionModalCloseBtn.addEventListener("click", closeCompositionModal);
+    }
+    if (compositionAddRowBtn) {
+        compositionAddRowBtn.addEventListener("click", () => {
+            state.compositionDraftRows.push({ sku: 0, quantity: 1 });
+            renderCompositionRows();
+        });
+    }
+    if (compositionSaveBtn) {
+        compositionSaveBtn.addEventListener("click", saveCompositionUpdate);
+    }
+    addCargoPlaceBtn.addEventListener("click", () => {
+        state.cargoPlaces.push({
+            id: state.cargoPlaceNextId++,
+            key: `cargo-${Date.now()}-${state.cargoPlaceNextId}`,
+            type: "BOX",
+            allocations: {},
+        });
+        renderCargoPlacesUi();
+    });
+    submitCargoBtn.addEventListener("click", submitCargoPlaces);
+    stepNextBtns.forEach((btn) => {
+        btn.addEventListener("click", async () => {
+            const nextId = String(btn.getAttribute("data-next-step-id") || "").trim();
+            if (!nextId) {
+                return;
+            }
+            const parentStep = btn.closest(".supply-create-step");
+            const parentId = parentStep ? parentStep.id : "";
+            if (parentId === "supply-create-step-cluster" && nextId === "supply-create-step-slots") {
+                const ok = await ensureDraftForCurrentSelection();
+                if (!ok) {
+                    updateStepNavigationState();
+                    return;
+                }
+            }
+            const nextEl = document.getElementById(nextId);
+            if (!nextEl || nextEl.hidden) {
+                return;
+            }
+            state.activeStepId = nextId;
+            syncStepSlider();
+        });
+    });
+    stepPrevBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const prevId = String(btn.getAttribute("data-prev-step-id") || "").trim();
+            if (!prevId) {
+                return;
+            }
+            const prevEl = document.getElementById(prevId);
+            if (!prevEl || prevEl.hidden) {
+                return;
+            }
+            state.activeStepId = prevId;
+            syncStepSlider();
+        });
+    });
+    if (sideCancelOrderBtn) {
+        sideCancelOrderBtn.addEventListener("click", async () => {
+            const oid = Number(state.supplyOrderId || 0);
+            if (!Number.isInteger(oid) || oid <= 0) {
+                return;
+            }
+            if (!window.confirm(`Отменить заявку ${oid} в Ozon?`)) {
+                return;
+            }
+            sideCancelOrderBtn.disabled = true;
+            try {
+                const resp = await fetch("/api/supply-queue/cancel-order", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ order_id: oid }),
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data || !data.ok) {
+                    const msg = (data && data.error) ? String(data.error) : "Не удалось отменить заявку.";
+                    showBottomToast(msg, "error", 3200);
+                    return;
+                }
+                showBottomToast("Заявка отменена.", "success", 1400);
+                window.setTimeout(() => window.location.reload(), 900);
+            } catch (_err) {
+                showBottomToast("Не удалось отменить заявку.", "error", 3200);
+            } finally {
+                sideCancelOrderBtn.disabled = !(Number.isInteger(Number(state.supplyOrderId || 0)) && Number(state.supplyOrderId || 0) > 0);
+                updateSidebarSummary();
+            }
+        });
+    }
+    if (clusterDays.length === 0) {
+        openClusterModalBtn.disabled = true;
+    }
+
+    if (products.length === 0) {
+        emptyProductsHint.hidden = false;
+    }
+
+    createRow();
+    rerenderAllRows();
+    updateSidebarSummary();
+})();
+</script>
+{% endblock %}
