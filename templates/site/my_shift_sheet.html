@@ -1,0 +1,129 @@
+{% extends "site/base.html" %}
+{% block title %}Смена {{ sheet.shift_date.strftime('%d.%m.%Y') }}{% endblock %}
+{% block sidebar %}
+<a href="/my-shift" class="btn">← Мои смены</a>
+<a href="/logout" class="btn">Выйти</a>
+{% endblock %}
+{% block extra_css %}
+<style>
+    .meta { color: #666; margin-bottom: 14px; font-size: 0.92rem; }
+    .alert { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 0.9rem; }
+    .alert-success { background: #d4edda; color: #155724; }
+    .alert-error { background: #fee2e2; color: #991b1b; }
+    .task-card {
+        border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px;
+        background: #fff;
+    }
+    .task-card.done { border-left: 4px solid #2e7d32; }
+    .task-card.partial { border-left: 4px solid #f9a825; }
+    .task-card.failed { border-left: 4px solid #c62828; }
+    .task-type { font-size: 0.78rem; text-transform: uppercase; color: #888; letter-spacing: 0.04em; }
+    .task-title { font-family: 'Russo One', sans-serif; font-size: 1.05rem; margin: 4px 0 8px; }
+    .task-qty { font-weight: 700; margin-bottom: 8px; }
+    .task-desc { color: #555; font-size: 0.88rem; margin-bottom: 10px; }
+    .report-form { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+    .report-form label { display: block; font-size: 0.82rem; color: #555; margin: 8px 0 4px; }
+    .report-form input[type="text"], .report-form input[type="number"], .report-form textarea {
+        width: 100%; max-width: 480px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box;
+    }
+    .report-form textarea { min-height: 64px; }
+    .status-options { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 8px 0; }
+    .status-options label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; }
+    .partial-fields { display: none; margin-top: 8px; }
+    .partial-fields.visible { display: block; }
+    .comment-required-hint { font-size: 0.8rem; color: #b45309; }
+    .task-report { background: #f5f5f5; padding: 10px; border-radius: 6px; font-size: 0.88rem; margin-top: 8px; }
+    .task-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .task-photos img { max-width: 120px; max-height: 120px; border-radius: 6px; border: 1px solid var(--border); }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Смена {{ sheet.shift_date.strftime('%d.%m.%Y') }}</h1>
+<p class="meta">
+    {% if sheet.manager_notes %}<em>{{ sheet.manager_notes }}</em><br>{% endif %}
+    {% if readonly %}Лист закрыт — только просмотр.{% else %}Отметьте каждый пункт по факту выполнения.{% endif %}
+</p>
+
+{% if request.query_params.get("success") %}
+<div class="alert alert-success">Статус сохранён.</div>
+{% endif %}
+{% if request.query_params.get("error") == "comment" %}
+<div class="alert alert-error">Для «Не выполнено» и «Частично» нужен комментарий.</div>
+{% elif request.query_params.get("error") == "percent" %}
+<div class="alert alert-error">Укажите процент выполнения от 1 до 99.</div>
+{% endif %}
+
+{% for t in sheet.tasks %}
+<article class="task-card {% if t.status == 'completed' %}done{% elif t.status == 'partial' %}partial{% elif t.status == 'failed' %}failed{% endif %}" id="task-{{ t.id }}">
+    <div class="task-type">{{ task_type_labels.get(t.task_type, t.task_type) }}</div>
+    <h2 class="task-title">{{ t.title }}</h2>
+    <p class="task-qty">План: {{ t.target_quantity }} {{ t.unit_label }}</p>
+    {% if t.description %}<p class="task-desc">{{ t.description }}</p>{% endif %}
+
+    {% if t.status != 'pending' %}
+    <div class="task-report">
+        <strong>{{ task_status_labels.get(t.status, t.status) }}</strong>
+        {% if t.completion_percent is not none %} — {{ t.completion_percent }}%{% endif %}
+        {% if t.worker_comment %}<br>{{ t.worker_comment }}{% endif %}
+    </div>
+    {% if t.attachments %}
+    <div class="task-photos">
+        {% for a in t.attachments %}
+        <a href="{{ shift_attachment_url(a.stored_filename) }}" target="_blank" rel="noopener">
+            <img src="{{ shift_attachment_url(a.stored_filename) }}" alt="Фото">
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if not readonly %}
+    <form class="report-form" method="POST" action="/my-shift/task/{{ t.id }}/report" enctype="multipart/form-data">
+        <p class="comment-required-hint">Для «Не выполнено» и «Частично» комментарий обязателен.</p>
+        <div class="status-options">
+            <label><input type="radio" name="report_status" value="completed" {% if t.status == 'completed' %}checked{% endif %}> Выполнено</label>
+            <label><input type="radio" name="report_status" value="partial" class="js-partial-radio" {% if t.status == 'partial' %}checked{% endif %}> Частично</label>
+            <label><input type="radio" name="report_status" value="failed" {% if t.status == 'failed' %}checked{% endif %}> Не выполнено</label>
+        </div>
+        <div class="partial-fields js-partial-fields">
+            <label>Процент выполнения (1–99)</label>
+            <input type="number" name="completion_percent" min="1" max="99" value="{{ t.completion_percent or '' }}">
+        </div>
+        <label>Комментарий</label>
+        <textarea name="worker_comment" placeholder="Что сделано, что помешало…">{{ t.worker_comment or '' }}</textarea>
+        <label>Фото (необязательно)</label>
+        <input type="file" name="photos" accept="image/*" multiple>
+        <div class="btn-row">
+            <button type="submit" class="btn">Сохранить отметку</button>
+        </div>
+    </form>
+    {% endif %}
+</article>
+{% else %}
+<p>В листе нет заданий.</p>
+{% endfor %}
+
+<script>
+(function() {
+    document.querySelectorAll('.report-form').forEach(function(form) {
+        var partialRadios = form.querySelectorAll('.js-partial-radio');
+        var partialFields = form.querySelector('.js-partial-fields');
+        function syncPartial() {
+            var isPartial = false;
+            partialRadios.forEach(function(r) { if (r.checked) isPartial = true; });
+            if (partialFields) partialFields.classList.toggle('visible', isPartial);
+        }
+        form.querySelectorAll('input[name="report_status"]').forEach(function(r) {
+            r.addEventListener('change', syncPartial);
+        });
+        syncPartial();
+    });
+    var errTask = new URLSearchParams(window.location.search).get('task');
+    if (errTask) {
+        var el = document.getElementById('task-' + errTask);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+})();
+</script>
+{% endblock %}

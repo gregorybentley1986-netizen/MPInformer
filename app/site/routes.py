@@ -481,6 +481,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.auth import verify_site_user, verify_password
+from app.shift_planning.helpers import user_is_operator, normalize_user_role
 from app.db.database import get_db, AsyncSessionLocal
 from app.db.models import (
     User, PrintJob, Printer, Material, Color, PrintQueueItem, Spool,
@@ -657,7 +658,8 @@ async def login_page(request: Request):
     try:
         session = getattr(request, "session", None)
         if session and session.get("site_user_id"):
-            return RedirectResponse(url="/", status_code=303)
+            dest = "/my-shift" if session.get("site_user_role") == "operator" else "/"
+            return RedirectResponse(url=dest, status_code=303)
     except Exception:
         pass
     error = request.query_params.get("error") == "1"
@@ -688,8 +690,11 @@ async def login_submit(
         if session is not None:
             session["site_user_id"] = user.id
             session["site_username"] = user.username
+            session["site_user_role"] = (getattr(user, "role", None) or "staff").strip().lower()
     except Exception as e:
         logger.warning("Сессия при входе: %s", e)
+    if user_is_operator(user):
+        return RedirectResponse(url="/my-shift", status_code=303)
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -701,6 +706,7 @@ async def logout(request: Request):
         if session is not None:
             session.pop("site_user_id", None)
             session.pop("site_username", None)
+            session.pop("site_user_role", None)
     except Exception:
         pass
     return RedirectResponse(url="/login", status_code=303)

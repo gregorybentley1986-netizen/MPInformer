@@ -1,0 +1,142 @@
+{% extends "site/base.html" %}
+{% block title %}Лист смены #{{ sheet.id }}{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}<a href="/" class="btn-header">Сайт</a>{% endblock %}
+{% block sidebar %}{% include "admin/_sidebar.html" %}{% endblock %}
+{% block extra_css %}
+<style>
+    .meta { color: #666; margin-bottom: 16px; font-size: 0.92rem; }
+    .alert { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 0.9rem; }
+    .alert-success { background: #d4edda; color: #155724; }
+    .alert-error { background: #f8d7da; color: #721c24; }
+    .card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 16px; background: #fafafa; }
+    .card h3 { font-family: 'Russo One', sans-serif; font-size: 1rem; margin-bottom: 10px; }
+    .task-list { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .task-list th, .task-list td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    .task-list th { background: #eee; font-size: 0.82rem; }
+    .form-inline { display: grid; gap: 10px; max-width: 640px; }
+    .form-inline label { font-size: 0.82rem; color: #555; display: block; margin-bottom: 3px; }
+    .form-inline input, .form-inline select, .form-inline textarea {
+        width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box;
+    }
+    .form-inline textarea { min-height: 56px; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 120px; gap: 10px; }
+    .actions-top { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .status-pill { padding: 4px 12px; border-radius: 999px; background: #e5e7eb; font-size: 0.85rem; }
+    .status-pill.published { background: #d1fae5; }
+    .status-pill.closed { background: #dbeafe; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Лист на смену</h1>
+<p class="meta">
+    <strong>{{ sheet.shift_date.strftime('%d.%m.%Y') }}</strong> ·
+    оператор: <strong>{{ sheet.assignee.username if sheet.assignee else '—' }}</strong> ·
+    <span class="status-pill {{ sheet.status }}">{{ status_labels.get(sheet.status, sheet.status) }}</span>
+</p>
+
+{% if request.query_params.get("success") == "published" %}
+<div class="alert alert-success">Лист выдан оператору — он увидит его в разделе «Моя смена».</div>
+{% elif request.query_params.get("success") == "closed" %}
+<div class="alert alert-success">Лист закрыт.</div>
+{% elif request.query_params.get("error") == "empty" %}
+<div class="alert alert-error">Добавьте хотя бы одно задание перед выдачей.</div>
+{% elif request.query_params.get("error") == "locked" %}
+<div class="alert alert-error">Редактирование состава доступно только в черновике.</div>
+{% endif %}
+
+{% if sheet.manager_notes %}
+<p class="meta"><em>Комментарий:</em> {{ sheet.manager_notes }}</p>
+{% endif %}
+
+<div class="actions-top">
+    <a href="/admin/planning" class="btn">← К списку</a>
+    {% if sheet.status == 'draft' %}
+    <form method="POST" action="/admin/planning/{{ sheet.id }}/publish" style="display:inline;">
+        <button type="submit" class="btn btn-op btn-income">Выдать оператору</button>
+    </form>
+    {% elif sheet.status == 'published' %}
+    <form method="POST" action="/admin/planning/{{ sheet.id }}/close" style="display:inline;">
+        <button type="submit" class="btn">Закрыть лист</button>
+    </form>
+    {% endif %}
+    <form method="POST" action="/admin/planning/{{ sheet.id }}/delete" style="display:inline;" onsubmit="return confirm('Удалить лист и все задания?');">
+        <button type="submit" class="btn btn-op btn-expense">Удалить</button>
+    </form>
+</div>
+
+<table class="task-list">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Тип</th>
+            <th>Задание</th>
+            <th>Кол-во</th>
+            <th>Статус оператора</th>
+            {% if sheet.status == 'draft' %}<th></th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for t in sheet.tasks %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ task_type_labels.get(t.task_type, t.task_type) }}</td>
+            <td>
+                <strong>{{ t.title }}</strong>
+                {% if t.description %}<br><span style="color:#666;font-size:0.85rem;">{{ t.description }}</span>{% endif %}
+                {% if t.worker_comment %}<br><span style="color:#92400e;font-size:0.85rem;">Отчёт: {{ t.worker_comment }}</span>{% endif %}
+            </td>
+            <td>{{ t.target_quantity }} {{ t.unit_label }}</td>
+            <td>
+                {{ task_status_labels.get(t.status, t.status) }}
+                {% if t.completion_percent is not none %} ({{ t.completion_percent }}%){% endif %}
+            </td>
+            {% if sheet.status == 'draft' %}
+            <td>
+                <form method="POST" action="/admin/planning/{{ sheet.id }}/task/{{ t.id }}/delete" style="display:inline;">
+                    <button type="submit" class="btn" style="padding:4px 8px;font-size:0.8rem;">Удалить</button>
+                </form>
+            </td>
+            {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="6">Заданий пока нет — добавьте ниже.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if sheet.status == 'draft' %}
+<div class="card">
+    <h3>Добавить задание</h3>
+    <form method="POST" action="/admin/planning/{{ sheet.id }}/task/add" class="form-inline">
+        <div class="form-group">
+            <label>Тип</label>
+            <select name="task_type">
+                {% for code, label in task_type_labels.items() %}
+                <option value="{{ code }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Название / что сделать</label>
+            <input type="text" name="title" required maxlength="256" placeholder="Например: Корпус А — 20 шт.">
+        </div>
+        <div class="form-group">
+            <label>Детали (необязательно)</label>
+            <textarea name="description" placeholder="Артикулы, принтеры, особенности"></textarea>
+        </div>
+        <div class="form-row-2">
+            <div>
+                <label>Количество</label>
+                <input type="number" name="target_quantity" min="1" value="1" required>
+            </div>
+            <div>
+                <label>Ед.</label>
+                <input type="text" name="unit_label" value="шт." maxlength="32">
+            </div>
+        </div>
+        <button type="submit" class="btn">Добавить в лист</button>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

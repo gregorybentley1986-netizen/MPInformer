@@ -39,6 +39,14 @@
                value="{{ user.username if user else '' }}"
                autocomplete="username">
     </div>
+    <div class="form-group">
+        <label for="role">Роль</label>
+        <select id="role" name="role" required style="max-width:320px;padding:10px 12px;border:2px solid var(--border);width:100%;">
+            {% for code, label in role_labels.items() %}
+            <option value="{{ code }}" {% if user and (user.role or 'staff') == code %}selected{% elif not user and code == 'staff' %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
     {% if is_edit %}
     <div class="form-group">
         <label for="new_password">Новый пароль</label>

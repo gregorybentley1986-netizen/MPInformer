@@ -39,6 +39,8 @@ from app.auth import hash_password
 from app.config import settings
 from app.time_utils import MSK
 from app.db.database import get_db
+from app.shift_planning.helpers import normalize_user_role
+from app.shift_planning.constants import USER_ROLE_LABELS, USER_ROLE_OPERATOR, USER_ROLE_STAFF
 
 
 def _datetime_to_msk_display(dt):
@@ -683,6 +685,7 @@ async def admin_users_list(
     return templates.TemplateResponse("admin/users.html", {
         "request": request,
         "users": users,
+        "role_labels": USER_ROLE_LABELS,
     })
 
 
@@ -693,6 +696,7 @@ async def admin_user_new_page(request: Request, username: str = Depends(verify_a
         "request": request,
         "user": None,
         "is_edit": False,
+        "role_labels": USER_ROLE_LABELS,
     })
 
 
@@ -703,6 +707,7 @@ async def admin_user_create(
     username: str = Depends(verify_admin),
     login: str = Form(..., alias="username"),
     password: str = Form(...),
+    role: str = Form("staff"),
 ):
     """Создание пользователя (логин + пароль)."""
     login = (login or "").strip()
@@ -712,7 +717,11 @@ async def admin_user_create(
     existing = await db.execute(select(User).where(User.username == login))
     if existing.scalar_one_or_none():
         return RedirectResponse(url="/admin/users/new?error=exists", status_code=303)
-    user = User(username=login, password_hash=hash_password(password))
+    user = User(
+        username=login,
+        password_hash=hash_password(password),
+        role=normalize_user_role(role),
+    )
     db.add(user)
     await db.commit()
     return RedirectResponse(url="/admin/users?success=created", status_code=303)
@@ -734,6 +743,7 @@ async def admin_user_edit_page(
         "request": request,
         "user": user,
         "is_edit": True,
+        "role_labels": USER_ROLE_LABELS,
     })
 
 
@@ -745,6 +755,7 @@ async def admin_user_update(
     username: str = Depends(verify_admin),
     login: str = Form(..., alias="username"),
     new_password: str = Form(""),
+    role: str = Form("staff"),
 ):
     """Обновление логина и/или пароля. Пароль меняется только если указан."""
     login = (login or "").strip()
@@ -760,6 +771,7 @@ async def admin_user_update(
     if other.scalar_one_or_none():
         return RedirectResponse(url=f"/admin/users/{user_id}/edit?error=exists", status_code=303)
     user.username = login
+    user.role = normalize_user_role(role)
     if new_password:
         user.password_hash = hash_password(new_password)
     await db.commit()
@@ -4152,3 +4164,8 @@ async def admin_finance_counterparty_reorder(
         row_map[cid].sort_order = idx
     await db.commit()
     return JSONResponse({"ok": True})
+
+
+from app.admin.planning_routes import router as planning_router
+
+router.include_router(planning_router)

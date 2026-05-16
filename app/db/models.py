@@ -1,7 +1,7 @@
 """
 Модели базы данных
 """
-from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, UniqueConstraint, ForeignKey, Table, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, UniqueConstraint, ForeignKey, Table, Boolean, Date, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -32,7 +32,72 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(64), unique=True, nullable=False, index=True)
     password_hash = Column(String(256), nullable=False)
+    # staff — полный доступ к сайту; operator — листы-задания на смену
+    role = Column(String(32), nullable=False, default="staff", index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    shift_sheets = relationship("ShiftSheet", back_populates="assignee", foreign_keys="ShiftSheet.assignee_user_id")
+
+
+class ShiftSheet(Base):
+    """Лист-задание на смену для оператора (печать / сборка / упаковка)."""
+    __tablename__ = "shift_sheets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignee_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    shift_date = Column(Date, nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="draft", index=True)  # draft | published | closed
+    manager_notes = Column(String(1024), nullable=False, default="")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+
+    assignee = relationship("User", back_populates="shift_sheets", foreign_keys=[assignee_user_id])
+    tasks = relationship(
+        "ShiftTask",
+        back_populates="sheet",
+        cascade="all, delete-orphan",
+        order_by="ShiftTask.sort_order",
+    )
+
+
+class ShiftTask(Base):
+    """Пункт листа-задания на смену."""
+    __tablename__ = "shift_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sheet_id = Column(Integer, ForeignKey("shift_sheets.id", ondelete="CASCADE"), nullable=False, index=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    task_type = Column(String(32), nullable=False, default="print")  # print | assemble | pack
+    title = Column(String(256), nullable=False, default="")
+    description = Column(Text, nullable=False, default="")
+    target_quantity = Column(Integer, nullable=False, default=1)
+    unit_label = Column(String(32), nullable=False, default="шт.")
+    # pending | completed | partial | failed
+    status = Column(String(32), nullable=False, default="pending", index=True)
+    completion_percent = Column(Integer, nullable=True)
+    worker_comment = Column(String(2000), nullable=False, default="")
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    sheet = relationship("ShiftSheet", back_populates="tasks")
+    attachments = relationship(
+        "ShiftTaskAttachment",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+
+
+class ShiftTaskAttachment(Base):
+    """Фото к отчёту оператора по пункту задания."""
+    __tablename__ = "shift_task_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("shift_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    stored_filename = Column(String(256), nullable=False)
+    original_filename = Column(String(256), nullable=False, default="")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    task = relationship("ShiftTask", back_populates="attachments")
 
 
 class Color(Base):

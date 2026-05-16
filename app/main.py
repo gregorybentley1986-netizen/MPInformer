@@ -23,6 +23,7 @@ from app.modules.notifications.scheduler import start_scheduler
 from app.telegram.bot import start_bot, stop_bot
 from app.admin.routes import router as admin_router
 from app.site.routes import router as site_router
+from app.site.shift_routes import router as shift_router
 
 # Корень проекта для пути к файлу логов и загрузок
 _project_root = Path(__file__).resolve().parent.parent
@@ -167,6 +168,7 @@ async def _stl_large_form_middleware(request: StarletteRequest, call_next):
 
 # Публичные страницы сервиса (главная, очередь печати, очередь поставок)
 app.include_router(site_router)
+app.include_router(shift_router)
 # Админ-панель
 app.include_router(admin_router)
 # Загрузки (STL деталей, фото деталей и изделий) — по /uploads/...
@@ -244,6 +246,8 @@ async def startup_event():
     ensure_warehouse_defect_records_table,
     ensure_printed_part_stock_log_table,
     ensure_finance_schema,
+    ensure_user_role,
+    ensure_shift_planning_tables,
 )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -274,6 +278,8 @@ async def startup_event():
         await conn.run_sync(ensure_warehouse_defect_records_table)
         await conn.run_sync(ensure_printed_part_stock_log_table)
         await conn.run_sync(ensure_finance_schema)
+        await conn.run_sync(ensure_user_role)
+        await conn.run_sync(ensure_shift_planning_tables)
     logger.info("Запуск MPInformer...")
     logger.info(f"Время уведомлений: {getattr(settings, 'report_notification_times', '09:00')}")
     

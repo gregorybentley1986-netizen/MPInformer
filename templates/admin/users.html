@@ -47,6 +47,7 @@
         <tr>
             <th>ID</th>
             <th>Логин</th>
+            <th>Роль</th>
             <th>Действия</th>
         </tr>
     </thead>
@@ -55,6 +56,7 @@
         <tr>
             <td>{{ u.id }}</td>
             <td>{{ u.username }}</td>
+            <td>{{ role_labels.get(u.role, u.role or 'staff') }}</td>
             <td>
                 <div class="users-actions">
                     <a href="/admin/users/{{ u.id }}/edit" class="btn">Изменить</a>
@@ -65,7 +67,7 @@
             </td>
         </tr>
         {% else %}
-        <tr><td colspan="3">Нет пользователей. <a href="/admin/users/new">Создать первого</a>.</td></tr>
+        <tr><td colspan="4">Нет пользователей. <a href="/admin/users/new">Создать первого</a>.</td></tr>
         {% endfor %}
     </tbody>
 </table>

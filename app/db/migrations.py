@@ -517,3 +517,61 @@ def ensure_finance_schema(conn):
         ))
     except Exception:
         pass
+
+
+def ensure_user_role(conn):
+    """Роль пользователя сайта: staff | operator."""
+    try:
+        conn.execute(text(
+            "ALTER TABLE users ADD COLUMN role VARCHAR(32) NOT NULL DEFAULT 'staff'"
+        ))
+    except Exception:
+        pass
+
+
+def ensure_shift_planning_tables(conn):
+    """Листы-задания на смену для операторов."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS shift_sheets (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            assignee_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            shift_date DATE NOT NULL,
+            status VARCHAR(32) NOT NULL DEFAULT 'draft',
+            manager_notes VARCHAR(1024) NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            published_at TIMESTAMP
+        )
+    """))
+    try:
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_shift_sheets_assignee_date "
+            "ON shift_sheets (assignee_user_id, shift_date)"
+        ))
+    except Exception:
+        pass
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS shift_tasks (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            sheet_id INTEGER NOT NULL REFERENCES shift_sheets(id) ON DELETE CASCADE,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            task_type VARCHAR(32) NOT NULL DEFAULT 'print',
+            title VARCHAR(256) NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            target_quantity INTEGER NOT NULL DEFAULT 1,
+            unit_label VARCHAR(32) NOT NULL DEFAULT 'шт.',
+            status VARCHAR(32) NOT NULL DEFAULT 'pending',
+            completion_percent INTEGER,
+            worker_comment VARCHAR(2000) NOT NULL DEFAULT '',
+            completed_at TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS shift_task_attachments (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL REFERENCES shift_tasks(id) ON DELETE CASCADE,
+            stored_filename VARCHAR(256) NOT NULL,
+            original_filename VARCHAR(256) NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))

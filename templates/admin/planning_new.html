@@ -1,0 +1,53 @@
+{% extends "site/base.html" %}
+{% block title %}Новый лист смены{% endblock %}
+{% block logo %}<a href="/admin">MPI Admin</a>{% endblock %}
+{% block header_right %}<a href="/" class="btn-header">Сайт</a>{% endblock %}
+{% block sidebar %}{% include "admin/_sidebar.html" %}{% endblock %}
+{% block extra_css %}
+<style>
+    .alert-error { padding: 12px; background: #f8d7da; color: #721c24; border-radius: 8px; margin-bottom: 12px; }
+    .form-group { margin-bottom: 14px; max-width: 420px; }
+    .form-group label { display: block; font-size: 0.88rem; color: #555; margin-bottom: 4px; }
+    .form-group input, .form-group select, .form-group textarea {
+        width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; box-sizing: border-box;
+    }
+    .form-group textarea { min-height: 72px; resize: vertical; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Новый лист на смену</h1>
+
+{% if request.query_params.get("error") == "date" %}
+<div class="alert-error">Укажите корректную дату смены.</div>
+{% elif request.query_params.get("error") == "user" %}
+<div class="alert-error">Выберите пользователя с ролью «Оператор смены» (создайте в разделе Пользователи).</div>
+{% endif %}
+
+{% if not operators %}
+<p style="color:#b71c1c;margin-bottom:12px;">Нет операторов. В <a href="/admin/users/new">пользователях</a> создайте аккаунт с ролью «Оператор смены».</p>
+{% endif %}
+
+<form method="POST" action="/admin/planning/new">
+    <div class="form-group">
+        <label for="assignee_user_id">Оператор</label>
+        <select id="assignee_user_id" name="assignee_user_id" required {% if not operators %}disabled{% endif %}>
+            <option value="">— выберите —</option>
+            {% for op in operators %}
+            <option value="{{ op.id }}">{{ op.username }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="shift_date">Дата смены</label>
+        <input type="date" id="shift_date" name="shift_date" value="{{ default_date }}" required>
+    </div>
+    <div class="form-group">
+        <label for="manager_notes">Комментарий руководителя (необязательно)</label>
+        <textarea id="manager_notes" name="manager_notes" placeholder="Общие указания на смену"></textarea>
+    </div>
+    <p style="margin-top:16px;">
+        <button type="submit" class="btn" {% if not operators %}disabled{% endif %}>Создать и добавить задания</button>
+        <a href="/admin/planning" class="btn" style="margin-left:8px;">Отмена</a>
+    </p>
+</form>
+{% endblock %}
