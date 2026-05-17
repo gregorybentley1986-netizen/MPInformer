@@ -1,6 +1,6 @@
 <style>
     .shift-print-wrap { margin-bottom: 16px; max-width: 100%; overflow-x: auto; }
-    .shift-time-group { margin-bottom: 10px; min-width: 280px; }
+    .shift-time-group { margin-bottom: 10px; min-width: 320px; }
     .shift-time-head {
         font-family: 'Russo One', sans-serif; font-size: 0.95rem; color: #374151;
         padding: 4px 8px; background: #f3f4f6; border-radius: 6px 6px 0 0;
@@ -10,9 +10,8 @@
         width: 100%; border-collapse: collapse; font-size: 0.82rem;
         table-layout: fixed;
     }
-    .shift-print-table col.col-printer { width: 36px; }
-    .shift-print-table col.col-warn { width: 28px; }
-    .shift-print-table col.col-actions { width: 118px; }
+    .shift-print-table col.col-printer { width: 150px; }
+    .shift-print-table col.col-actions { width: 150px; }
     .shift-print-table col.col-del { width: 32px; }
     .shift-print-table col.col-job { width: auto; }
     .shift-print-table th, .shift-print-table td {
@@ -23,43 +22,53 @@
     .shift-print-table tr.row-partial td { background: #fffbeb; }
     .shift-print-table tr.row-failed td { background: #fef2f2; }
     .td-printer {
-        text-align: center; font-weight: 700; font-size: 0.8rem;
-        white-space: nowrap; padding-left: 4px; padding-right: 4px;
+        font-weight: 700; font-size: 0.82rem;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .td-job { overflow: hidden; }
     .job-cell {
         display: flex; align-items: center; gap: 8px; min-width: 0;
     }
-    .job-name {
-        flex: 1 1 auto; min-width: 0; font-weight: 600;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
     .job-mat {
         flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
     }
     .mat-color-sq {
-        width: 18px; height: 18px; border-radius: 4px;
-        border: 1px solid rgba(0,0,0,0.22); flex-shrink: 0; display: inline-block;
+        width: 20px; height: 20px; border-radius: 4px;
+        border: 1px solid rgba(0,0,0,0.25); flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        position: relative; box-sizing: border-box;
+    }
+    .mat-color-sq.has-warn {
+        box-shadow: inset 0 0 0 2px rgba(0,0,0,0.35);
+    }
+    .mat-sq-warn-mark {
+        font-weight: 900; font-size: 15px; line-height: 1;
+        color: #fff;
+        text-shadow:
+            0 0 2px #000,
+            0 1px 3px #000,
+            1px 0 3px #000,
+            -1px 0 2px #000;
+        pointer-events: none;
+        user-select: none;
     }
     .mat-plastic {
         font-size: 0.72rem; color: #6b7280; white-space: nowrap;
-        max-width: 5rem; overflow: hidden; text-overflow: ellipsis;
+        max-width: 4.5rem; overflow: hidden; text-overflow: ellipsis;
     }
-    .td-warn { text-align: center; padding-left: 2px; padding-right: 2px; }
-    .mat-warn {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 20px; height: 20px; border-radius: 50%; background: #fef3c7; color: #b45309;
-        font-size: 0.72rem; cursor: help; border: none; padding: 0;
+    .job-name {
+        flex: 1 1 auto; min-width: 0; font-weight: 600;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .td-actions { padding-left: 4px; padding-right: 6px; overflow: visible; }
+    .td-actions { padding-left: 6px; padding-right: 8px; overflow: visible; }
     .row-actions {
-        display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+        display: flex; align-items: center; justify-content: flex-end; gap: 6px;
         flex-wrap: nowrap;
     }
-    .status-icons { display: inline-flex; gap: 2px; flex-shrink: 0; }
+    .status-icons { display: inline-flex; gap: 4px; flex-shrink: 0; }
     .status-btn {
         display: inline-flex; align-items: center; justify-content: center;
-        width: 26px; height: 26px; padding: 0; border: 1px solid transparent;
+        width: 28px; height: 28px; padding: 0; border: 1px solid transparent;
         border-radius: 6px; background: transparent; cursor: pointer; color: #9ca3af;
         flex-shrink: 0;
     }
@@ -68,7 +77,7 @@
     .status-btn.st-completed.active { color: #15803d; }
     .status-btn.st-partial.active { color: #ca8a04; }
     .status-btn.st-failed.active { color: #dc2626; }
-    .status-btn svg { width: 16px; height: 16px; display: block; }
+    .status-btn svg { width: 18px; height: 18px; display: block; }
     .comment-btn {
         display: inline-flex; align-items: center; justify-content: center;
         width: 28px; height: 28px; padding: 0; border: none; border-radius: 6px;
@@ -77,8 +86,12 @@
     .comment-btn.has-comment { color: #2563eb; }
     .comment-btn:hover { background: #eff6ff; }
     .comment-btn svg { width: 17px; height: 17px; }
-    .st-readonly { font-size: 1rem; line-height: 1; padding: 0 2px; }
-    .comment-hint { font-size: 0.85rem; opacity: 0.85; }
+    .st-readonly {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; font-size: 1rem; line-height: 1;
+    }
+    .st-readonly.st-partial-icon { color: #ca8a04; }
+    .st-readonly.st-partial-icon svg { width: 18px; height: 18px; display: block; }
     .btn-del {
         padding: 0 6px; font-size: 1rem; line-height: 1.2; border: none;
         background: transparent; color: #999; cursor: pointer;

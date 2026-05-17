@@ -1,4 +1,4 @@
-{# print_groups, task_status_labels, readonly, admin_draft=false, sheet_id=none #}
+{# print_groups, task_status_labels, readonly, admin_draft=false, sheet_id=none, admin_view=false #}
 {% for group in print_groups %}
 <div class="shift-time-group">
     <div class="shift-time-head">{{ group.time_label }}</div>
@@ -6,7 +6,6 @@
         <colgroup>
             <col class="col-printer">
             <col class="col-job">
-            <col class="col-warn">
             <col class="col-actions">
             {% if admin_draft %}<col class="col-del">{% endif %}
         </colgroup>
@@ -14,7 +13,6 @@
             <tr>
                 <th>Пр.</th>
                 <th>Задание</th>
-                <th></th>
                 <th>Статус</th>
                 {% if admin_draft %}<th></th>{% endif %}
             </tr>
@@ -22,33 +20,42 @@
         <tbody>
             {% for row in group.rows %}
             <tr id="task-{{ row.task_id }}" class="{% if row.status == 'completed' %}row-done{% elif row.status == 'partial' %}row-partial{% elif row.status == 'failed' %}row-failed{% endif %}">
-                <td class="td-printer" title="{{ row.printer_title }}">{{ row.printer_display }}</td>
+                <td class="td-printer" title="{{ row.printer_title }}">{{ row.printer_number }}</td>
                 <td class="td-job">
                     <div class="job-cell">
-                        <span class="job-name" title="{{ row.job_name }}">{{ row.job_name }}</span>
                         {% if row.material_has or row.material_plastic_type %}
                         <span class="job-mat">
                             {% if row.material_has %}
-                            <span class="mat-color-sq" data-color="{{ row.material_color_hex }}" title="{{ row.material_color_name }}"></span>
+                            <span class="mat-color-sq{% if row.material_warning %} has-warn{% endif %}"
+                                data-color="{{ row.material_color_hex }}"
+                                title="{% if row.material_warning %}{{ row.material_warning_text }}{% else %}{{ row.material_color_name }}{% endif %}">
+                                {% if row.material_warning %}<span class="mat-sq-warn-mark" aria-hidden="true">!</span>{% endif %}
+                            </span>
                             {% endif %}
                             {% if row.material_plastic_type %}
                             <span class="mat-plastic" title="{{ row.material_plastic_type }}">{{ row.material_plastic_type }}</span>
                             {% endif %}
                         </span>
                         {% endif %}
+                        <span class="job-name" title="{{ row.job_name }}">{{ row.job_name }}</span>
                     </div>
-                </td>
-                <td class="td-warn">
-                    {% if row.material_warning %}
-                    <button type="button" class="mat-warn" title="{{ row.material_warning_text }}">!</button>
-                    {% endif %}
                 </td>
                 <td class="td-actions">
                     <div class="row-actions">
                         {% if readonly %}
-                        <span class="st-readonly" title="{{ task_status_labels.get(row.status, row.status) }}{% if row.completion_percent is not none %} {{ row.completion_percent }}%{% endif %}">
-                            {% if row.status == 'completed' %}✓{% elif row.status == 'partial' %}◐{% elif row.status == 'failed' %}✗{% else %}○{% endif %}
+                        {% if row.status == 'partial' %}
+                        <span class="st-readonly st-partial-icon" title="{{ task_status_labels.get(row.status, row.status) }}{% if row.completion_percent is not none %} {{ row.completion_percent }}%{% endif %}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M12 3L2 21h20L12 3z"/>
+                                <path d="M12 9v5" stroke-linecap="round"/>
+                                <path d="M12 17h.01" stroke-linecap="round" stroke-width="3"/>
+                            </svg>
                         </span>
+                        {% else %}
+                        <span class="st-readonly" title="{{ task_status_labels.get(row.status, row.status) }}{% if row.completion_percent is not none %} {{ row.completion_percent }}%{% endif %}">
+                            {% if row.status == 'completed' %}✓{% elif row.status == 'failed' %}✗{% else %}○{% endif %}
+                        </span>
+                        {% endif %}
                         {% if admin_view %}
                         {% if row.has_comment %}
                         <span class="comment-btn has-comment" title="{{ row.worker_comment }}">
@@ -72,11 +79,15 @@
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
                                 </button>
                             </form>
-                            <button type="button" class="status-btn st-partial {% if row.status == 'partial' %}active{% endif %} js-open-status-modal" title="Частично"
+                            <button type="button" class="status-btn st-partial {% if row.status == 'partial' %}active{% endif %} js-open-status-modal" title="Частично" aria-label="Частично"
                                 data-task-id="{{ row.task_id }}" data-status="partial" data-comment="{{ row.worker_comment|replace('\n',' ')|e }}" data-pct="{{ row.completion_percent or '' }}">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l5 3"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+                                    <path d="M12 3L2 21h20L12 3z"/>
+                                    <path d="M12 9v5" stroke-linecap="round"/>
+                                    <path d="M12 17h.01" stroke-linecap="round" stroke-width="3"/>
+                                </svg>
                             </button>
-                            <button type="button" class="status-btn st-failed {% if row.status == 'failed' %}active{% endif %} js-open-status-modal" title="Не выполнено"
+                            <button type="button" class="status-btn st-failed {% if row.status == 'failed' %}active{% endif %} js-open-status-modal" title="Не выполнено" aria-label="Не выполнено"
                                 data-task-id="{{ row.task_id }}" data-status="failed" data-comment="{{ row.worker_comment|replace('\n',' ')|e }}">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
                             </button>
