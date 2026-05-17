@@ -15,11 +15,16 @@ from sqlalchemy.orm import selectinload
 from app.admin.auth import verify_admin
 from app.db.database import get_db
 from app.db.models import ShiftSheet, ShiftTask, User
+from app.shift_planning.print_queue_pick import (
+    build_shift_task_from_queue_row,
+    load_print_queue_for_day,
+)
 from app.shift_planning.constants import (
     SHIFT_SHEET_STATUS_DRAFT,
     SHIFT_SHEET_STATUS_LABELS,
     SHIFT_SHEET_STATUS_PUBLISHED,
     SHIFT_TASK_TYPE_LABELS,
+    SHIFT_TASK_TYPE_PRINT,
     SHIFT_TASK_STATUS_LABELS,
     USER_ROLE_OPERATOR,
 )
@@ -130,6 +135,9 @@ async def planning_sheet_page(
     sheet = await _load_sheet(db, sheet_id)
     if not sheet:
         return RedirectResponse(url="/admin/planning?error=notfound", status_code=303)
+    print_queue_day = sheet.shift_date
+    print_queue_rows = await load_print_queue_for_day(db, print_queue_day, sheet_id=sheet.id)
+    today_msk = datetime.now(MSK).date()
     return templates.TemplateResponse(
         "admin/planning_sheet.html",
         {
@@ -138,8 +146,70 @@ async def planning_sheet_page(
             "status_labels": SHIFT_SHEET_STATUS_LABELS,
             "task_type_labels": SHIFT_TASK_TYPE_LABELS,
             "task_status_labels": SHIFT_TASK_STATUS_LABELS,
+            "print_queue_rows": print_queue_rows,
+            "print_queue_day": print_queue_day,
+            "today_msk": today_msk,
         },
     )
+
+
+@router.post("/{sheet_id:int}/tasks/from-print-queue")
+async def planning_tasks_from_print_queue(
+    request: Request,
+    sheet_id: int,
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Добавить в лист выбранные задания из очереди печати (диаграмма) на дату смены."""
+    sheet = await db.get(ShiftSheet, sheet_id)
+    if not sheet:
+        return RedirectResponse(url="/admin/planning?error=notfound", status_code=303)
+    if sheet.status != SHIFT_SHEET_STATUS_DRAFT:
+        return RedirectResponse(url=f"/admin/planning/{sheet_id}?error=locked", status_code=303)
+
+    form = await request.form()
+    raw_ids = form.getlist("queue_item_id")
+    selected_ids: list[int] = []
+    for v in raw_ids:
+        try:
+            selected_ids.append(int(v))
+        except (TypeError, ValueError):
+            continue
+    if not selected_ids:
+        return RedirectResponse(url=f"/admin/planning/{sheet_id}?error=no_print_pick", status_code=303)
+
+    rows = await load_print_queue_for_day(db, sheet.shift_date, sheet_id=sheet.id)
+    by_id = {r["queue_item_id"]: r for r in rows if not r.get("already_added")}
+
+    max_q = await db.execute(
+        select(func.coalesce(func.max(ShiftTask.sort_order), 0)).where(ShiftTask.sheet_id == sheet_id)
+    )
+    sort_order = int(max_q.scalar_one() or 0)
+    added = 0
+    for qid in selected_ids:
+        row = by_id.get(qid)
+        if not row:
+            continue
+        fields = build_shift_task_from_queue_row(row)
+        sort_order += 1
+        db.add(
+            ShiftTask(
+                sheet_id=sheet_id,
+                sort_order=sort_order,
+                task_type=fields["task_type"],
+                title=fields["title"],
+                description=fields["description"],
+                target_quantity=fields["target_quantity"],
+                unit_label=fields["unit_label"],
+                print_queue_item_id=fields.get("print_queue_item_id"),
+            )
+        )
+        added += 1
+    await db.commit()
+    if added == 0:
+        return RedirectResponse(url=f"/admin/planning/{sheet_id}?error=print_pick_invalid", status_code=303)
+    logger.info("В лист смены {} добавлено {} заданий из очереди печати", sheet_id, added)
+    return RedirectResponse(url=f"/admin/planning/{sheet_id}?success=print_added", status_code=303)
 
 
 @router.post("/{sheet_id:int}/task/add")

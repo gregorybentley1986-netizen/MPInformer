@@ -25,6 +25,14 @@
     .status-pill { padding: 4px 12px; border-radius: 999px; background: #e5e7eb; font-size: 0.85rem; }
     .status-pill.published { background: #d1fae5; }
     .status-pill.closed { background: #dbeafe; }
+    .print-pick-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .print-pick-toolbar label { font-size: 0.85rem; cursor: pointer; user-select: none; }
+    .print-pick-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    .print-pick-table th, .print-pick-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    .print-pick-table th { background: #eee; font-size: 0.8rem; }
+    .print-pick-table tr.row-added { opacity: 0.55; }
+    .print-pick-table tr.row-added td { color: #666; }
+    .badge-from-queue { display: inline-block; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: #e0e7ff; color: #3730a3; margin-left: 4px; vertical-align: middle; }
 </style>
 {% endblock %}
 {% block content %}
@@ -41,8 +49,14 @@
 <div class="alert alert-success">Лист закрыт.</div>
 {% elif request.query_params.get("error") == "empty" %}
 <div class="alert alert-error">Добавьте хотя бы одно задание перед выдачей.</div>
+{% elif request.query_params.get("success") == "print_added" %}
+<div class="alert alert-success">Выбранные задания на печать добавлены в лист.</div>
 {% elif request.query_params.get("error") == "locked" %}
 <div class="alert alert-error">Редактирование состава доступно только в черновике.</div>
+{% elif request.query_params.get("error") == "no_print_pick" %}
+<div class="alert alert-error">Отметьте хотя бы одно задание из списка печати.</div>
+{% elif request.query_params.get("error") == "print_pick_invalid" %}
+<div class="alert alert-error">Не удалось добавить задания — возможно, они уже в листе или недоступны.</div>
 {% endif %}
 
 {% if sheet.manager_notes %}
@@ -83,6 +97,7 @@
             <td>{{ task_type_labels.get(t.task_type, t.task_type) }}</td>
             <td>
                 <strong>{{ t.title }}</strong>
+                {% if t.print_queue_item_id %}<span class="badge-from-queue" title="Из плана печати (диаграмма)">план</span>{% endif %}
                 {% if t.description %}<br><span style="color:#666;font-size:0.85rem;">{{ t.description }}</span>{% endif %}
                 {% if t.worker_comment %}<br><span style="color:#92400e;font-size:0.85rem;">Отчёт: {{ t.worker_comment }}</span>{% endif %}
             </td>
@@ -106,8 +121,57 @@
 </table>
 
 {% if sheet.status == 'draft' %}
+<div class="card" id="print-queue-pick-card">
+    <h3>Задания на печать из диаграммы ({{ print_queue_day.strftime('%d.%m.%Y') }})</h3>
+    <p class="meta" style="margin-top:0;">
+        Слоты очереди печати на дату смены. Отметьте нужные и добавьте в лист одной кнопкой.
+        {% if print_queue_day == today_msk %}<strong>Сегодня по МСК.</strong>{% endif %}
+        <a href="/print-queue" target="_blank" rel="noopener">Открыть диаграмму →</a>
+    </p>
+    {% if print_queue_rows %}
+    <form method="POST" action="/admin/planning/{{ sheet.id }}/tasks/from-print-queue" id="print-queue-pick-form">
+        <div class="print-pick-toolbar">
+            <label><input type="checkbox" id="print-pick-select-all" aria-label="Выделить все доступные"> Выделить всё</label>
+            <button type="submit" class="btn btn-op btn-income">Добавить выбранные в лист</button>
+        </div>
+        <table class="print-pick-table">
+            <thead>
+                <tr>
+                    <th style="width:36px;"></th>
+                    <th>Время</th>
+                    <th>Принтер</th>
+                    <th>Задание</th>
+                    <th>Материал</th>
+                    <th>Детали</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in print_queue_rows %}
+                <tr class="{% if row.already_added %}row-added{% endif %}">
+                    <td>
+                        {% if row.already_added %}
+                        <input type="checkbox" disabled title="Уже в листе">
+                        {% else %}
+                        <input type="checkbox" class="print-pick-cb" name="queue_item_id" value="{{ row.queue_item_id }}">
+                        {% endif %}
+                    </td>
+                    <td>{{ row.time_label }}</td>
+                    <td>{{ row.printer_label }}</td>
+                    <td><strong>{{ row.job_name or '—' }}</strong></td>
+                    <td>{{ row.material_label }}</td>
+                    <td style="font-size:0.85rem;color:#555;">{{ row.parts_summary or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </form>
+    {% else %}
+    <p class="meta">На эту дату в очереди печати нет запланированных слотов. Перенесите задания из плана печати на диаграмму или выберите другую дату смены.</p>
+    {% endif %}
+</div>
+
 <div class="card">
-    <h3>Добавить задание</h3>
+    <h3>Добавить задание вручную</h3>
     <form method="POST" action="/admin/planning/{{ sheet.id }}/task/add" class="form-inline">
         <div class="form-group">
             <label>Тип</label>
@@ -138,5 +202,42 @@
         <button type="submit" class="btn">Добавить в лист</button>
     </form>
 </div>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+{% if sheet.status == 'draft' and print_queue_rows %}
+<script>
+(function () {
+    var master = document.getElementById('print-pick-select-all');
+    if (!master) return;
+    function pickable() {
+        return Array.prototype.slice.call(
+            document.querySelectorAll('#print-queue-pick-form .print-pick-cb:not(:disabled)')
+        );
+    }
+    function syncMaster() {
+        var boxes = pickable();
+        if (!boxes.length) {
+            master.checked = false;
+            master.indeterminate = false;
+            master.disabled = true;
+            return;
+        }
+        master.disabled = false;
+        var checked = boxes.filter(function (b) { return b.checked; }).length;
+        master.checked = checked === boxes.length;
+        master.indeterminate = checked > 0 && checked < boxes.length;
+    }
+    master.addEventListener('change', function () {
+        var on = master.checked;
+        pickable().forEach(function (b) { b.checked = on; });
+        master.indeterminate = false;
+    });
+    document.getElementById('print-queue-pick-form').addEventListener('change', function (e) {
+        if (e.target && e.target.classList.contains('print-pick-cb')) syncMaster();
+    });
+    syncMaster();
+})();
+</script>
 {% endif %}
 {% endblock %}

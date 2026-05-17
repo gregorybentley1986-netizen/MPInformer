@@ -72,6 +72,12 @@ class ShiftTask(Base):
     description = Column(Text, nullable=False, default="")
     target_quantity = Column(Integer, nullable=False, default=1)
     unit_label = Column(String(32), nullable=False, default="шт.")
+    print_queue_item_id = Column(
+        Integer,
+        ForeignKey("print_queue_items.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # pending | completed | partial | failed
     status = Column(String(32), nullable=False, default="pending", index=True)
     completion_percent = Column(Integer, nullable=True)

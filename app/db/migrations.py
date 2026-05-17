@@ -575,3 +575,10 @@ def ensure_shift_planning_tables(conn):
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """))
+    try:
+        conn.execute(text(
+            "ALTER TABLE shift_tasks ADD COLUMN print_queue_item_id INTEGER "
+            "REFERENCES print_queue_items(id) ON DELETE SET NULL"
+        ))
+    except Exception:
+        pass
