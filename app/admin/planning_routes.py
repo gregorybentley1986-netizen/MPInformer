@@ -19,6 +19,7 @@ from app.shift_planning.print_queue_pick import (
     build_shift_task_from_queue_row,
     load_print_queue_for_day,
 )
+from app.shift_planning.sheet_view import build_shift_sheet_view, material_warning_text
 from app.shift_planning.constants import (
     SHIFT_SHEET_STATUS_DRAFT,
     SHIFT_SHEET_STATUS_LABELS,
@@ -137,6 +138,7 @@ async def planning_sheet_page(
         return RedirectResponse(url="/admin/planning?error=notfound", status_code=303)
     print_queue_day = sheet.shift_date
     print_queue_rows = await load_print_queue_for_day(db, print_queue_day, sheet_id=sheet.id)
+    sheet_view = await build_shift_sheet_view(db, list(sheet.tasks))
     today_msk = datetime.now(MSK).date()
     return templates.TemplateResponse(
         "admin/planning_sheet.html",
@@ -149,6 +151,9 @@ async def planning_sheet_page(
             "print_queue_rows": print_queue_rows,
             "print_queue_day": print_queue_day,
             "today_msk": today_msk,
+            "print_groups": sheet_view["print_groups"],
+            "other_tasks": sheet_view["other_tasks"],
+            "material_warning_text": material_warning_text,
         },
     )
 

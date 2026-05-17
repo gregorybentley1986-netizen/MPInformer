@@ -30,6 +30,7 @@ from app.shift_planning.helpers import (
     shift_attachment_url,
     user_is_operator,
 )
+from app.shift_planning.sheet_view import build_shift_sheet_view, material_warning_text
 from app.time_utils import MSK
 
 router = APIRouter(tags=["shift"])
@@ -96,6 +97,7 @@ async def my_shift_sheet(
     if not sheet:
         return RedirectResponse(url="/my-shift?error=notfound", status_code=303)
     readonly = sheet.status == "closed"
+    sheet_view = await build_shift_sheet_view(db, list(sheet.tasks))
     return templates.TemplateResponse(
         "site/my_shift_sheet.html",
         {
@@ -106,8 +108,34 @@ async def my_shift_sheet(
             "task_type_labels": SHIFT_TASK_TYPE_LABELS,
             "task_status_labels": SHIFT_TASK_STATUS_LABELS,
             "shift_attachment_url": shift_attachment_url,
+            "print_groups": sheet_view["print_groups"],
+            "other_tasks": sheet_view["other_tasks"],
+            "material_warning_text": material_warning_text,
         },
     )
+
+
+@router.post("/my-shift/task/{task_id:int}/comment")
+async def my_shift_task_comment(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(verify_site_user),
+    worker_comment: str = Form(""),
+):
+    if not user_is_operator(user):
+        return RedirectResponse(url="/", status_code=303)
+    r = await db.execute(
+        select(ShiftTask).options(selectinload(ShiftTask.sheet)).where(ShiftTask.id == task_id)
+    )
+    task = r.scalar_one_or_none()
+    if not task or not task.sheet:
+        return RedirectResponse(url="/my-shift?error=notfound", status_code=303)
+    sheet = task.sheet
+    if sheet.assignee_user_id != user.id or sheet.status != SHIFT_SHEET_STATUS_PUBLISHED:
+        return RedirectResponse(url=f"/my-shift/{sheet.id}?error=locked", status_code=303)
+    task.worker_comment = (worker_comment or "").strip()[:2000]
+    await db.commit()
+    return RedirectResponse(url=f"/my-shift/{sheet.id}?success=1#task-{task_id}", status_code=303)
 
 
 @router.post("/my-shift/task/{task_id:int}/report")
@@ -142,7 +170,8 @@ async def my_shift_task_report(
     if st == SHIFT_TASK_STATUS_COMPLETED:
         task.status = SHIFT_TASK_STATUS_COMPLETED
         task.completion_percent = 100
-        task.worker_comment = comment
+        if comment:
+            task.worker_comment = comment
         task.completed_at = datetime.now(MSK)
     elif st == SHIFT_TASK_STATUS_PARTIAL:
         if not comment:

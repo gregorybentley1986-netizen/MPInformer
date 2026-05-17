@@ -6,119 +6,294 @@
 {% endblock %}
 {% block extra_css %}
 <style>
-    .meta { color: #666; margin-bottom: 14px; font-size: 0.92rem; }
-    .alert { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 0.9rem; }
+    .meta { color: #666; margin-bottom: 10px; font-size: 0.88rem; }
+    .alert { padding: 8px 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.85rem; }
     .alert-success { background: #d4edda; color: #155724; }
     .alert-error { background: #fee2e2; color: #991b1b; }
-    .task-card {
-        border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px;
-        background: #fff;
+    .shift-print-wrap { margin-bottom: 16px; }
+    .shift-time-group { margin-bottom: 10px; }
+    .shift-time-head {
+        font-family: 'Russo One', sans-serif; font-size: 0.95rem; color: #374151;
+        padding: 4px 8px; background: #f3f4f6; border-radius: 6px 6px 0 0;
+        border: 1px solid var(--border); border-bottom: none;
     }
-    .task-card.done { border-left: 4px solid #2e7d32; }
-    .task-card.partial { border-left: 4px solid #f9a825; }
-    .task-card.failed { border-left: 4px solid #c62828; }
-    .task-type { font-size: 0.78rem; text-transform: uppercase; color: #888; letter-spacing: 0.04em; }
-    .task-title { font-family: 'Russo One', sans-serif; font-size: 1.05rem; margin: 4px 0 8px; }
-    .task-qty { font-weight: 700; margin-bottom: 8px; }
-    .task-desc { color: #555; font-size: 0.88rem; margin-bottom: 10px; }
-    .report-form { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
-    .report-form label { display: block; font-size: 0.82rem; color: #555; margin: 8px 0 4px; }
-    .report-form input[type="text"], .report-form input[type="number"], .report-form textarea {
-        width: 100%; max-width: 480px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box;
+    .shift-print-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; table-layout: fixed; }
+    .shift-print-table th, .shift-print-table td {
+        padding: 5px 6px; border: 1px solid var(--border); vertical-align: middle;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .report-form textarea { min-height: 64px; }
-    .status-options { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 8px 0; }
-    .status-options label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; }
-    .partial-fields { display: none; margin-top: 8px; }
-    .partial-fields.visible { display: block; }
-    .comment-required-hint { font-size: 0.8rem; color: #b45309; }
-    .task-report { background: #f5f5f5; padding: 10px; border-radius: 6px; font-size: 0.88rem; margin-top: 8px; }
-    .task-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-    .task-photos img { max-width: 120px; max-height: 120px; border-radius: 6px; border: 1px solid var(--border); }
-    .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .shift-print-table th { background: #fafafa; font-size: 0.72rem; font-weight: 600; color: #666; }
+    .shift-print-table tr.row-done td { background: #f0fdf4; }
+    .shift-print-table tr.row-partial td { background: #fffbeb; }
+    .shift-print-table tr.row-failed td { background: #fef2f2; }
+    .col-time { width: 52px; }
+    .col-printer { width: 44px; }
+    .col-status { width: 88px; text-align: center; }
+    .col-comment { width: 36px; text-align: center; }
+    .col-warn { width: 28px; text-align: center; }
+    .job-name { font-weight: 600; }
+    .mat-warn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 22px; height: 22px; border-radius: 50%; background: #fef3c7; color: #b45309;
+        font-size: 0.75rem; cursor: help; border: none; padding: 0;
+    }
+    .status-icons { display: inline-flex; gap: 2px; align-items: center; justify-content: center; }
+    .status-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; padding: 0; border: 1px solid transparent;
+        border-radius: 6px; background: transparent; cursor: pointer; color: #9ca3af;
+    }
+    .status-btn:hover { background: #f3f4f6; color: #374151; }
+    .status-btn.active { border-color: currentColor; background: #fff; }
+    .status-btn.st-completed.active { color: #15803d; }
+    .status-btn.st-partial.active { color: #ca8a04; }
+    .status-btn.st-failed.active { color: #dc2626; }
+    .status-btn svg { width: 16px; height: 16px; display: block; }
+    .comment-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; padding: 0; border: none; border-radius: 6px;
+        background: transparent; cursor: pointer; color: #9ca3af;
+    }
+    .comment-btn.has-comment { color: #2563eb; }
+    .comment-btn:hover { background: #eff6ff; }
+    .comment-btn svg { width: 18px; height: 18px; }
+    .other-task {
+        border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+        font-size: 0.88rem;
+    }
+    .other-task strong { font-family: 'Russo One', sans-serif; font-size: 0.95rem; }
+    .modal-overlay {
+        display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+        z-index: 2000; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+        background: #fff; border-radius: 10px; max-width: 420px; width: 100%;
+        padding: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .modal-box h3 { font-family: 'Russo One', sans-serif; font-size: 1rem; margin: 0 0 10px; }
+    .modal-box textarea {
+        width: 100%; min-height: 100px; padding: 8px; border: 1px solid var(--border);
+        border-radius: 6px; box-sizing: border-box; font-size: 0.9rem;
+    }
+    .modal-box .modal-actions { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+    .modal-hint { font-size: 0.8rem; color: #b45309; margin-bottom: 8px; }
+    .partial-pct { margin: 8px 0; }
+    .partial-pct input { width: 80px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; }
 </style>
 {% endblock %}
 {% block content %}
-<h1>Смена {{ sheet.shift_date.strftime('%d.%m.%Y') }}</h1>
+<h1 style="font-size:1.25rem;margin-bottom:4px;">Смена {{ sheet.shift_date.strftime('%d.%m.%Y') }}</h1>
 <p class="meta">
-    {% if sheet.manager_notes %}<em>{{ sheet.manager_notes }}</em><br>{% endif %}
-    {% if readonly %}Лист закрыт — только просмотр.{% else %}Отметьте каждый пункт по факту выполнения.{% endif %}
+    {% if sheet.manager_notes %}{{ sheet.manager_notes }} · {% endif %}
+    {% if readonly %}Только просмотр{% else %}Отметьте статус иконками; комментарий — по иконке сообщения{% endif %}
 </p>
 
 {% if request.query_params.get("success") %}
-<div class="alert alert-success">Статус сохранён.</div>
+<div class="alert alert-success">Сохранено.</div>
 {% endif %}
 {% if request.query_params.get("error") == "comment" %}
-<div class="alert alert-error">Для «Не выполнено» и «Частично» нужен комментарий.</div>
+<div class="alert alert-error">Для «Частично» и «Не выполнено» нужен комментарий.</div>
 {% elif request.query_params.get("error") == "percent" %}
-<div class="alert alert-error">Укажите процент выполнения от 1 до 99.</div>
+<div class="alert alert-error">Укажите процент от 1 до 99.</div>
 {% endif %}
 
-{% for t in sheet.tasks %}
-<article class="task-card {% if t.status == 'completed' %}done{% elif t.status == 'partial' %}partial{% elif t.status == 'failed' %}failed{% endif %}" id="task-{{ t.id }}">
-    <div class="task-type">{{ task_type_labels.get(t.task_type, t.task_type) }}</div>
-    <h2 class="task-title">{{ t.title }}</h2>
-    <p class="task-qty">План: {{ t.target_quantity }} {{ t.unit_label }}</p>
-    {% if t.description %}<p class="task-desc">{{ t.description }}</p>{% endif %}
-
-    {% if t.status != 'pending' %}
-    <div class="task-report">
-        <strong>{{ task_status_labels.get(t.status, t.status) }}</strong>
-        {% if t.completion_percent is not none %} — {{ t.completion_percent }}%{% endif %}
-        {% if t.worker_comment %}<br>{{ t.worker_comment }}{% endif %}
+{% if print_groups %}
+<div class="shift-print-wrap">
+    {% for group in print_groups %}
+    <div class="shift-time-group">
+        <div class="shift-time-head">{{ group.time_label }}</div>
+        <table class="shift-print-table">
+            <thead>
+                <tr>
+                    <th class="col-printer">Пр.</th>
+                    <th>Задание</th>
+                    <th>Материал</th>
+                    <th class="col-warn"></th>
+                    <th class="col-status">Статус</th>
+                    <th class="col-comment"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in group.rows %}
+                <tr id="task-{{ row.task_id }}" class="{% if row.status == 'completed' %}row-done{% elif row.status == 'partial' %}row-partial{% elif row.status == 'failed' %}row-failed{% endif %}">
+                    <td class="col-printer" title="{{ row.printer_number }}">{{ row.printer_number }}</td>
+                    <td class="job-name" title="{{ row.job_name }}">{{ row.job_name }}</td>
+                    <td title="{{ row.material_label }}">{{ row.material_label }}</td>
+                    <td class="col-warn">
+                        {% if row.material_warning %}
+                        <button type="button" class="mat-warn" title="{{ row.material_warning_text }}">!</button>
+                        {% endif %}
+                    </td>
+                    <td class="col-status">
+                        {% if readonly %}
+                        <span title="{{ task_status_labels.get(row.status, row.status) }}{% if row.completion_percent is not none %} {{ row.completion_percent }}%{% endif %}">
+                            {% if row.status == 'completed' %}✓{% elif row.status == 'partial' %}◐{% elif row.status == 'failed' %}✗{% else %}○{% endif %}
+                        </span>
+                        {% else %}
+                        <div class="status-icons" data-task-id="{{ row.task_id }}">
+                            <form method="POST" action="/my-shift/task/{{ row.task_id }}/report" class="js-status-form" style="display:inline;">
+                                <input type="hidden" name="report_status" value="completed">
+                                <button type="submit" class="status-btn st-completed {% if row.status == 'completed' %}active{% endif %}" title="Выполнено" aria-label="Выполнено">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
+                                </button>
+                            </form>
+                            <button type="button" class="status-btn st-partial {% if row.status == 'partial' %}active{% endif %} js-open-status-modal" title="Частично" aria-label="Частично"
+                                data-task-id="{{ row.task_id }}" data-status="partial" data-comment="{{ row.worker_comment|replace('\n',' ')|e }}" data-pct="{{ row.completion_percent or '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l5 3"/></svg>
+                            </button>
+                            <button type="button" class="status-btn st-failed {% if row.status == 'failed' %}active{% endif %} js-open-status-modal" title="Не выполнено" aria-label="Не выполнено"
+                                data-task-id="{{ row.task_id }}" data-status="failed" data-comment="{{ row.worker_comment|replace('\n',' ')|e }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                            </button>
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td class="col-comment">
+                        <button type="button" class="comment-btn {% if row.has_comment %}has-comment{% endif %} js-open-comment-modal"
+                            title="{% if row.has_comment %}Комментарий{% else %}Добавить комментарий{% endif %}"
+                            data-task-id="{{ row.task_id }}"
+                            data-comment="{{ row.worker_comment|replace('\n',' ')|e }}"
+                            data-readonly="{{ '1' if readonly else '0' }}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-    {% if t.attachments %}
-    <div class="task-photos">
-        {% for a in t.attachments %}
-        <a href="{{ shift_attachment_url(a.stored_filename) }}" target="_blank" rel="noopener">
-            <img src="{{ shift_attachment_url(a.stored_filename) }}" alt="Фото">
-        </a>
-        {% endfor %}
-    </div>
-    {% endif %}
-    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
 
+{% if other_tasks %}
+<h2 style="font-size:1rem;margin:14px 0 8px;font-family:'Russo One',sans-serif;">Прочие задания</h2>
+{% for t in other_tasks %}
+<div class="other-task" id="task-{{ t.id }}">
+    <strong>{{ task_type_labels.get(t.task_type, t.task_type) }}:</strong> {{ t.title }}
+    {% if t.target_quantity %} — {{ t.target_quantity }} {{ t.unit_label }}{% endif %}
+    {% if t.description %}<br><span style="color:#666;">{{ t.description }}</span>{% endif %}
     {% if not readonly %}
-    <form class="report-form" method="POST" action="/my-shift/task/{{ t.id }}/report" enctype="multipart/form-data">
-        <p class="comment-required-hint">Для «Не выполнено» и «Частично» комментарий обязателен.</p>
-        <div class="status-options">
-            <label><input type="radio" name="report_status" value="completed" {% if t.status == 'completed' %}checked{% endif %}> Выполнено</label>
-            <label><input type="radio" name="report_status" value="partial" class="js-partial-radio" {% if t.status == 'partial' %}checked{% endif %}> Частично</label>
-            <label><input type="radio" name="report_status" value="failed" {% if t.status == 'failed' %}checked{% endif %}> Не выполнено</label>
+    <form method="POST" action="/my-shift/task/{{ t.id }}/report" style="margin-top:8px;">
+        <div class="status-icons">
+            <label><input type="radio" name="report_status" value="completed" {% if t.status == 'completed' %}checked{% endif %}> ✓</label>
+            <label><input type="radio" name="report_status" value="partial" class="js-partial-radio" {% if t.status == 'partial' %}checked{% endif %}> ◐</label>
+            <label><input type="radio" name="report_status" value="failed" {% if t.status == 'failed' %}checked{% endif %}> ✗</label>
         </div>
-        <div class="partial-fields js-partial-fields">
-            <label>Процент выполнения (1–99)</label>
-            <input type="number" name="completion_percent" min="1" max="99" value="{{ t.completion_percent or '' }}">
+        <div class="js-partial-fields partial-pct" style="display:{% if t.status == 'partial' %}block{% else %}none{% endif %};">
+            <input type="number" name="completion_percent" min="1" max="99" value="{{ t.completion_percent or '' }}" placeholder="%">
         </div>
-        <label>Комментарий</label>
-        <textarea name="worker_comment" placeholder="Что сделано, что помешало…">{{ t.worker_comment or '' }}</textarea>
-        <label>Фото (необязательно)</label>
-        <input type="file" name="photos" accept="image/*" multiple>
-        <div class="btn-row">
-            <button type="submit" class="btn">Сохранить отметку</button>
-        </div>
+        <textarea name="worker_comment" rows="2" style="width:100%;margin-top:6px;font-size:0.85rem;">{{ t.worker_comment or '' }}</textarea>
+        <button type="submit" class="btn" style="margin-top:6px;padding:4px 10px;font-size:0.8rem;">Сохранить</button>
     </form>
+    {% else %}
+    <div style="margin-top:4px;color:#555;">{{ task_status_labels.get(t.status, t.status) }}{% if t.worker_comment %} — {{ t.worker_comment }}{% endif %}</div>
     {% endif %}
-</article>
-{% else %}
-<p>В листе нет заданий.</p>
+</div>
 {% endfor %}
+{% endif %}
 
+{% if not print_groups and not other_tasks %}
+<p>Заданий нет.</p>
+{% endif %}
+
+<div class="modal-overlay" id="comment-modal" aria-hidden="true">
+    <div class="modal-box" role="dialog" aria-labelledby="comment-modal-title">
+        <h3 id="comment-modal-title">Комментарий</h3>
+        <form method="POST" id="comment-modal-form" action="">
+            <textarea name="worker_comment" id="comment-modal-text" placeholder="Что сделано, что помешало…"></textarea>
+            <div class="modal-actions">
+                <button type="button" class="btn js-modal-close">Отмена</button>
+                <button type="submit" class="btn btn-op btn-income" id="comment-modal-save">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="status-modal" aria-hidden="true">
+    <div class="modal-box" role="dialog">
+        <h3 id="status-modal-title">Отметка</h3>
+        <p class="modal-hint" id="status-modal-hint">Комментарий обязателен.</p>
+        <form method="POST" id="status-modal-form" action="">
+            <input type="hidden" name="report_status" id="status-modal-status" value="">
+            <div class="partial-pct" id="status-modal-pct-wrap" style="display:none;">
+                <label>Процент (1–99)</label><br>
+                <input type="number" name="completion_percent" id="status-modal-pct" min="1" max="99">
+            </div>
+            <textarea name="worker_comment" id="status-modal-comment" placeholder="Комментарий…"></textarea>
+            <div class="modal-actions">
+                <button type="button" class="btn js-modal-close">Отмена</button>
+                <button type="submit" class="btn btn-op btn-income">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
 <script>
-(function() {
-    document.querySelectorAll('.report-form').forEach(function(form) {
+(function () {
+    function closeModals() {
+        document.querySelectorAll('.modal-overlay.open').forEach(function (el) { el.classList.remove('open'); });
+    }
+    document.querySelectorAll('.js-modal-close').forEach(function (btn) {
+        btn.addEventListener('click', closeModals);
+    });
+    document.querySelectorAll('.modal-overlay').forEach(function (ov) {
+        ov.addEventListener('click', function (e) { if (e.target === ov) closeModals(); });
+    });
+
+    var commentModal = document.getElementById('comment-modal');
+    var commentForm = document.getElementById('comment-modal-form');
+    var commentText = document.getElementById('comment-modal-text');
+    var commentSave = document.getElementById('comment-modal-save');
+    document.querySelectorAll('.js-open-comment-modal').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var tid = btn.getAttribute('data-task-id');
+            var ro = btn.getAttribute('data-readonly') === '1';
+            commentForm.action = '/my-shift/task/' + tid + '/comment';
+            commentText.value = btn.getAttribute('data-comment') || '';
+            commentText.readOnly = ro;
+            commentSave.style.display = ro ? 'none' : '';
+            commentModal.classList.add('open');
+        });
+    });
+
+    var statusModal = document.getElementById('status-modal');
+    var statusForm = document.getElementById('status-modal-form');
+    document.querySelectorAll('.js-open-status-modal').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var tid = btn.getAttribute('data-task-id');
+            var st = btn.getAttribute('data-status');
+            statusForm.action = '/my-shift/task/' + tid + '/report';
+            document.getElementById('status-modal-status').value = st;
+            document.getElementById('status-modal-comment').value = btn.getAttribute('data-comment') || '';
+            var pctWrap = document.getElementById('status-modal-pct-wrap');
+            var pctIn = document.getElementById('status-modal-pct');
+            var isPartial = st === 'partial';
+            pctWrap.style.display = isPartial ? 'block' : 'none';
+            pctIn.value = btn.getAttribute('data-pct') || '';
+            document.getElementById('status-modal-title').textContent = isPartial ? 'Частично выполнено' : 'Не выполнено';
+            statusModal.classList.add('open');
+        });
+    });
+
+    document.querySelectorAll('.other-task form').forEach(function (form) {
         var partialRadios = form.querySelectorAll('.js-partial-radio');
         var partialFields = form.querySelector('.js-partial-fields');
         function syncPartial() {
             var isPartial = false;
-            partialRadios.forEach(function(r) { if (r.checked) isPartial = true; });
-            if (partialFields) partialFields.classList.toggle('visible', isPartial);
+            partialRadios.forEach(function (r) { if (r.checked) isPartial = true; });
+            if (partialFields) partialFields.style.display = isPartial ? 'block' : 'none';
         }
-        form.querySelectorAll('input[name="report_status"]').forEach(function(r) {
+        form.querySelectorAll('input[name="report_status"]').forEach(function (r) {
             r.addEventListener('change', syncPartial);
         });
         syncPartial();
     });
+
     var errTask = new URLSearchParams(window.location.search).get('task');
     if (errTask) {
         var el = document.getElementById('task-' + errTask);
