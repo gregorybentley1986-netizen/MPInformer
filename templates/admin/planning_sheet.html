@@ -4,6 +4,7 @@
 {% block header_right %}<a href="/" class="btn-header">Сайт</a>{% endblock %}
 {% block sidebar %}{% include "admin/_sidebar.html" %}{% endblock %}
 {% block extra_css %}
+{% include "shift/_shift_print_styles.html" %}
 <style>
     .meta { color: #666; margin-bottom: 16px; font-size: 0.92rem; }
     .alert { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 0.9rem; }
@@ -33,14 +34,6 @@
     .print-pick-table tr.row-added { opacity: 0.55; }
     .print-pick-table tr.row-added td { color: #666; }
     .badge-from-queue { display: inline-block; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: #e0e7ff; color: #3730a3; margin-left: 4px; vertical-align: middle; }
-    .shift-time-group { margin-bottom: 10px; }
-    .shift-time-head { font-family: 'Russo One', sans-serif; font-size: 0.92rem; padding: 4px 8px; background: #f3f4f6; border-radius: 6px 6px 0 0; border: 1px solid var(--border); border-bottom: none; }
-    .shift-print-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; table-layout: fixed; }
-    .shift-print-table th, .shift-print-table td { padding: 5px 6px; border: 1px solid var(--border); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .shift-print-table th { background: #fafafa; font-size: 0.72rem; color: #666; }
-    .mat-warn { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: #fef3c7; color: #b45309; font-size: 0.72rem; align-items: center; justify-content: center; border: none; cursor: help; }
-    .st-icon { font-size: 1rem; }
-    .comment-dot { color: #2563eb; }
 </style>
 {% endblock %}
 {% block content %}
@@ -89,47 +82,13 @@
 
 {% if print_groups %}
 <h3 style="font-family:'Russo One',sans-serif;font-size:1rem;margin:12px 0 8px;">Печать</h3>
-{% for group in print_groups %}
-<div class="shift-time-group">
-    <div class="shift-time-head">{{ group.time_label }}</div>
-    <table class="shift-print-table task-list">
-        <thead>
-            <tr>
-                <th style="width:44px;">Пр.</th>
-                <th>Задание</th>
-                <th>Материал</th>
-                <th style="width:28px;"></th>
-                <th style="width:72px;">Статус</th>
-                <th style="width:28px;"></th>
-                {% if sheet.status == 'draft' %}<th style="width:64px;"></th>{% endif %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in group.rows %}
-            <tr>
-                <td title="{{ row.printer_number }}">{{ row.printer_number }}</td>
-                <td title="{{ row.job_name }}"><strong>{{ row.job_name }}</strong></td>
-                <td title="{{ row.material_label }}">{{ row.material_label }}</td>
-                <td>{% if row.material_warning %}<button type="button" class="mat-warn" title="{{ row.material_warning_text }}">!</button>{% endif %}</td>
-                <td>
-                    <span class="st-icon" title="{{ task_status_labels.get(row.status, row.status) }}{% if row.completion_percent is not none %} {{ row.completion_percent }}%{% endif %}">
-                        {% if row.status == 'completed' %}✓{% elif row.status == 'partial' %}◐{% elif row.status == 'failed' %}✗{% else %}○{% endif %}
-                    </span>
-                </td>
-                <td>{% if row.has_comment %}<span class="comment-dot" title="{{ row.worker_comment }}">💬</span>{% endif %}</td>
-                {% if sheet.status == 'draft' %}
-                <td>
-                    <form method="POST" action="/admin/planning/{{ sheet.id }}/task/{{ row.task_id }}/delete" style="display:inline;">
-                        <button type="submit" class="btn" style="padding:2px 6px;font-size:0.72rem;">×</button>
-                    </form>
-                </td>
-                {% endif %}
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div class="shift-print-wrap">
+    {% set admin_draft = sheet.status == 'draft' %}
+    {% set readonly = true %}
+    {% set admin_view = true %}
+    {% set sheet_id = sheet.id %}
+    {% include "shift/_print_compact_table.html" %}
 </div>
-{% endfor %}
 {% endif %}
 
 {% if other_tasks %}
@@ -244,6 +203,13 @@
 {% endif %}
 {% endblock %}
 {% block extra_js %}
+{% if print_groups %}
+<script>
+document.querySelectorAll('.mat-color-sq[data-color]').forEach(function (el) {
+    el.style.backgroundColor = el.getAttribute('data-color') || '#ccc';
+});
+</script>
+{% endif %}
 {% if sheet.status == 'draft' and print_queue_rows %}
 <script>
 (function () {

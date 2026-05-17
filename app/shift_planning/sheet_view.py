@@ -8,7 +8,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Material, PrintJob, PrintQueueItem, Printer, ShiftTask, Spool
+from app.db.models import Color, Material, PrintJob, PrintQueueItem, Printer, ShiftTask, Spool
 from app.shift_planning.constants import SHIFT_TASK_TYPE_PRINT
 from app.shift_planning.print_queue_pick import _ensure_datetime_msk, _format_time_range, _parse_execution_time_minutes
 from app.time_utils import MSK
@@ -62,11 +62,39 @@ def _material_label(mat: Material | None) -> str:
     return label or "—"
 
 
+def _material_display(mat: Material | None, color_hex_map: dict[str, str]) -> dict:
+    if not mat:
+        return {
+            "color_hex": "#cccccc",
+            "color_name": "",
+            "plastic_type": "",
+            "has_material": False,
+        }
+    color_name = (mat.color or "").strip()
+    return {
+        "color_hex": color_hex_map.get(color_name, "#888888") if color_name else "#888888",
+        "color_name": color_name,
+        "plastic_type": (mat.plastic_type or "").strip(),
+        "has_material": True,
+    }
+
+
 def _printer_number(printer: Printer | None) -> str:
     if not printer:
         return "—"
     num = (printer.number or "").strip()
     return f"№{num}" if num else ((printer.name or "").strip() or "—")
+
+
+def _printer_display(printer: Printer | None) -> tuple[str, str]:
+    """Короткая подпись для ячейки и полный title."""
+    if not printer:
+        return "—", "—"
+    num = (printer.number or "").strip()
+    if num:
+        return num, f"№{num}"
+    name = (printer.name or "").strip()
+    return (name[:4] if name else "—"), name or "—"
 
 
 def _material_warning(
@@ -113,6 +141,9 @@ async def build_shift_sheet_view(db: AsyncSession, tasks: list[ShiftTask]) -> di
     job_by_id: dict[int, PrintJob] = {}
     printer_by_id: dict[int, Printer] = {}
     material_by_id: dict[int, Material] = {}
+    color_hex_map: dict[str, str] = {}
+    r_col = await db.execute(select(Color))
+    color_hex_map = {c.name: (c.hex or "#888888") for c in r_col.scalars().all() if c.name}
 
     if qids:
         r = await db.execute(select(PrintQueueItem).where(PrintQueueItem.id.in_(qids)))
@@ -155,7 +186,10 @@ async def build_shift_sheet_view(db: AsyncSession, tasks: list[ShiftTask]) -> di
         time_label = fb["time_label"]
         time_sort = fb["time_sort"]
         printer_number = fb["printer_number"]
+        printer_display = printer_number.lstrip("№") if printer_number.startswith("№") else printer_number
+        printer_title = printer_number
         material_label = fb["material_label"]
+        mat_display = _material_display(None, color_hex_map)
         material_warning = None
         qid = task.print_queue_item_id
 
@@ -166,8 +200,10 @@ async def build_shift_sheet_view(db: AsyncSession, tasks: list[ShiftTask]) -> di
             mat = material_by_id.get(item.material_id) if item.material_id else None
             if job and (job.name or "").strip():
                 job_name = (job.name or "").strip()
+            printer_display, printer_title = _printer_display(printer)
             printer_number = _printer_number(printer)
             material_label = _material_label(mat)
+            mat_display = _material_display(mat, color_hex_map)
             start = _ensure_datetime_msk(item.scheduled_start)
             dur = 0
             if job:
@@ -197,8 +233,14 @@ async def build_shift_sheet_view(db: AsyncSession, tasks: list[ShiftTask]) -> di
                 "time_label": time_label,
                 "time_sort": time_sort,
                 "printer_number": printer_number,
+                "printer_display": printer_display,
+                "printer_title": printer_title,
                 "job_name": job_name,
                 "material_label": material_label,
+                "material_color_hex": mat_display["color_hex"],
+                "material_color_name": mat_display["color_name"],
+                "material_plastic_type": mat_display["plastic_type"],
+                "material_has": mat_display["has_material"],
                 "material_warning": material_warning,
                 "material_warning_text": material_warning_text(material_warning),
                 "attachments": list(task.attachments or []),

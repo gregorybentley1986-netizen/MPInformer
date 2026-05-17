@@ -5,58 +5,12 @@
 <a href="/logout" class="btn">Выйти</a>
 {% endblock %}
 {% block extra_css %}
+{% include "shift/_shift_print_styles.html" %}
 <style>
     .meta { color: #666; margin-bottom: 10px; font-size: 0.88rem; }
     .alert { padding: 8px 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.85rem; }
     .alert-success { background: #d4edda; color: #155724; }
     .alert-error { background: #fee2e2; color: #991b1b; }
-    .shift-print-wrap { margin-bottom: 16px; }
-    .shift-time-group { margin-bottom: 10px; }
-    .shift-time-head {
-        font-family: 'Russo One', sans-serif; font-size: 0.95rem; color: #374151;
-        padding: 4px 8px; background: #f3f4f6; border-radius: 6px 6px 0 0;
-        border: 1px solid var(--border); border-bottom: none;
-    }
-    .shift-print-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; table-layout: fixed; }
-    .shift-print-table th, .shift-print-table td {
-        padding: 5px 6px; border: 1px solid var(--border); vertical-align: middle;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .shift-print-table th { background: #fafafa; font-size: 0.72rem; font-weight: 600; color: #666; }
-    .shift-print-table tr.row-done td { background: #f0fdf4; }
-    .shift-print-table tr.row-partial td { background: #fffbeb; }
-    .shift-print-table tr.row-failed td { background: #fef2f2; }
-    .col-time { width: 52px; }
-    .col-printer { width: 44px; }
-    .col-status { width: 88px; text-align: center; }
-    .col-comment { width: 36px; text-align: center; }
-    .col-warn { width: 28px; text-align: center; }
-    .job-name { font-weight: 600; }
-    .mat-warn {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 22px; height: 22px; border-radius: 50%; background: #fef3c7; color: #b45309;
-        font-size: 0.75rem; cursor: help; border: none; padding: 0;
-    }
-    .status-icons { display: inline-flex; gap: 2px; align-items: center; justify-content: center; }
-    .status-btn {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 26px; height: 26px; padding: 0; border: 1px solid transparent;
-        border-radius: 6px; background: transparent; cursor: pointer; color: #9ca3af;
-    }
-    .status-btn:hover { background: #f3f4f6; color: #374151; }
-    .status-btn.active { border-color: currentColor; background: #fff; }
-    .status-btn.st-completed.active { color: #15803d; }
-    .status-btn.st-partial.active { color: #ca8a04; }
-    .status-btn.st-failed.active { color: #dc2626; }
-    .status-btn svg { width: 16px; height: 16px; display: block; }
-    .comment-btn {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 28px; height: 28px; padding: 0; border: none; border-radius: 6px;
-        background: transparent; cursor: pointer; color: #9ca3af;
-    }
-    .comment-btn.has-comment { color: #2563eb; }
-    .comment-btn:hover { background: #eff6ff; }
-    .comment-btn svg { width: 18px; height: 18px; }
     .other-task {
         border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
         font-size: 0.88rem;
@@ -100,72 +54,9 @@
 
 {% if print_groups %}
 <div class="shift-print-wrap">
-    {% for group in print_groups %}
-    <div class="shift-time-group">
-        <div class="shift-time-head">{{ group.time_label }}</div>
-        <table class="shift-print-table">
-            <thead>
-                <tr>
-                    <th class="col-printer">Пр.</th>
-                    <th>Задание</th>
-                    <th>Материал</th>
-                    <th class="col-warn"></th>
-                    <th class="col-status">Статус</th>
-                    <th class="col-comment"></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in group.rows %}
-                <tr id="task-{{ row.task_id }}" class="{% if row.status == 'completed' %}row-done{% elif row.status == 'partial' %}row-partial{% elif row.status == 'failed' %}row-failed{% endif %}">
-                    <td class="col-printer" title="{{ row.printer_number }}">{{ row.printer_number }}</td>
-                    <td class="job-name" title="{{ row.job_name }}">{{ row.job_name }}</td>
-                    <td title="{{ row.material_label }}">{{ row.material_label }}</td>
-                    <td class="col-warn">
-                        {% if row.material_warning %}
-                        <button type="button" class="mat-warn" title="{{ row.material_warning_text }}">!</button>
-                        {% endif %}
-                    </td>
-                    <td class="col-status">
-                        {% if readonly %}
-                        <span title="{{ task_status_labels.get(row.status, row.status) }}{% if row.completion_percent is not none %} {{ row.completion_percent }}%{% endif %}">
-                            {% if row.status == 'completed' %}✓{% elif row.status == 'partial' %}◐{% elif row.status == 'failed' %}✗{% else %}○{% endif %}
-                        </span>
-                        {% else %}
-                        <div class="status-icons" data-task-id="{{ row.task_id }}">
-                            <form method="POST" action="/my-shift/task/{{ row.task_id }}/report" class="js-status-form" style="display:inline;">
-                                <input type="hidden" name="report_status" value="completed">
-                                <button type="submit" class="status-btn st-completed {% if row.status == 'completed' %}active{% endif %}" title="Выполнено" aria-label="Выполнено">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
-                                </button>
-                            </form>
-                            <button type="button" class="status-btn st-partial {% if row.status == 'partial' %}active{% endif %} js-open-status-modal" title="Частично" aria-label="Частично"
-                                data-task-id="{{ row.task_id }}" data-status="partial" data-comment="{{ row.worker_comment|replace('\n',' ')|e }}" data-pct="{{ row.completion_percent or '' }}">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l5 3"/></svg>
-                            </button>
-                            <button type="button" class="status-btn st-failed {% if row.status == 'failed' %}active{% endif %} js-open-status-modal" title="Не выполнено" aria-label="Не выполнено"
-                                data-task-id="{{ row.task_id }}" data-status="failed" data-comment="{{ row.worker_comment|replace('\n',' ')|e }}">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
-                            </button>
-                        </div>
-                        {% endif %}
-                    </td>
-                    <td class="col-comment">
-                        <button type="button" class="comment-btn {% if row.has_comment %}has-comment{% endif %} js-open-comment-modal"
-                            title="{% if row.has_comment %}Комментарий{% else %}Добавить комментарий{% endif %}"
-                            data-task-id="{{ row.task_id }}"
-                            data-comment="{{ row.worker_comment|replace('\n',' ')|e }}"
-                            data-readonly="{{ '1' if readonly else '0' }}">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                            </svg>
-                        </button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endfor %}
+    {% set admin_draft = false %}
+    {% set admin_view = false %}
+    {% include "shift/_print_compact_table.html" %}
 </div>
 {% endif %}
 
@@ -292,6 +183,10 @@
             r.addEventListener('change', syncPartial);
         });
         syncPartial();
+    });
+
+    document.querySelectorAll('.mat-color-sq[data-color]').forEach(function (el) {
+        el.style.backgroundColor = el.getAttribute('data-color') || '#ccc';
     });
 
     var errTask = new URLSearchParams(window.location.search).get('task');
