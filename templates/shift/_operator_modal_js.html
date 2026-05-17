@@ -1,0 +1,190 @@
+<script>
+(function () {
+    function commentRequiredStatus(st) {
+        return st === 'partial' || st === 'failed';
+    }
+
+    function closeModals() {
+        document.querySelectorAll('.modal-overlay.open').forEach(function (el) { el.classList.remove('open'); });
+    }
+
+    function showErr(el, msg) {
+        if (!el) return;
+        el.textContent = msg;
+        el.style.display = msg ? 'block' : 'none';
+    }
+
+    function parseAttachments(raw) {
+        if (!raw) return [];
+        try { return JSON.parse(raw); } catch (e) { return []; }
+    }
+
+    function fillExistingFiles(listEl, items) {
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        (items || []).forEach(function (it) {
+            var li = document.createElement('li');
+            var a = document.createElement('a');
+            a.href = it.url;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            a.textContent = it.name || 'Файл';
+            li.appendChild(a);
+            listEl.appendChild(li);
+        });
+    }
+
+    document.querySelectorAll('.js-modal-close').forEach(function (btn) {
+        btn.addEventListener('click', closeModals);
+    });
+
+    var commentModal = document.getElementById('comment-modal');
+    var commentForm = document.getElementById('comment-modal-form');
+    var commentText = document.getElementById('comment-modal-text');
+    var commentSave = document.getElementById('comment-modal-save');
+    var commentErr = document.getElementById('comment-modal-err');
+    var commentHint = document.getElementById('comment-modal-hint');
+    var commentFiles = document.getElementById('comment-modal-files');
+    var commentExisting = document.getElementById('comment-modal-existing');
+    var commentRequiresComment = false;
+
+    function openCommentModal(btn, showError) {
+        if (!commentModal || !commentForm) return;
+        var tid = btn.getAttribute('data-task-id');
+        var ro = btn.getAttribute('data-readonly') === '1';
+        var st = btn.getAttribute('data-task-status') || '';
+        commentRequiresComment = commentRequiredStatus(st);
+        commentForm.action = '/my-shift/task/' + tid + '/comment';
+        commentText.value = btn.getAttribute('data-comment') || '';
+        commentText.readOnly = ro;
+        commentSave.style.display = ro ? 'none' : '';
+        if (commentHint) commentHint.style.display = commentRequiresComment && !ro ? 'block' : 'none';
+        if (commentFiles) commentFiles.value = '';
+        fillExistingFiles(commentExisting, parseAttachments(btn.getAttribute('data-attachments')));
+        showErr(commentErr, showError || '');
+        commentModal.classList.add('open');
+    }
+
+    document.querySelectorAll('.js-open-comment-modal').forEach(function (btn) {
+        btn.addEventListener('click', function () { openCommentModal(btn, ''); });
+    });
+
+    if (commentForm) {
+        commentForm.addEventListener('submit', function (e) {
+            if (commentText.readOnly) return;
+            if (commentRequiresComment && !commentText.value.trim()) {
+                e.preventDefault();
+                showErr(commentErr, 'Комментарий обязателен для этого статуса.');
+                commentText.focus();
+            }
+        });
+    }
+
+    var statusModal = document.getElementById('status-modal');
+    var statusForm = document.getElementById('status-modal-form');
+    var statusErr = document.getElementById('status-modal-err');
+    var statusFiles = document.getElementById('status-modal-files');
+    var statusExisting = document.getElementById('status-modal-existing');
+
+    function openStatusModal(btn, showError) {
+        if (!statusModal || !statusForm) return;
+        var tid = btn.getAttribute('data-task-id');
+        var st = btn.getAttribute('data-status');
+        statusForm.action = '/my-shift/task/' + tid + '/report';
+        document.getElementById('status-modal-status').value = st;
+        document.getElementById('status-modal-comment').value = btn.getAttribute('data-comment') || '';
+        var pctWrap = document.getElementById('status-modal-pct-wrap');
+        var pctIn = document.getElementById('status-modal-pct');
+        var isPartial = st === 'partial';
+        pctWrap.style.display = isPartial ? 'block' : 'none';
+        pctIn.value = btn.getAttribute('data-pct') || '';
+        document.getElementById('status-modal-title').textContent = isPartial ? 'Частично выполнено' : 'Не выполнено';
+        if (statusFiles) statusFiles.value = '';
+        fillExistingFiles(statusExisting, parseAttachments(btn.getAttribute('data-attachments')));
+        showErr(statusErr, showError || '');
+        statusModal.classList.add('open');
+    }
+
+    document.querySelectorAll('.js-open-status-modal').forEach(function (btn) {
+        btn.addEventListener('click', function () { openStatusModal(btn, ''); });
+    });
+
+    if (statusForm) {
+        statusForm.addEventListener('submit', function (e) {
+            var st = document.getElementById('status-modal-status').value;
+            var comment = document.getElementById('status-modal-comment');
+            if (!comment.value.trim()) {
+                e.preventDefault();
+                showErr(statusErr, 'Комментарий обязателен.');
+                comment.focus();
+                return;
+            }
+            if (st === 'partial') {
+                var pct = parseInt(document.getElementById('status-modal-pct').value, 10);
+                if (!(pct >= 1 && pct <= 99)) {
+                    e.preventDefault();
+                    showErr(statusErr, 'Укажите процент от 1 до 99.');
+                }
+            }
+        });
+    }
+
+    document.querySelectorAll('.js-other-task-form').forEach(function (form) {
+        var partialRadios = form.querySelectorAll('.js-partial-radio');
+        var partialFields = form.querySelector('.js-partial-fields');
+        var errEl = form.querySelector('.js-other-form-err');
+        function syncPartial() {
+            var isPartial = false;
+            partialRadios.forEach(function (r) { if (r.checked) isPartial = true; });
+            if (partialFields) partialFields.style.display = isPartial ? 'block' : 'none';
+        }
+        form.querySelectorAll('input[name="report_status"]').forEach(function (r) {
+            r.addEventListener('change', syncPartial);
+        });
+        syncPartial();
+        form.addEventListener('submit', function (e) {
+            var st = (form.querySelector('input[name="report_status"]:checked') || {}).value;
+            var comment = form.querySelector('textarea[name="worker_comment"]');
+            if (commentRequiredStatus(st) && comment && !comment.value.trim()) {
+                e.preventDefault();
+                showErr(errEl, 'Комментарий обязателен.');
+                comment.focus();
+                return;
+            }
+            if (st === 'partial') {
+                var pctEl = form.querySelector('input[name="completion_percent"]');
+                var pct = parseInt(pctEl && pctEl.value, 10);
+                if (!(pct >= 1 && pct <= 99)) {
+                    e.preventDefault();
+                    showErr(errEl, 'Укажите процент от 1 до 99.');
+                }
+            }
+        });
+    });
+
+    document.querySelectorAll('.mat-color-sq[data-color]').forEach(function (el) {
+        el.style.backgroundColor = el.getAttribute('data-color') || '#ccc';
+    });
+
+    var params = new URLSearchParams(window.location.search);
+    var errTask = params.get('task');
+    var errKind = params.get('error');
+    var errStatus = params.get('status');
+    if (errTask) {
+        var row = document.getElementById('task-' + errTask);
+        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    if (errKind === 'comment' && errTask) {
+        var msg = 'Комментарий обязателен.';
+        if (errStatus === 'partial' || errStatus === 'failed') {
+            var statusBtn = document.querySelector(
+                '.js-open-status-modal[data-task-id="' + errTask + '"][data-status="' + errStatus + '"]'
+            );
+            if (statusBtn) openStatusModal(statusBtn, msg);
+        } else {
+            var commentBtn = document.querySelector('.js-open-comment-modal[data-task-id="' + errTask + '"]');
+            if (commentBtn) openCommentModal(commentBtn, msg);
+        }
+    }
+})();
+</script>

@@ -244,6 +244,13 @@ async def build_shift_sheet_view(db: AsyncSession, tasks: list[ShiftTask]) -> di
                 "material_warning": material_warning,
                 "material_warning_text": material_warning_text(material_warning),
                 "attachments": list(task.attachments or []),
+                "attachments_list": [
+                    {
+                        "url": f"/uploads/shift_tasks/{a.stored_filename}",
+                        "name": (a.original_filename or a.stored_filename or "").strip(),
+                    }
+                    for a in (task.attachments or [])
+                ],
             }
         )
 

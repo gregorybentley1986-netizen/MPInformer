@@ -34,6 +34,13 @@
     .modal-hint { font-size: 0.8rem; color: #b45309; margin-bottom: 8px; }
     .partial-pct { margin: 8px 0; }
     .partial-pct input { width: 80px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; }
+    .modal-err { font-size: 0.82rem; color: #b91c1c; background: #fee2e2; padding: 8px 10px; border-radius: 6px; margin-bottom: 8px; }
+    .modal-files-block { margin-top: 10px; }
+    .modal-files-label { display: block; font-size: 0.8rem; color: #555; margin-bottom: 4px; }
+    .modal-files-block input[type="file"] { font-size: 0.82rem; max-width: 100%; }
+    .modal-existing-files { margin: 6px 0 0; padding: 0; list-style: none; font-size: 0.8rem; }
+    .modal-existing-files li { margin-bottom: 4px; }
+    .modal-existing-files a { color: #2563eb; }
 </style>
 {% endblock %}
 {% block content %}
@@ -47,7 +54,7 @@
 <div class="alert alert-success">Сохранено.</div>
 {% endif %}
 {% if request.query_params.get("error") == "comment" %}
-<div class="alert alert-error">Для «Частично» и «Не выполнено» нужен комментарий.</div>
+<div class="alert alert-error" id="page-comment-error">Для «Частично» и «Не выполнено» комментарий обязателен.</div>
 {% elif request.query_params.get("error") == "percent" %}
 <div class="alert alert-error">Укажите процент от 1 до 99.</div>
 {% endif %}
@@ -68,7 +75,8 @@
     {% if t.target_quantity %} — {{ t.target_quantity }} {{ t.unit_label }}{% endif %}
     {% if t.description %}<br><span style="color:#666;">{{ t.description }}</span>{% endif %}
     {% if not readonly %}
-    <form method="POST" action="/my-shift/task/{{ t.id }}/report" style="margin-top:8px;">
+    <form method="POST" action="/my-shift/task/{{ t.id }}/report" class="js-other-task-form" enctype="multipart/form-data" style="margin-top:8px;">
+        <p class="modal-err js-other-form-err" style="display:none;"></p>
         <div class="status-icons">
             <label><input type="radio" name="report_status" value="completed" {% if t.status == 'completed' %}checked{% endif %}> ✓</label>
             <label><input type="radio" name="report_status" value="partial" class="js-partial-radio" {% if t.status == 'partial' %}checked{% endif %}> ◐</label>
@@ -78,6 +86,8 @@
             <input type="number" name="completion_percent" min="1" max="99" value="{{ t.completion_percent or '' }}" placeholder="%">
         </div>
         <textarea name="worker_comment" rows="2" style="width:100%;margin-top:6px;font-size:0.85rem;">{{ t.worker_comment or '' }}</textarea>
+        <label style="display:block;font-size:0.8rem;color:#555;margin-top:6px;">Файлы</label>
+        <input type="file" name="attachments" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar,.7z" style="font-size:0.82rem;">
         <button type="submit" class="btn" style="margin-top:6px;padding:4px 10px;font-size:0.8rem;">Сохранить</button>
     </form>
     {% else %}
@@ -91,109 +101,13 @@
 <p>Заданий нет.</p>
 {% endif %}
 
-<div class="modal-overlay" id="comment-modal" aria-hidden="true">
-    <div class="modal-box" role="dialog" aria-labelledby="comment-modal-title">
-        <h3 id="comment-modal-title">Комментарий</h3>
-        <form method="POST" id="comment-modal-form" action="">
-            <textarea name="worker_comment" id="comment-modal-text" placeholder="Что сделано, что помешало…"></textarea>
-            <div class="modal-actions">
-                <button type="button" class="btn js-modal-close">Отмена</button>
-                <button type="submit" class="btn btn-op btn-income" id="comment-modal-save">Сохранить</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div class="modal-overlay" id="status-modal" aria-hidden="true">
-    <div class="modal-box" role="dialog">
-        <h3 id="status-modal-title">Отметка</h3>
-        <p class="modal-hint" id="status-modal-hint">Комментарий обязателен.</p>
-        <form method="POST" id="status-modal-form" action="">
-            <input type="hidden" name="report_status" id="status-modal-status" value="">
-            <div class="partial-pct" id="status-modal-pct-wrap" style="display:none;">
-                <label>Процент (1–99)</label><br>
-                <input type="number" name="completion_percent" id="status-modal-pct" min="1" max="99">
-            </div>
-            <textarea name="worker_comment" id="status-modal-comment" placeholder="Комментарий…"></textarea>
-            <div class="modal-actions">
-                <button type="button" class="btn js-modal-close">Отмена</button>
-                <button type="submit" class="btn btn-op btn-income">Сохранить</button>
-            </div>
-        </form>
-    </div>
-</div>
+{% if not readonly %}
+{% include "shift/_operator_modals.html" %}
+{% endif %}
 {% endblock %}
 {% block extra_js %}
-<script>
-(function () {
-    function closeModals() {
-        document.querySelectorAll('.modal-overlay.open').forEach(function (el) { el.classList.remove('open'); });
-    }
-    document.querySelectorAll('.js-modal-close').forEach(function (btn) {
-        btn.addEventListener('click', closeModals);
-    });
-    document.querySelectorAll('.modal-overlay').forEach(function (ov) {
-        ov.addEventListener('click', function (e) { if (e.target === ov) closeModals(); });
-    });
-
-    var commentModal = document.getElementById('comment-modal');
-    var commentForm = document.getElementById('comment-modal-form');
-    var commentText = document.getElementById('comment-modal-text');
-    var commentSave = document.getElementById('comment-modal-save');
-    document.querySelectorAll('.js-open-comment-modal').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var tid = btn.getAttribute('data-task-id');
-            var ro = btn.getAttribute('data-readonly') === '1';
-            commentForm.action = '/my-shift/task/' + tid + '/comment';
-            commentText.value = btn.getAttribute('data-comment') || '';
-            commentText.readOnly = ro;
-            commentSave.style.display = ro ? 'none' : '';
-            commentModal.classList.add('open');
-        });
-    });
-
-    var statusModal = document.getElementById('status-modal');
-    var statusForm = document.getElementById('status-modal-form');
-    document.querySelectorAll('.js-open-status-modal').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var tid = btn.getAttribute('data-task-id');
-            var st = btn.getAttribute('data-status');
-            statusForm.action = '/my-shift/task/' + tid + '/report';
-            document.getElementById('status-modal-status').value = st;
-            document.getElementById('status-modal-comment').value = btn.getAttribute('data-comment') || '';
-            var pctWrap = document.getElementById('status-modal-pct-wrap');
-            var pctIn = document.getElementById('status-modal-pct');
-            var isPartial = st === 'partial';
-            pctWrap.style.display = isPartial ? 'block' : 'none';
-            pctIn.value = btn.getAttribute('data-pct') || '';
-            document.getElementById('status-modal-title').textContent = isPartial ? 'Частично выполнено' : 'Не выполнено';
-            statusModal.classList.add('open');
-        });
-    });
-
-    document.querySelectorAll('.other-task form').forEach(function (form) {
-        var partialRadios = form.querySelectorAll('.js-partial-radio');
-        var partialFields = form.querySelector('.js-partial-fields');
-        function syncPartial() {
-            var isPartial = false;
-            partialRadios.forEach(function (r) { if (r.checked) isPartial = true; });
-            if (partialFields) partialFields.style.display = isPartial ? 'block' : 'none';
-        }
-        form.querySelectorAll('input[name="report_status"]').forEach(function (r) {
-            r.addEventListener('change', syncPartial);
-        });
-        syncPartial();
-    });
-
-    document.querySelectorAll('.mat-color-sq[data-color]').forEach(function (el) {
-        el.style.backgroundColor = el.getAttribute('data-color') || '#ccc';
-    });
-
-    var errTask = new URLSearchParams(window.location.search).get('task');
-    if (errTask) {
-        var el = document.getElementById('task-' + errTask);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-})();
-</script>
+{% if not readonly %}
+{% include "shift/_operator_modal_js.html" %}
+{% endif %}
 {% endblock %}
+

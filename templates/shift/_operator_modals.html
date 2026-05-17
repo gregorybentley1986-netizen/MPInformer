@@ -1,0 +1,46 @@
+<div class="modal-overlay" id="comment-modal" aria-hidden="true">
+    <div class="modal-box" role="dialog" aria-labelledby="comment-modal-title" onclick="event.stopPropagation()">
+        <h3 id="comment-modal-title">Комментарий</h3>
+        <p class="modal-err" id="comment-modal-err" style="display:none;"></p>
+        <p class="modal-hint" id="comment-modal-hint" style="display:none;">Комментарий обязателен для статуса «Частично» и «Не выполнено».</p>
+        <form method="POST" id="comment-modal-form" action="" enctype="multipart/form-data">
+            <textarea name="worker_comment" id="comment-modal-text" placeholder="Что сделано, что помешало…"></textarea>
+            <div class="modal-files-block">
+                <label class="modal-files-label">Файлы (фото, PDF и др.)</label>
+                <input type="file" name="attachments" id="comment-modal-files" multiple
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar,.7z">
+                <ul class="modal-existing-files" id="comment-modal-existing"></ul>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn js-modal-close">Отмена</button>
+                <button type="submit" class="btn btn-op btn-income" id="comment-modal-save">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="status-modal" aria-hidden="true">
+    <div class="modal-box" role="dialog" onclick="event.stopPropagation()">
+        <h3 id="status-modal-title">Отметка</h3>
+        <p class="modal-err" id="status-modal-err" style="display:none;"></p>
+        <p class="modal-hint" id="status-modal-hint">Комментарий обязателен.</p>
+        <form method="POST" id="status-modal-form" action="" enctype="multipart/form-data">
+            <input type="hidden" name="report_status" id="status-modal-status" value="">
+            <div class="partial-pct" id="status-modal-pct-wrap" style="display:none;">
+                <label>Процент (1–99)</label><br>
+                <input type="number" name="completion_percent" id="status-modal-pct" min="1" max="99">
+            </div>
+            <textarea name="worker_comment" id="status-modal-comment" placeholder="Комментарий…" required></textarea>
+            <div class="modal-files-block">
+                <label class="modal-files-label">Файлы (фото, PDF и др.)</label>
+                <input type="file" name="attachments" id="status-modal-files" multiple
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar,.7z">
+                <ul class="modal-existing-files" id="status-modal-existing"></ul>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn js-modal-close">Отмена</button>
+                <button type="submit" class="btn btn-op btn-income">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>

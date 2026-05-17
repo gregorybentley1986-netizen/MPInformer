@@ -26,7 +26,7 @@ from app.shift_planning.constants import (
     SHIFT_SHEET_STATUS_LABELS,
 )
 from app.shift_planning.helpers import (
-    save_shift_task_photos,
+    save_shift_task_attachments,
     shift_attachment_url,
     user_is_operator,
 )
@@ -115,17 +115,48 @@ async def my_shift_sheet(
     )
 
 
+def _redirect_comment_required(
+    sheet_id: int,
+    task_id: int,
+    *,
+    report_status: str | None = None,
+) -> RedirectResponse:
+    q = f"error=comment&task={task_id}"
+    if report_status:
+        q += f"&status={report_status}"
+    return RedirectResponse(url=f"/my-shift/{sheet_id}?{q}", status_code=303)
+
+
+async def _add_task_attachments(
+    db: AsyncSession,
+    task_id: int,
+    files: list,
+) -> None:
+    saved = await save_shift_task_attachments(files or [])
+    for stored, orig in saved:
+        db.add(
+            ShiftTaskAttachment(
+                task_id=task_id,
+                stored_filename=stored,
+                original_filename=orig[:256],
+            )
+        )
+
+
 @router.post("/my-shift/task/{task_id:int}/comment")
 async def my_shift_task_comment(
     task_id: int,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(verify_site_user),
     worker_comment: str = Form(""),
+    attachments: list[UploadFile] | None = File(None),
 ):
     if not user_is_operator(user):
         return RedirectResponse(url="/", status_code=303)
     r = await db.execute(
-        select(ShiftTask).options(selectinload(ShiftTask.sheet)).where(ShiftTask.id == task_id)
+        select(ShiftTask)
+        .options(selectinload(ShiftTask.sheet), selectinload(ShiftTask.attachments))
+        .where(ShiftTask.id == task_id)
     )
     task = r.scalar_one_or_none()
     if not task or not task.sheet:
@@ -133,7 +164,13 @@ async def my_shift_task_comment(
     sheet = task.sheet
     if sheet.assignee_user_id != user.id or sheet.status != SHIFT_SHEET_STATUS_PUBLISHED:
         return RedirectResponse(url=f"/my-shift/{sheet.id}?error=locked", status_code=303)
-    task.worker_comment = (worker_comment or "").strip()[:2000]
+
+    comment = (worker_comment or "").strip()
+    if task.status in (SHIFT_TASK_STATUS_PARTIAL, SHIFT_TASK_STATUS_FAILED) and not comment:
+        return _redirect_comment_required(sheet.id, task_id)
+
+    task.worker_comment = comment[:2000]
+    await _add_task_attachments(db, task.id, attachments or [])
     await db.commit()
     return RedirectResponse(url=f"/my-shift/{sheet.id}?success=1#task-{task_id}", status_code=303)
 
@@ -147,7 +184,7 @@ async def my_shift_task_report(
     report_status: str = Form(...),
     completion_percent: str = Form(""),
     worker_comment: str = Form(""),
-    photos: list[UploadFile] | None = File(None),
+    attachments: list[UploadFile] | None = File(None),
 ):
     if not user_is_operator(user):
         return RedirectResponse(url="/", status_code=303)
@@ -175,10 +212,7 @@ async def my_shift_task_report(
         task.completed_at = datetime.now(MSK)
     elif st == SHIFT_TASK_STATUS_PARTIAL:
         if not comment:
-            return RedirectResponse(
-                url=f"/my-shift/{sheet_id}?error=comment&task={task_id}",
-                status_code=303,
-            )
+            return _redirect_comment_required(sheet_id, task_id, report_status=st)
         try:
             pct = int((completion_percent or "").strip())
         except ValueError:
@@ -194,10 +228,7 @@ async def my_shift_task_report(
         task.completed_at = datetime.now(MSK)
     elif st == SHIFT_TASK_STATUS_FAILED:
         if not comment:
-            return RedirectResponse(
-                url=f"/my-shift/{sheet_id}?error=comment&task={task_id}",
-                status_code=303,
-            )
+            return _redirect_comment_required(sheet_id, task_id, report_status=st)
         task.status = SHIFT_TASK_STATUS_FAILED
         task.completion_percent = None
         task.worker_comment = comment[:2000]
@@ -205,15 +236,7 @@ async def my_shift_task_report(
     else:
         return RedirectResponse(url=f"/my-shift/{sheet_id}?error=status", status_code=303)
 
-    saved = await save_shift_task_photos(photos or [])
-    for stored, orig in saved:
-        db.add(
-            ShiftTaskAttachment(
-                task_id=task.id,
-                stored_filename=stored,
-                original_filename=orig[:256],
-            )
-        )
+    await _add_task_attachments(db, task.id, attachments or [])
     await db.commit()
     logger.info(
         "Оператор {} отметил задание {} как {} (лист {})",
