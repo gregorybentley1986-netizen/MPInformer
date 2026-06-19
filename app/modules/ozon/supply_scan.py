@@ -24,6 +24,8 @@ from app.db.database import AsyncSessionLocal
 from app.config import settings
 from app.modules.ozon.api_client import OzonAPIClient
 from app.modules.ozon.timeslot_parse import (
+    build_selected_cluster_warehouses_from_draft,
+    cluster_list_id,
     cluster_macrolocal_id,
     extract_draft_id,
     extract_timeslot_days,
@@ -63,6 +65,34 @@ STATUS_POLL_MAX_ATTEMPTS = 60
 TIMESLOT_RATE_SEC = 6  # пауза перед запросом таймслотов (снижает 429)
 TIMESLOT_429_RETRY_DELAY_SEC = 30  # при 429 ждём и повторяем (окно лимита Ozon может быть до минуты)
 TIMESLOT_429_MAX_RETRIES = 4  # всего 5 попыток (0..4), при 429 — пауза 25 с между попытками
+TIMESLOT_404_RETRY_DELAY_SEC = 15  # Ozon иногда отдаёт 404 сразу после SUCCESS черновика
+
+
+async def _request_draft_timeslots(
+    client: OzonAPIClient,
+    *,
+    draft_id: int,
+    date_from: str,
+    date_to: str,
+    selected_cluster_warehouses: list[dict],
+) -> dict:
+    """POST /v2/draft/timeslot/info с повторами при 429."""
+    ts_resp: dict = {}
+    for retry in range(TIMESLOT_429_MAX_RETRIES + 1):
+        ts_resp = await client.get_draft_timeslots(
+            draft_id=int(draft_id),
+            date_from=date_from,
+            date_to=date_to,
+            supply_type="CROSSDOCK",
+            selected_cluster_warehouses=selected_cluster_warehouses,
+        )
+        if not ts_resp.get("_error"):
+            return ts_resp
+        if ts_resp.get("status_code") == 429 and retry < TIMESLOT_429_MAX_RETRIES:
+            await asyncio.sleep(TIMESLOT_429_RETRY_DELAY_SEC)
+            continue
+        break
+    return ts_resp
 
 
 async def _get_draft_config(session: AsyncSession) -> Optional[dict]:
@@ -75,13 +105,9 @@ async def _get_draft_config(session: AsyncSession) -> Optional[dict]:
 
 
 async def _get_clusters() -> list[dict]:
-    """Список кластеров Ozon, доступных для кросс-докинга (как в UI создания поставки)."""
+    """Список кластеров Ozon для кроссдокинга."""
     client = OzonAPIClient()
-    clusters = await client.get_cluster_list_for_supply(
-        filter_by_supply_type=["CREATE_TYPE_CROSSDOCK"],
-        search="",
-        cluster_type="CLUSTER_TYPE_OZON",
-    )
+    clusters = await client.get_cluster_list(cluster_type="CLUSTER_TYPE_OZON")
     return clusters or []
 
 
@@ -261,14 +287,14 @@ async def _run_supply_queue_scan_impl() -> None:
         if macrolocal_id is None:
             logger.warning("Supply scan: пропуск кластера без macrolocal_cluster_id: {}", cluster)
             continue
-        cluster_id = macrolocal_id
-        cluster_name = cluster.get("name") or cluster.get("cluster_name") or f"Кластер {cluster_id}"
+        stored_cluster_id = cluster_list_id(cluster, macrolocal_id) or macrolocal_id
+        cluster_name = cluster.get("name") or cluster.get("cluster_name") or f"Кластер {stored_cluster_id}"
 
         payload = copy.deepcopy(body)
         if "cluster_info" not in payload:
             payload["cluster_info"] = {}
         payload["cluster_info"] = dict(payload["cluster_info"])
-        payload["cluster_info"]["macrolocal_cluster_id"] = int(cluster_id)
+        payload["cluster_info"]["macrolocal_cluster_id"] = int(macrolocal_id)
 
         draft_created_at = time.monotonic()
 
@@ -276,23 +302,23 @@ async def _run_supply_queue_scan_impl() -> None:
             resp = await client.create_crossdock_draft_raw(payload)
             draft_id = extract_draft_id(resp)
             if not draft_id or resp.get("errors"):
-                results.append((int(cluster_id), cluster_name, "ошибка создания черновика", [-1] * DAYS_COUNT))
+                results.append((int(stored_cluster_id), cluster_name, "ошибка создания черновика", [-1] * DAYS_COUNT))
                 await asyncio.sleep(max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at)))
                 continue
         except httpx.HTTPStatusError as e:
             resp_text = (e.response.text or "")[:1500]
             logger.warning(
                 "Supply scan cluster {}: create draft failed: HTTP {} | response: {}",
-                cluster_id,
+                stored_cluster_id,
                 e.response.status_code,
                 resp_text or "(empty)",
             )
-            results.append((int(cluster_id), cluster_name, "ошибка создания черновика", [-1] * DAYS_COUNT))
+            results.append((int(stored_cluster_id), cluster_name, "ошибка создания черновика", [-1] * DAYS_COUNT))
             await asyncio.sleep(max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at)))
             continue
         except Exception as e:
-            logger.warning("Supply scan cluster {}: create draft failed: {}", cluster_id, e)
-            results.append((int(cluster_id), cluster_name, "ошибка создания черновика", [-1] * DAYS_COUNT))
+            logger.warning("Supply scan cluster {}: create draft failed: {}", stored_cluster_id, e)
+            results.append((int(stored_cluster_id), cluster_name, "ошибка создания черновика", [-1] * DAYS_COUNT))
             await asyncio.sleep(max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at)))
             continue
 
@@ -302,6 +328,7 @@ async def _run_supply_queue_scan_impl() -> None:
         success = False
         failed_no_slots = False
         last_status = ""
+        last_draft_info: dict = {}
         for _ in range(STATUS_POLL_MAX_ATTEMPTS):
             info = await client.get_draft_info(str(draft_id))
             if info.get("_error"):
@@ -311,20 +338,21 @@ async def _run_supply_queue_scan_impl() -> None:
             last_status = st
             if is_draft_status_ready(st):
                 success = True
+                last_draft_info = info
                 break
             if st == "FAILED" or (st and "FAILED" in st):
                 if is_drop_off_point_has_no_timeslots(info):
                     failed_no_slots = True
                     logger.info(
                         "Supply scan cluster {} ({}): черновик FAILED — точка отгрузки без слотов",
-                        cluster_id,
+                        stored_cluster_id,
                         cluster_name,
                     )
                 break
             if not is_draft_status_in_progress(st):
                 logger.warning(
                     "Supply scan cluster {} ({}): неожиданный статус черновика draft_id={} status={}",
-                    cluster_id,
+                    stored_cluster_id,
                     cluster_name,
                     draft_id,
                     st,
@@ -333,112 +361,124 @@ async def _run_supply_queue_scan_impl() -> None:
             await asyncio.sleep(STATUS_POLL_INTERVAL_SEC)
 
         if failed_no_slots:
-            results.append((int(cluster_id), cluster_name, "нет дат", [0] * DAYS_COUNT))
+            results.append((int(stored_cluster_id), cluster_name, "нет дат", [0] * DAYS_COUNT))
             await asyncio.sleep(max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at)))
             continue
         if not success:
             logger.warning(
                 "Supply scan cluster {} ({}): таймаут/ошибка статуса черновика draft_id={} last_status={}",
-                cluster_id,
+                stored_cluster_id,
                 cluster_name,
                 draft_id,
                 last_status,
             )
-            results.append((int(cluster_id), cluster_name, "таймаут статуса", [-1] * DAYS_COUNT))
+            results.append((int(stored_cluster_id), cluster_name, "таймаут статуса", [-1] * DAYS_COUNT))
             await asyncio.sleep(max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at)))
             continue
 
+        selected_wh = build_selected_cluster_warehouses_from_draft(last_draft_info, int(macrolocal_id))
         await asyncio.sleep(TIMESLOT_RATE_SEC)
 
         try:
             logger.info(
-                "Supply scan cluster {} ({}): запрос таймслотов draft_id={} date_from={} date_to={}",
-                cluster_id,
+                "Supply scan cluster {} ({}): запрос таймслотов draft_id={} macrolocal={} selected_wh={} date_from={} date_to={}",
+                stored_cluster_id,
                 cluster_name,
                 draft_id,
+                macrolocal_id,
+                selected_wh,
                 today_str,
                 to_str,
             )
-            ts_resp = None
-            for retry in range(TIMESLOT_429_MAX_RETRIES + 1):
-                ts_resp = await client.get_draft_timeslots(
+            ts_resp = await _request_draft_timeslots(
+                client,
+                draft_id=int(draft_id),
+                date_from=today_str,
+                date_to=to_str,
+                selected_cluster_warehouses=selected_wh,
+            )
+            if ts_resp.get("_error") and ts_resp.get("status_code") == 404:
+                oz_snip = str(ts_resp.get("ozon_response", ""))[:400]
+                logger.warning(
+                    "Supply scan cluster {} ({}): timeslot 404 draft_id={} ozon={}",
+                    stored_cluster_id,
+                    cluster_name,
+                    draft_id,
+                    oz_snip,
+                )
+                logger.info(
+                    "Supply scan cluster {} ({}): пауза {} с и повтор timeslot после 404",
+                    stored_cluster_id,
+                    cluster_name,
+                    TIMESLOT_404_RETRY_DELAY_SEC,
+                )
+                await asyncio.sleep(TIMESLOT_404_RETRY_DELAY_SEC)
+                ts_resp = await _request_draft_timeslots(
+                    client,
                     draft_id=int(draft_id),
                     date_from=today_str,
                     date_to=to_str,
-                    supply_type="CROSSDOCK",
-                    selected_cluster_warehouses=[{"macrolocal_cluster_id": int(cluster_id)}],
+                    selected_cluster_warehouses=selected_wh,
                 )
-                if not ts_resp.get("_error"):
-                    break
-                if ts_resp.get("status_code") == 429 and retry < TIMESLOT_429_MAX_RETRIES:
-                    logger.info(
-                        "Supply scan cluster {}: 429 rate limit, пауза {} с, повтор {}",
-                        cluster_id,
-                        TIMESLOT_429_RETRY_DELAY_SEC,
-                        retry + 2,
-                    )
-                    await asyncio.sleep(TIMESLOT_429_RETRY_DELAY_SEC)
-                    continue
-                break
             if ts_resp.get("_error"):
                 status_code = ts_resp.get("status_code")
                 if status_code == 404:
                     logger.info(
-                        "Supply scan cluster {} ({}): Ozon 404 — нет слотов по кластеру",
-                        cluster_id,
+                        "Supply scan cluster {} ({}): Ozon 404 после повтора — нет слотов",
+                        stored_cluster_id,
                         cluster_name,
                     )
-                    results.append((int(cluster_id), cluster_name, "нет дат", [0] * DAYS_COUNT))
+                    results.append((int(stored_cluster_id), cluster_name, "нет дат", [0] * DAYS_COUNT))
                 else:
                     logger.warning(
                         "Supply scan cluster {}: таймслоты ошибка _error={} status_code={} ozon_preview={}",
-                        cluster_id,
+                        stored_cluster_id,
                         ts_resp.get("_error"),
                         status_code,
                         str(ts_resp.get("ozon_response", ""))[:400],
                     )
-                    results.append((int(cluster_id), cluster_name, "ошибка таймслотов", [-1] * DAYS_COUNT))
+                    results.append((int(stored_cluster_id), cluster_name, "ошибка таймслотов", [-1] * DAYS_COUNT))
             else:
                 ts_err = timeslot_error_reason(ts_resp)
-                days = extract_timeslot_days(ts_resp, macrolocal_cluster_id=int(cluster_id))
-                dates_text = parse_timeslot_dates_text(ts_resp, macrolocal_cluster_id=int(cluster_id))
+                days = extract_timeslot_days(ts_resp, macrolocal_cluster_id=int(macrolocal_id))
+                dates_text = parse_timeslot_dates_text(ts_resp, macrolocal_cluster_id=int(macrolocal_id))
                 day_counts = parse_timeslot_day_counts(
                     ts_resp,
                     today_str,
                     DAYS_COUNT,
-                    macrolocal_cluster_id=int(cluster_id),
+                    macrolocal_cluster_id=int(macrolocal_id),
                 )
                 if ts_err and not any(c > 0 for c in day_counts):
                     logger.warning(
                         "Supply scan cluster {} ({}): таймслоты пусты, error_reason={} days_in_response={}",
-                        cluster_id,
+                        stored_cluster_id,
                         cluster_name,
                         ts_err,
                         len(days),
                     )
                 elif not days:
                     logger.warning(
-                        "Supply scan cluster {} ({}): таймслоты HTTP 200, но days пуст — keys={}",
-                        cluster_id,
+                        "Supply scan cluster {} ({}): tаймслоты HTTP 200, но days пуст — keys={}",
+                        stored_cluster_id,
                         cluster_name,
                         list((ts_resp.get("result") or {}).keys()) if isinstance(ts_resp.get("result"), dict) else [],
                     )
                 logger.info(
                     "Supply scan cluster {}: таймслоты ok dates_text={} day_counts={}",
-                    cluster_id,
+                    stored_cluster_id,
                     dates_text,
                     day_counts,
                 )
-                results.append((int(cluster_id), cluster_name, dates_text, day_counts))
+                results.append((int(stored_cluster_id), cluster_name, dates_text, day_counts))
         except Exception as e:
             logger.warning(
                 "Supply scan cluster {}: timeslots exception {} ({})",
-                cluster_id,
+                stored_cluster_id,
                 type(e).__name__,
                 e,
                 exc_info=True,
             )
-            results.append((int(cluster_id), cluster_name, "ошибка таймслотов", [-1] * DAYS_COUNT))
+            results.append((int(stored_cluster_id), cluster_name, "ошибка таймслотов", [-1] * DAYS_COUNT))
 
         await asyncio.sleep(max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at)))
 

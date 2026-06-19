@@ -180,6 +180,11 @@ def extract_timeslot_days(data: dict | None, macrolocal_cluster_id: int | None =
     days = _days_from_block(drop_off)
     if days:
         return days
+    if isinstance(drop_off, dict) and isinstance(drop_off.get("days"), list):
+        logger.debug(
+            "timeslot_parse: drop_off_warehouse_timeslots.days пуст (macrolocal_cluster_id={})",
+            macrolocal_cluster_id,
+        )
 
     # Иногда слоты лежат в массиве по кластерам/складам.
     for key in (
@@ -281,14 +286,89 @@ def cluster_macrolocal_id(cluster: dict) -> int | None:
     """macrolocal_cluster_id кластера для draft/timeslot (не путать с id кластера в списке)."""
     if not isinstance(cluster, dict):
         return None
-    for key in ("macrolocal_cluster_id", "id"):
-        raw = cluster.get(key)
+    raw = cluster.get("macrolocal_cluster_id")
+    if raw is not None:
+        try:
+            val = int(raw)
+            if val > 0:
+                return val
+        except (TypeError, ValueError):
+            pass
+    for lc in cluster.get("logistic_clusters") or []:
+        if not isinstance(lc, dict):
+            continue
+        raw = lc.get("macrolocal_cluster_id")
         if raw is None:
             continue
         try:
             val = int(raw)
+            if val > 0:
+                return val
         except (TypeError, ValueError):
             continue
-        if val > 0:
-            return val
+    raw = cluster.get("id")
+    if raw is not None:
+        try:
+            val = int(raw)
+            if val > 0:
+                return val
+        except (TypeError, ValueError):
+            pass
     return None
+
+
+def cluster_list_id(cluster: dict, macrolocal_cluster_id: int | None = None) -> int | None:
+    """id кластера из POST /v1/cluster/list — для сохранения в БД (как в UI)."""
+    if not isinstance(cluster, dict):
+        return None
+    raw = cluster.get("id")
+    if raw is not None:
+        try:
+            val = int(raw)
+            if val > 0:
+                return val
+        except (TypeError, ValueError):
+            pass
+    return macrolocal_cluster_id
+
+
+def build_selected_cluster_warehouses_from_draft(
+    draft_info: dict | None,
+    macrolocal_cluster_id: int,
+) -> list[dict]:
+    """
+    selected_cluster_warehouses для POST /v2/draft/timeslot/info.
+    Берём macrolocal_cluster_id из ответа v2/draft/create/info (после SUCCESS), если есть.
+    """
+    fallback = [{"macrolocal_cluster_id": int(macrolocal_cluster_id)}]
+    if not isinstance(draft_info, dict):
+        return fallback
+    payload = _result_payload(draft_info)
+    clusters = payload.get("clusters") or draft_info.get("clusters") or []
+    if not isinstance(clusters, list):
+        return fallback
+    req = int(macrolocal_cluster_id)
+    for cl in clusters:
+        if not isinstance(cl, dict):
+            continue
+        try:
+            ml = int(cl.get("macrolocal_cluster_id"))
+        except (TypeError, ValueError):
+            continue
+        if ml == req:
+            return [{"macrolocal_cluster_id": ml}]
+    for cl in clusters:
+        if not isinstance(cl, dict):
+            continue
+        try:
+            ml = int(cl.get("macrolocal_cluster_id"))
+        except (TypeError, ValueError):
+            continue
+        if ml > 0:
+            logger.debug(
+                "timeslot_parse: macrolocal {} не в draft/info, используем {} из черновика",
+                req,
+                ml,
+            )
+            return [{"macrolocal_cluster_id": ml}]
+    return fallback
