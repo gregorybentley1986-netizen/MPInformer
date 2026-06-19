@@ -1591,14 +1591,16 @@ class OzonAPIClient:
                     days = (drop_off.get("days") if isinstance(drop_off, dict) else None) or []
                     days_len = len(days) if isinstance(days, list) else 0
                     first_day_slots = len((days[0].get("timeslots") or [])) if days and len(days) > 0 and isinstance(days[0], dict) else 0
+                    err_reason = (data.get("error_reason") or "") if isinstance(data, dict) else ""
                     logger.info(
-                        "Ozon supply draft: POST /v2/draft/timeslot/info success draft_id={} response_keys={} result_keys={} drop_off_keys={} days_count={} first_day_slots={}",
+                        "Ozon supply draft: POST /v2/draft/timeslot/info success draft_id={} response_keys={} result_keys={} drop_off_keys={} days_count={} first_day_slots={} error_reason={}",
                         draft_id,
                         list(data.keys()),
                         list(result.keys()) if result else [],
                         list(drop_off.keys()) if drop_off else [],
                         days_len,
                         first_day_slots,
+                        err_reason or "-",
                     )
                     data["attempts"] = attempts
                     return data

@@ -21,6 +21,15 @@ from app.db.models import SlotsTrackerConfig, SupplyDraftConfig
 from app.db.database import AsyncSessionLocal
 from app.config import settings
 from app.modules.ozon.api_client import OzonAPIClient
+from app.modules.ozon.timeslot_parse import (
+    extract_draft_id,
+    is_drop_off_point_has_no_timeslots,
+    is_draft_status_in_progress,
+    is_draft_status_ready,
+    parse_draft_status,
+    parse_timeslot_dates_text,
+    parse_timeslot_day_counts,
+)
 from app.time_utils import MSK, now_msk
 
 # Если конфиг парсера пуст — используем дефолт (как в supply_scan), чтобы отслеживатель мог запуститься
@@ -67,56 +76,14 @@ async def _get_draft_config(session: AsyncSession) -> Optional[dict]:
 
 
 def _parse_dates_and_counts_in_period(
-    data: dict, date_from_str: str, period_days: int
+    data: dict, date_from_str: str, period_days: int, macrolocal_cluster_id: int | None = None
 ) -> tuple[str, list[int]]:
-    """
-    Из ответа v2/draft/timeslot/info извлечь даты с слотами и список количеств слотов по дням
-    в пределах period_days. Возвращает (dates_text, day_counts).
-    """
-    dates: list[str] = []
-    out: list[int] = []
-    try:
-        result = (data or {}).get("result") or (data or {}).get("data") or {}
-        drop_off = result.get("drop_off_warehouse_timeslots") or {}
-        days_raw = drop_off.get("days") or []
-        if not days_raw and isinstance(result, dict):
-            # альтернативная структура ответа
-            for key in ("warehouse_timeslots", "timeslots", "days"):
-                cand = result.get(key)
-                if isinstance(cand, list):
-                    days_raw = cand
-                    break
-        if not days_raw:
-            logger.debug(
-                "Slots tracker _parse_dates: пустой days, ключи data=%s result=%s",
-                list((data or {}).keys()),
-                list(result.keys()) if isinstance(result, dict) else [],
-            )
-        by_date: dict[str, int] = {}
-        for day in days_raw:
-            if not isinstance(day, dict):
-                continue
-            dt = day.get("date_in_timezone") or ""
-            if len(dt) >= 10:
-                key = dt[:10]
-                cnt = len(day.get("timeslots") or [])
-                by_date[key] = cnt
-        base = datetime.strptime(date_from_str, "%Y-%m-%d").date()
-        for i in range(period_days):
-            d = base + timedelta(days=i)
-            key = d.strftime("%Y-%m-%d")
-            cnt = by_date.get(key, 0)
-            out.append(cnt)
-            if cnt > 0:
-                dates.append(d.strftime("%d.%m"))
-    except Exception as e:
-        logger.warning(
-            "Slots tracker _parse_dates_and_counts error: %s (%s)",
-            type(e).__name__, e,
-        )
-        out = [0] * period_days
-    dates_text = ", ".join(dates) if dates else "нет дат"
-    return dates_text, out[:period_days]
+    """Из ответа v2/draft/timeslot/info — даты и day_counts за period_days."""
+    day_counts = parse_timeslot_day_counts(
+        data, date_from_str, period_days, macrolocal_cluster_id=macrolocal_cluster_id
+    )
+    dates_text = parse_timeslot_dates_text(data, macrolocal_cluster_id=macrolocal_cluster_id)
+    return dates_text, day_counts[:period_days]
 
 
 def _has_slots_in_period(day_counts: list[int]) -> bool:
@@ -312,10 +279,8 @@ async def run_slots_tracker() -> None:
 
         try:
             resp = await client.create_crossdock_draft_raw(payload)
-            draft_id = resp.get("draft_id")
-            if (draft_id is None or draft_id == 0) and isinstance(resp.get("result"), dict):
-                draft_id = resp.get("result").get("draft_id")
-            if not draft_id or draft_id == 0 or resp.get("errors"):
+            draft_id = extract_draft_id(resp)
+            if not draft_id or resp.get("errors"):
                 logger.debug(
                     "Slots tracker cluster %s: ошибка создания черновика",
                     cid,
@@ -345,29 +310,16 @@ async def run_slots_tracker() -> None:
                 await asyncio.sleep(STATUS_POLL_INTERVAL_SEC)
                 continue
             payload_res = info.get("result") or info.get("data") or info
-            st = (
-                info.get("status")
-                or info.get("state")
-                or (payload_res.get("status") if isinstance(payload_res, dict) else None)
-                or (payload_res.get("state") if isinstance(payload_res, dict) else None)
-            )
-            st = (st or "").strip().upper()
-            if st == "SUCCESS":
+            st = parse_draft_status(info)
+            if is_draft_status_ready(st):
                 success = True
                 break
-            if st == "FAILED":
-                err_list = (
-                    info.get("errors")
-                    or (payload_res.get("errors") if isinstance(payload_res, dict) else None)
-                    or []
-                )
-                for e in err_list:
-                    msg = (e.get("error_message") or "") if isinstance(e, dict) else ""
-                    if msg == "DROP_OFF_POINT_HAS_NO_TIMESLOTS":
-                        failed_no_slots = True
-                        break
-                if failed_no_slots:
-                    break
+            if st == "FAILED" or (st and "FAILED" in st):
+                if is_drop_off_point_has_no_timeslots(info):
+                    failed_no_slots = True
+                break
+            if not is_draft_status_in_progress(st):
+                break
             await asyncio.sleep(STATUS_POLL_INTERVAL_SEC)
 
         if failed_no_slots or not success:
@@ -407,7 +359,7 @@ async def run_slots_tracker() -> None:
                 )
                 continue
             dates_text, day_counts = _parse_dates_and_counts_in_period(
-                ts_resp, today_str, period_days
+                ts_resp, today_str, period_days, macrolocal_cluster_id=cid
             )
             results.append((cid, cluster_name, dates_text))
             image_rows.append((cid, cluster_name, dates_text, day_counts))

@@ -4535,11 +4535,18 @@ async def api_supplies_timeslot_info(
             )
 
         result = raw.get("result") if isinstance(raw.get("result"), dict) else {}
-        drop_off = result.get("drop_off_warehouse_timeslots") if isinstance(result, dict) else {}
-        days = drop_off.get("days") if isinstance(drop_off, dict) else []
+        from app.modules.ozon.timeslot_parse import extract_timeslot_days
+
+        ml_id = None
+        if filtered_wh:
+            try:
+                ml_id = int(filtered_wh[0].get("macrolocal_cluster_id"))
+            except (TypeError, ValueError, AttributeError):
+                ml_id = None
+        days = extract_timeslot_days(raw, macrolocal_cluster_id=ml_id)
         slots_flat: list[dict] = []
         want_day = date_from[:10]
-        for day in days if isinstance(days, list) else []:
+        for day in days:
             if not isinstance(day, dict):
                 continue
             date_tz = str(day.get("date_in_timezone") or "")
