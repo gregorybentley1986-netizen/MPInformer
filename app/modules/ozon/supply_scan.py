@@ -105,10 +105,44 @@ async def _get_draft_config(session: AsyncSession) -> Optional[dict]:
 
 
 async def _get_clusters() -> list[dict]:
-    """Список кластеров Ozon для кроссдокинга."""
+    """
+    Кластеры для скана: POST /v1/cluster/list с filter_by_supply_type=CREATE_TYPE_CROSSDOCK.
+    В ответе v1 два разных id (док. Ozon):
+      id — идентификатор строки кластера (для UI/БД, напр. 2, 150);
+      macrolocal_cluster_id — для draft/create и draft/timeslot/info (напр. 4004, 4042).
+    Дубликаты по macrolocal_cluster_id отбрасываем (оставляем первый v1 id).
+    """
     client = OzonAPIClient()
-    clusters = await client.get_cluster_list(cluster_type="CLUSTER_TYPE_OZON")
-    return clusters or []
+    clusters = await client.get_cluster_list_for_supply(
+        filter_by_supply_type=["CREATE_TYPE_CROSSDOCK"],
+        search="",
+        cluster_type="CLUSTER_TYPE_OZON",
+    )
+    if not clusters:
+        logger.warning("Supply scan: v1/cluster/list (crossdock filter) пуст, fallback без фильтра")
+        clusters = await client.get_cluster_list(cluster_type="CLUSTER_TYPE_OZON")
+    seen_ml: set[int] = set()
+    deduped: list[dict] = []
+    for cl in clusters or []:
+        ml = cluster_macrolocal_id(cl)
+        if ml is None:
+            logger.warning("Supply scan: кластер без macrolocal_cluster_id, пропуск: {}", cl)
+            continue
+        if ml in seen_ml:
+            continue
+        seen_ml.add(ml)
+        deduped.append(cl)
+    if deduped:
+        sample = [
+            f"{cluster_list_id(c, cluster_macrolocal_id(c))}→{cluster_macrolocal_id(c)}"
+            for c in deduped[:5]
+        ]
+        logger.info(
+            "Supply scan: кластеров для скана={} (v1 id→macrolocal, первые: {})",
+            len(deduped),
+            ", ".join(sample),
+        )
+    return deduped
 
 
 # Цвета ячеек для картинки (как в шаблоне)

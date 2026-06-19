@@ -828,6 +828,72 @@ class OzonAPIClient:
         )
         return out
 
+    async def get_macrolocal_cluster_list_v2(self) -> List[Dict]:
+        """
+        POST /v2/cluster/list — макролокальные кластеры (официальная схема result[]).
+        Элемент: macrolocal_cluster_id, data.macrolocal_cluster.name, data.fulfillments[].
+        """
+        url = f"{self.BASE_URL}/v2/cluster/list"
+        try:
+            async with self._ozon_http(30.0) as client:
+                response = await client.post(
+                    url,
+                    json={},
+                    headers=self.headers,
+                    _ozon_op="supply_queue:macrolocal_cluster_list_v2",
+                )
+                response.raise_for_status()
+                data = response.json()
+        except httpx.HTTPStatusError as e:
+            logger.warning(
+                "Ozon v2/cluster/list HTTP {}: {}",
+                e.response.status_code,
+                (e.response.text or "")[:400],
+            )
+            return []
+        except Exception as e:
+            logger.warning("Ozon get_macrolocal_cluster_list_v2: {}", e, exc_info=True)
+            return []
+        if not isinstance(data, dict):
+            return []
+        items = data.get("result")
+        if not isinstance(items, list):
+            logger.info(
+                "Ozon v2/cluster/list: ключи ответа={}, result не массив",
+                list(data.keys()),
+            )
+            return []
+        out: List[Dict] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            raw_ml = item.get("macrolocal_cluster_id")
+            try:
+                ml_id = int(raw_ml)
+            except (TypeError, ValueError):
+                continue
+            if ml_id <= 0:
+                continue
+            payload = item.get("data") if isinstance(item.get("data"), dict) else {}
+            ml_obj = payload.get("macrolocal_cluster") if isinstance(payload.get("macrolocal_cluster"), dict) else {}
+            name = (ml_obj.get("name") or "").strip() or f"Кластер {ml_id}"
+            fulfillments: List[Dict] = []
+            for wh in payload.get("fulfillments") or []:
+                if not isinstance(wh, dict):
+                    continue
+                wid = wh.get("warehouse_id")
+                wname = (wh.get("name") or "").strip() or str(wid or "")
+                fulfillments.append({"warehouse_id": wid, "name": wname})
+            out.append(
+                {
+                    "macrolocal_cluster_id": ml_id,
+                    "name": name,
+                    "fulfillments": fulfillments,
+                }
+            )
+        logger.info("Ozon v2/cluster/list: макролокальных кластеров={}", len(out))
+        return out
+
     async def get_cluster_list_for_supply(
         self,
         filter_by_supply_type: Optional[List[str]] = None,

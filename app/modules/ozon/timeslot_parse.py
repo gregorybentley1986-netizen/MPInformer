@@ -283,7 +283,10 @@ def parse_timeslot_dates_text(
 
 
 def cluster_macrolocal_id(cluster: dict) -> int | None:
-    """macrolocal_cluster_id кластера для draft/timeslot (не путать с id кластера в списке)."""
+    """
+    macrolocal_cluster_id из POST /v1/cluster/list — для draft/crossdock/create и timeslot/info.
+    Не путать с полем id того же ответа (id строки кластера для UI/БД).
+    """
     if not isinstance(cluster, dict):
         return None
     raw = cluster.get("macrolocal_cluster_id")
