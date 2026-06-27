@@ -166,7 +166,7 @@
     <p class="supply-queue-meta" id="supply-queue-scan-meta">
         {% if cluster_scan_in_progress %}
         <span class="supply-queue-scan-progress" id="supply-queue-scan-progress">
-            Сканирование кластеров… {{ cluster_scan_progress.done if cluster_scan_progress else 0 }}/{{ cluster_scan_progress.total if cluster_scan_progress else '?' }}
+            Сканирование кластеров… {{ (cluster_scan_progress or {}).get('done', 0) }}/{{ (cluster_scan_progress or {}).get('total', '?') }}
         </span>
         {% if scanned_at_str %}<span id="supply-queue-scan-meta-sep"> · </span>{% endif %}
         {% endif %}
@@ -524,17 +524,20 @@
         if (!pageRoot || !clusterTbody) return;
 
         var pollMsActive = 8000;
-        var pollMsIdle = 12000;
-        var pollMs = pageRoot.getAttribute('data-cluster-scan-poll') === '1' ? pollMsActive : pollMsIdle;
         var pollTimer = null;
         var lastSignature = '';
+        var scanPollEnabled = pageRoot.getAttribute('data-cluster-scan-poll') === '1';
 
-        function reschedulePoll(active) {
-            var nextMs = active ? pollMsActive : pollMsIdle;
-            if (nextMs === pollMs && pollTimer) return;
-            pollMs = nextMs;
-            if (pollTimer) clearInterval(pollTimer);
-            pollTimer = setInterval(pollOnce, pollMs);
+        function stopPoll() {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        }
+
+        function startPoll(ms) {
+            stopPoll();
+            pollTimer = setInterval(pollOnce, ms);
         }
 
         function isWeekendIso(iso) {
@@ -625,16 +628,20 @@
                         updateScanMeta(data);
                     }
                     if (data.in_progress) {
-                        reschedulePoll(true);
-                    } else {
-                        reschedulePoll(false);
+                        scanPollEnabled = true;
+                        if (!pollTimer) startPoll(pollMsActive);
+                    } else if (scanPollEnabled) {
+                        scanPollEnabled = false;
+                        stopPoll();
                     }
                 })
                 .catch(function() {});
         }
 
-        pollOnce();
-        pollTimer = setInterval(pollOnce, pollMs);
+        if (scanPollEnabled) {
+            pollOnce();
+            startPoll(pollMsActive);
+        }
     })();
 })();
 </script>

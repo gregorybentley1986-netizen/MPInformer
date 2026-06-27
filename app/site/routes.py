@@ -1810,20 +1810,13 @@ async def _supply_queue_results_for_scan(
 
 
 async def _find_latest_nonempty_supply_queue_scan(db: AsyncSession) -> Optional[SupplyQueueScan]:
-    r_scans = await db.execute(
-        select(SupplyQueueScan).order_by(SupplyQueueScan.scanned_at.desc()).limit(30)
+    r = await db.execute(
+        select(SupplyQueueScan)
+        .where(SupplyQueueScan.id.in_(select(SupplyQueueResult.scan_id).distinct()))
+        .order_by(SupplyQueueScan.scanned_at.desc())
+        .limit(1)
     )
-    for candidate in r_scans.scalars().all():
-        try:
-            r_cnt = await db.execute(
-                select(func.count(SupplyQueueResult.id)).where(SupplyQueueResult.scan_id == candidate.id)
-            )
-            cnt = int(r_cnt.scalar() or 0)
-        except Exception:
-            cnt = 0
-        if cnt > 0:
-            return candidate
-    return None
+    return r.scalar_one_or_none()
 
 
 async def _load_supply_queue_cluster_scan(
@@ -1835,7 +1828,7 @@ async def _load_supply_queue_cluster_scan(
     Скан для таблицы кластеров: строки, даты колонок, подпись времени.
     Если идёт парсинг — отдаём уже сохранённые строки текущего scan_id (in_progress=True).
     """
-    from app.modules.ozon.supply_scan import get_supply_scan_progress
+    from app.modules.ozon.scan_progress import get_supply_scan_progress
 
     scan: Optional[SupplyQueueScan] = None
     results: list[dict] = []
@@ -1873,6 +1866,17 @@ async def _load_supply_queue_cluster_scan(
             db, last_scan, max_days=max_days
         )
     return scan, results, week_dates, scanned_at_str, in_progress, scan_progress
+
+
+async def _load_supply_queue_cluster_scan_for_page(
+    *,
+    max_days: int = 21,
+) -> tuple[Optional[SupplyQueueScan], list[dict], list[date], str, bool, dict | None]:
+    """Короткая отдельная сессия БД — не держим read-транзакцию на время рендера страницы."""
+    from app.db.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        return await _load_supply_queue_cluster_scan(session, max_days=max_days)
 
 
 def _supply_queue_cluster_scan_json(
@@ -3195,7 +3199,7 @@ async def supply_queue(
 ):
     """Очередь поставок: кластеры по скану; заявки — list, детали — get (до 50 id за запрос)."""
     scan, results, week_dates, scanned_at_str, cluster_scan_in_progress, cluster_scan_progress = (
-        await _load_supply_queue_cluster_scan(db, max_days=21)
+        await _load_supply_queue_cluster_scan_for_page(max_days=21)
     )
     supply_order_list_rows: list[dict] = []
     supply_order_list_error = ""
@@ -3410,7 +3414,7 @@ async def supply_queue_create(
 ):
     """Мастер создания заявки: товары, дата/кластер по матрице скана, затем слоты (через POST /api/supplies/draft)."""
     scan, results, week_dates, scanned_at_str, cluster_scan_in_progress, cluster_scan_progress = (
-        await _load_supply_queue_cluster_scan(db, max_days=21)
+        await _load_supply_queue_cluster_scan_for_page(max_days=21)
     )
     r = await db.execute(select(Product).order_by(Product.name))
     products = list(r.scalars().all())
@@ -3631,11 +3635,10 @@ async def api_supply_queue_refresh_progress(user: User = Depends(verify_site_use
 @router.get("/api/supply-queue/cluster-scan")
 async def api_supply_queue_cluster_scan(
     user: User = Depends(verify_site_user),
-    db: AsyncSession = Depends(get_db),
 ):
     """Таблица кластеров очереди поставок — для live-обновления во время парсинга."""
     scan, results, week_dates, scanned_at_str, in_progress, scan_progress = (
-        await _load_supply_queue_cluster_scan(db, max_days=21)
+        await _load_supply_queue_cluster_scan_for_page(max_days=21)
     )
     return JSONResponse(
         _supply_queue_cluster_scan_json(

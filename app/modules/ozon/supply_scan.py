@@ -23,6 +23,10 @@ from app.db.models import SupplyDraftConfig, SupplyQueueResult, SupplyQueueScan
 from app.db.database import AsyncSessionLocal
 from app.config import settings
 from app.modules.ozon.api_client import OzonAPIClient
+from app.modules.ozon.scan_progress import (
+    clear_supply_scan_progress as _clear_supply_scan_progress,
+    set_supply_scan_progress as _set_supply_scan_progress,
+)
 from app.modules.ozon.timeslot_parse import (
     build_crossdock_draft_payload,
     cluster_list_id,
@@ -68,29 +72,6 @@ TIMESLOT_RATE_SEC = 6  # пауза перед запросом таймслот
 TIMESLOT_429_RETRY_DELAY_SEC = 30  # при 429 ждём и повторяем (окно лимита Ozon может быть до минуты)
 TIMESLOT_429_MAX_RETRIES = 4  # всего 5 попыток (0..4), при 429 — пауза 25 с между попытками
 TIMESLOT_404_RETRY_DELAY_SEC = 15  # Ozon иногда отдаёт 404 сразу после SUCCESS черновика
-
-_supply_scan_progress: dict | None = None
-
-
-def get_supply_scan_progress() -> dict | None:
-    """In-memory прогресс текущего скана (тот же процесс uvicorn)."""
-    if not _supply_scan_progress:
-        return None
-    return dict(_supply_scan_progress)
-
-
-def _set_supply_scan_progress(*, scan_id: int, total: int, done: int) -> None:
-    global _supply_scan_progress
-    _supply_scan_progress = {
-        "scan_id": int(scan_id),
-        "total": int(total),
-        "done": int(done),
-    }
-
-
-def _clear_supply_scan_progress() -> None:
-    global _supply_scan_progress
-    _supply_scan_progress = None
 
 
 async def _persist_cluster_scan_result(
