@@ -14,6 +14,7 @@ rem
 rem VPS defaults (MPInformer): /opt/MPInformer, mpinformer, health http://127.0.0.1:8000/health
 rem Override: set DEPLOY_HEALTH_URL=...   match systemd uvicorn --port
 rem Skip pip on server: set DEPLOY_SKIP_PIP=1
+rem Pip timeout on server (seconds): set DEPLOY_PIP_TIMEOUT_SEC=120
 rem Close window without pause: set DEPLOY_NO_PAUSE=1
 rem LAN PrintFarm override example:
 rem   set "DEPLOY_REMOTE_PATH=/home/esox/PrintFarm"
@@ -32,6 +33,10 @@ if defined DEPLOY_HEALTH_URL set "HEALTH_URL=!DEPLOY_HEALTH_URL!"
 
 set "SERVER="
 if not "%~2"=="" set "SERVER=%~2"
+if "!SERVER!"=="" if not "%~1"=="" (
+  echo %~1 | findstr "@" >nul 2>&1
+  if not errorlevel 1 set "SERVER=%~1"
+)
 if "!SERVER!"=="" if defined MPINFORMER_SSH_TARGET set "SERVER=!MPINFORMER_SSH_TARGET!"
 if "!SERVER!"=="" if defined SSH_TARGET set "SERVER=!SSH_TARGET!"
 if "!SERVER!"=="" if defined PRINTFARM_SSH_TARGET set "SERVER=!PRINTFARM_SSH_TARGET!"
@@ -42,6 +47,7 @@ if "!SERVER!"=="" (
 )
 
 set "RESTART_TIMEOUT_SEC=90"
+if not defined DEPLOY_PIP_TIMEOUT_SEC set "DEPLOY_PIP_TIMEOUT_SEC=120"
 set "SSH_OPTS=-o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=12 -o ServerAliveCountMax=4"
 for /f %%u in ('git remote get-url origin 2^>nul') do set "ORIGIN_URL=%%u"
 
@@ -150,7 +156,9 @@ if errorlevel 1 (
 echo [OK] Files unpacked on server.
 
 call :remote_prepare_runtime
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+  echo [WARN] pip step failed or timed out - continuing to restart anyway.
+)
 
 echo [2/3] Restart service...
 ssh %SSH_OPTS% !SERVER! "sudo -n systemctl restart !SERVICE!"
@@ -303,7 +311,9 @@ echo.
 
 echo [7/8] Server: uploads dir + pip install ^(unless DEPLOY_SKIP_PIP=1^) ...
 call :remote_prepare_runtime
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+  echo [WARN] pip step failed or timed out - continuing to restart anyway.
+)
 
 echo [8/8] Restart service and wait for health GET !HEALTH_URL! ...
 ssh %SSH_OPTS% !SERVER! "sudo -n systemctl restart !SERVICE!"
@@ -337,10 +347,15 @@ if /I "!DEPLOY_SKIP_PIP!"=="1" (
   echo [SKIP] DEPLOY_SKIP_PIP=1 — pip install on server skipped.
   exit /b 0
 )
-echo [INFO] Server: ensure venv + pip install -r requirements.txt
-ssh %SSH_OPTS% !SERVER! "cd \"!REMOTE_PATH!\" && CUR_HASH=$(sha256sum requirements.txt | awk '{print $1}') && OLD_HASH=$(head -c 64 .deploy-requirements.sha256 2>/dev/null | tr -d '\r\n' || true) && if test -x venv/bin/python && test \"$CUR_HASH\" = \"$OLD_HASH\"; then echo [SKIP] requirements unchanged, pip skipped; else python3 -m venv venv && venv/bin/python -m pip install -r requirements.txt && echo \"$CUR_HASH\" > .deploy-requirements.sha256 && echo [OK] pip install executed; fi"
+echo [INFO] Server: ensure venv + pip install -r requirements.txt (timeout !DEPLOY_PIP_TIMEOUT_SEC!s)
+ssh %SSH_OPTS% !SERVER! "timeout !DEPLOY_PIP_TIMEOUT_SEC! bash \"!REMOTE_PATH!/scripts/server-pip-if-needed.sh\" \"!REMOTE_PATH!\""
+set "PIP_RC=!ERRORLEVEL!"
+if "!PIP_RC!"=="124" (
+  echo [WARN] pip install timed out after !DEPLOY_PIP_TIMEOUT_SEC!s on server.
+  exit /b 1
+)
 if errorlevel 1 (
-  echo [ERROR] pip install on server failed.
+  echo [WARN] pip install on server failed with code !PIP_RC!.
   exit /b 1
 )
 echo [OK] pip install on server completed.

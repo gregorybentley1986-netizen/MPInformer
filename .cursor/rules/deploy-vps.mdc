@@ -1,0 +1,30 @@
+---
+description: Auto-deploy MPInformer to VPS after code changes — agent runs deploy script without asking user to restart manually
+alwaysApply: true
+---
+
+# VPS deploy (MPInformer)
+
+When you change server-side code (Python, templates, static assets, scripts) and the user expects it live on production:
+
+1. **Deploy yourself** — do not ask the user to restart `mpinformer` or run git pull manually.
+2. Run from repo root (PowerShell):
+
+```bat
+cmd /c "set DEPLOY_NO_PAUSE=1&& scripts\deploy-to-vps.bat"
+```
+
+Or with explicit host if `MPINFORMER_SSH_TARGET` is unset:
+
+```bat
+cmd /c "set DEPLOY_NO_PAUSE=1&& scripts\deploy-to-vps.bat root@2.56.240.226"
+```
+
+3. **What the script does:** auto-commit (if needed) → git push → server `git pull` → skip pip unless `requirements.txt` changed → `systemctl restart mpinformer` → wait for `/health`.
+4. **Report** deploy result: commit hash, whether restart/health succeeded. If deploy fails, diagnose and retry (e.g. `DEPLOY_SKIP_PIP=1`, `localsync` if GitHub unreachable).
+5. **Do not deploy** for question-only / review-only tasks with no code changes.
+6. **Do not commit** unless user asked OR deploy script auto-commit is part of an explicit deploy request.
+
+SSH host alias in `~/.ssh/config`: `mpinformer-vps` → `root@2.56.240.226`, key `id_ed25519_vps_clean`.
+
+Server path: `/opt/MPInformer`, service: `mpinformer`, health: `http://127.0.0.1:8000/health`.
