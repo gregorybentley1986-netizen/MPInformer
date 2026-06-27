@@ -60,13 +60,18 @@
     }
     .supply-queue-table tbody td.supply-queue-day-col { height: 40px; vertical-align: middle; }
     .supply-queue-cell { width: 32px; height: 32px; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
-    .supply-queue-dot { width: 100%; height: 100%; border-radius: 4px; flex-shrink: 0; }
+    .supply-queue-dot {
+        width: 100%; height: 100%; border-radius: 4px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.68rem; font-weight: 700; line-height: 1;
+    }
+    .supply-queue-dot-num { position: relative; z-index: 1; }
     /* Дни без слотов — светлосерые */
-    .supply-queue-dot--empty { background: #f7f7f7 !important; border: 1px solid #d0d0d0; }
+    .supply-queue-dot--empty { background: #f7f7f7 !important; border: 1px solid #d0d0d0; color: #888 !important; font-weight: 600; }
     /* RGB: красный 232,51,51 | жёлтый 223,235,52 | зелёный 52,235,140 */
-    .supply-queue-dot--red { background: rgb(201, 131, 64) !important; }
-    .supply-queue-dot--yellow { background: rgb(223, 235, 52) !important; }
-    .supply-queue-dot--green { background: rgb(52, 235, 140) !important; }
+    .supply-queue-dot--red { background: rgb(201, 131, 64) !important; color: #1a1a1a !important; }
+    .supply-queue-dot--yellow { background: rgb(223, 235, 52) !important; color: #1a1a1a !important; }
+    .supply-queue-dot--green { background: rgb(52, 235, 140) !important; color: #1a1a1a !important; }
     .supply-queue-dot--error { background: #ffe0e0 !important; position: relative; }
     .supply-queue-dot--error::before,
     .supply-queue-dot--error::after { content: ''; position: absolute; left: 50%; top: 50%; width: 2px; height: 110%; background: #c00; transform: translate(-50%, -50%) rotate(45deg); }
@@ -205,13 +210,13 @@
                             {% if c < 0 %}
                             <div class="supply-queue-dot supply-queue-dot--error" title="Ошибка"></div>
                             {% elif c == 0 %}
-                            <div class="supply-queue-dot supply-queue-dot--empty" title="Нет слотов"></div>
+                            <div class="supply-queue-dot supply-queue-dot--empty" title="Нет слотов"><span class="supply-queue-dot-num">0</span></div>
                             {% elif c == 1 %}
-                            <div class="supply-queue-dot supply-queue-dot--red" title="1 слот"></div>
+                            <div class="supply-queue-dot supply-queue-dot--red" title="1 слот"><span class="supply-queue-dot-num">1</span></div>
                             {% elif c <= 6 %}
-                            <div class="supply-queue-dot supply-queue-dot--yellow" title="{{ c }} слотов"></div>
+                            <div class="supply-queue-dot supply-queue-dot--yellow" title="{{ c }} слотов"><span class="supply-queue-dot-num">{{ c }}</span></div>
                             {% else %}
-                            <div class="supply-queue-dot supply-queue-dot--green" title="{{ c }} слотов"></div>
+                            <div class="supply-queue-dot supply-queue-dot--green" title="{{ c }} слотов"><span class="supply-queue-dot-num">{{ c }}</span></div>
                             {% endif %}
                         {% else %}
                             <div class="supply-queue-dot supply-queue-dot--empty" title="—"></div>
@@ -227,10 +232,11 @@
     <div class="supply-queue-legend">
         <h3>Обозначения</h3>
         <ul>
-            <li><span class="legend-swatch legend-swatch--empty" aria-hidden="true"></span> Нет слотов</li>
+            <li><span class="legend-swatch legend-swatch--empty" aria-hidden="true"></span> 0 — нет слотов</li>
             <li><span class="legend-swatch legend-swatch--red" aria-hidden="true"></span> 1 слот</li>
             <li><span class="legend-swatch legend-swatch--yellow" aria-hidden="true"></span> 2–6 слотов</li>
-            <li><span class="legend-swatch legend-swatch--green" aria-hidden="true"></span> Более 6 слотов</li>
+            <li><span class="legend-swatch legend-swatch--green" aria-hidden="true"></span> более 6 слотов</li>
+            <li>В ячейке — число доступных слотов на день</li>
             <li><span class="legend-swatch legend-swatch--supply" aria-hidden="true"></span> Создана поставка</li>
             <li><span class="legend-swatch legend-swatch--error" aria-hidden="true"></span> Ошибка</li>
         </ul>
@@ -558,10 +564,19 @@
             var c = parseInt(count, 10);
             if (isNaN(c)) c = 0;
             if (c < 0) return '<div class="supply-queue-dot supply-queue-dot--error" title="Ошибка"></div>';
-            if (c === 0) return '<div class="supply-queue-dot supply-queue-dot--empty" title="Нет слотов"></div>';
-            if (c === 1) return '<div class="supply-queue-dot supply-queue-dot--red" title="1 слот"></div>';
-            if (c <= 6) return '<div class="supply-queue-dot supply-queue-dot--yellow" title="' + c + ' слотов"></div>';
-            return '<div class="supply-queue-dot supply-queue-dot--green" title="' + c + ' слотов"></div>';
+            var cls = 'empty';
+            var title = 'Нет слотов';
+            if (c === 1) {
+                cls = 'red';
+                title = '1 слот';
+            } else if (c >= 2 && c <= 6) {
+                cls = 'yellow';
+                title = c + ' слотов';
+            } else if (c > 6) {
+                cls = 'green';
+                title = c + ' слотов';
+            }
+            return '<div class="supply-queue-dot supply-queue-dot--' + cls + '" title="' + title + '"><span class="supply-queue-dot-num">' + c + '</span></div>';
         }
 
         function renderClusterTable(data) {
