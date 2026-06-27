@@ -156,18 +156,27 @@
     .sq-refresh-overlay-box { background: var(--main-bg); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; max-width: 420px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
     .sq-refresh-overlay-box p { margin: 0 0 8px 0; font-size: 0.95rem; }
     .sq-refresh-overlay-hint { font-size: 0.85rem !important; color: var(--text-muted) !important; margin-bottom: 0 !important; }
+    .supply-queue-scan-progress { color: #2563eb; font-weight: 500; }
 </style>
 {% endblock %}
 {% block content %}
-<div class="supply-queue-page">
+<div class="supply-queue-page" id="supply-queue-page" data-cluster-scan-poll="{{ '1' if cluster_scan_in_progress else '0' }}">
     <h1>Очередь поставок</h1>
-    {% if scan %}
-    <p class="supply-queue-meta">Данные сканирования: {{ scanned_at_str }} (автообновление каждый день в 07:00 МСК).</p>
+    {% if scan or cluster_scan_in_progress %}
+    <p class="supply-queue-meta" id="supply-queue-scan-meta">
+        {% if cluster_scan_in_progress %}
+        <span class="supply-queue-scan-progress" id="supply-queue-scan-progress">
+            Сканирование кластеров… {{ cluster_scan_progress.done if cluster_scan_progress else 0 }}/{{ cluster_scan_progress.total if cluster_scan_progress else '?' }}
+        </span>
+        {% if scanned_at_str %}<span id="supply-queue-scan-meta-sep"> · </span>{% endif %}
+        {% endif %}
+        <span id="supply-queue-scan-meta-base">{% if scanned_at_str %}Данные сканирования: {{ scanned_at_str }} (автообновление каждый день в 07:00 МСК).{% endif %}</span>
+    </p>
     {% endif %}
     <div class="supply-queue-main">
-    {% if scan %}
-    <details class="supply-queue-spoiler">
-        <summary>Таблица кластеров (развернуть)</summary>
+    {% if scan or cluster_scan_in_progress %}
+    <details class="supply-queue-spoiler" id="supply-queue-cluster-spoiler"{% if cluster_scan_in_progress %} open{% endif %}>
+        <summary>Таблица кластеров{% if cluster_scan_in_progress %} (обновляется…){% endif %}</summary>
     <div class="supply-queue-wrap">
     <div class="supply-queue-table-wrap">
     <table class="supply-queue-table">
@@ -179,7 +188,7 @@
                 {% endfor %}
             </tr>
         </thead>
-        <tbody>
+        <tbody id="supply-queue-cluster-tbody">
             {% for r in results %}
             <tr>
                 <td class="supply-queue-warehouse-col">{{ r.cluster_name }}</td>
@@ -508,6 +517,125 @@
                 });
         });
     }
+
+    (function initClusterScanPoll() {
+        var pageRoot = document.getElementById('supply-queue-page');
+        var clusterTbody = document.getElementById('supply-queue-cluster-tbody');
+        if (!pageRoot || !clusterTbody) return;
+
+        var pollMsActive = 8000;
+        var pollMsIdle = 12000;
+        var pollMs = pageRoot.getAttribute('data-cluster-scan-poll') === '1' ? pollMsActive : pollMsIdle;
+        var pollTimer = null;
+        var lastSignature = '';
+
+        function reschedulePoll(active) {
+            var nextMs = active ? pollMsActive : pollMsIdle;
+            if (nextMs === pollMs && pollTimer) return;
+            pollMs = nextMs;
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(pollOnce, pollMs);
+        }
+
+        function isWeekendIso(iso) {
+            if (!iso) return false;
+            var d = new Date(iso + 'T12:00:00');
+            var wd = d.getDay();
+            return wd === 0 || wd === 6;
+        }
+
+        function formatHeaderDate(iso) {
+            if (!iso) return '';
+            var p = iso.split('-');
+            if (p.length !== 3) return iso;
+            return p[2] + '.' + p[1];
+        }
+
+        function cellHtml(count) {
+            var c = parseInt(count, 10);
+            if (isNaN(c)) c = 0;
+            if (c < 0) return '<div class="supply-queue-dot supply-queue-dot--error" title="Ошибка"></div>';
+            if (c === 0) return '<div class="supply-queue-dot supply-queue-dot--empty" title="Нет слотов"></div>';
+            if (c === 1) return '<div class="supply-queue-dot supply-queue-dot--red" title="1 слот"></div>';
+            if (c <= 6) return '<div class="supply-queue-dot supply-queue-dot--yellow" title="' + c + ' слотов"></div>';
+            return '<div class="supply-queue-dot supply-queue-dot--green" title="' + c + ' слотов"></div>';
+        }
+
+        function renderClusterTable(data) {
+            if (!data || !Array.isArray(data.results)) return;
+            var weekDates = data.week_dates || [];
+            var html = '';
+            data.results.forEach(function(r) {
+                var counts = r.day_counts || [];
+                html += '<tr><td class="supply-queue-warehouse-col">' + (r.cluster_name || '') + '</td>';
+                weekDates.forEach(function(iso, idx) {
+                    var weekend = isWeekendIso(iso) ? ' weekend-col' : '';
+                    var c = (idx < counts.length && counts[idx] !== null && counts[idx] !== undefined) ? counts[idx] : null;
+                    html += '<td class="supply-queue-day-col' + weekend + '"><div class="supply-queue-cell">';
+                    html += (c === null) ? '<div class="supply-queue-dot supply-queue-dot--empty" title="—"></div>' : cellHtml(c);
+                    html += '</div></td>';
+                });
+                html += '</tr>';
+            });
+            clusterTbody.innerHTML = html;
+        }
+
+        function updateScanMeta(data) {
+            var meta = document.getElementById('supply-queue-scan-meta');
+            if (!meta) return;
+            var progressEl = document.getElementById('supply-queue-scan-progress');
+            if (data.in_progress) {
+                if (!progressEl) {
+                    progressEl = document.createElement('span');
+                    progressEl.id = 'supply-queue-scan-progress';
+                    progressEl.className = 'supply-queue-scan-progress';
+                    meta.insertBefore(progressEl, meta.firstChild);
+                }
+                progressEl.textContent = 'Сканирование кластеров… ' + (data.completed_clusters || 0) + '/' + (data.total_clusters || '?');
+                var spoiler = document.getElementById('supply-queue-cluster-spoiler');
+                if (spoiler) spoiler.open = true;
+            } else if (progressEl) {
+                progressEl.remove();
+            }
+            var base = document.getElementById('supply-queue-scan-meta-base');
+            if (base && data.scanned_at) {
+                base.textContent = 'Данные сканирования: ' + data.scanned_at + ' (автообновление каждый день в 07:00 МСК).';
+            }
+        }
+
+        function signature(data) {
+            return JSON.stringify({
+                in_progress: !!data.in_progress,
+                done: data.completed_clusters || 0,
+                scan_id: data.scan_id || null,
+                n: (data.results || []).length,
+                tail: (data.results || []).slice(-1)
+            });
+        }
+
+        function pollOnce() {
+            fetch('/api/supply-queue/cluster-scan', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data || !data.ok) return;
+                    var sig = signature(data);
+                    if (sig !== lastSignature) {
+                        lastSignature = sig;
+                        renderClusterTable(data);
+                        updateScanMeta(data);
+                    }
+                    if (data.in_progress) {
+                        reschedulePoll(true);
+                    } else {
+                        reschedulePoll(false);
+                    }
+                })
+                .catch(function() {});
+        }
+
+        pollOnce();
+        pollTimer = setInterval(pollOnce, pollMs);
+    })();
 })();
 </script>
 {% endblock %}

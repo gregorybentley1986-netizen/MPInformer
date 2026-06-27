@@ -335,43 +335,160 @@ def cluster_list_id(cluster: dict, macrolocal_cluster_id: int | None = None) -> 
     return macrolocal_cluster_id
 
 
-def build_selected_cluster_warehouses_from_draft(
-    draft_info: dict | None,
-    macrolocal_cluster_id: int,
-) -> list[dict]:
+def build_crossdock_draft_payload(config: dict | None, macrolocal_cluster_id: int) -> dict:
     """
-    selected_cluster_warehouses для POST /v2/draft/timeslot/info.
-    Берём macrolocal_cluster_id из ответа v2/draft/create/info (после SUCCESS), если есть.
+    Нормализованное тело POST /v1/draft/crossdock/create — как create_fbs_crossdock_draft в api_client.
+    Берёт items и delivery_info из конфига, подставляет macrolocal_cluster_id кластера скана.
     """
-    fallback = [{"macrolocal_cluster_id": int(macrolocal_cluster_id)}]
-    if not isinstance(draft_info, dict):
-        return fallback
-    payload = _result_payload(draft_info)
-    clusters = payload.get("clusters") or draft_info.get("clusters") or []
-    if not isinstance(clusters, list):
-        return fallback
+    cfg = config if isinstance(config, dict) else {}
+    ci = cfg.get("cluster_info") if isinstance(cfg.get("cluster_info"), dict) else {}
+    di = cfg.get("delivery_info") if isinstance(cfg.get("delivery_info"), dict) else {}
+    items: list[dict] = []
+    for it in ci.get("items") or []:
+        if not isinstance(it, dict):
+            continue
+        try:
+            sku = int(it.get("sku") or 0)
+            qty = int(it.get("quantity") or 0)
+        except (TypeError, ValueError):
+            continue
+        if sku > 0 and qty > 0:
+            items.append({"sku": sku, "quantity": qty})
+    drop_id = di.get("drop_off_warehouse_id")
+    drop_off = di.get("drop_off_warehouse") if isinstance(di.get("drop_off_warehouse"), dict) else {}
+    if drop_id in (None, "", 0, "0") and drop_off:
+        drop_id = drop_off.get("warehouse_id")
+    wh_type = (di.get("warehouse_type") or drop_off.get("warehouse_type") or "CROSS_DOCK")
+    wh_type = str(wh_type).strip() or "CROSS_DOCK"
+    seller = di.get("seller_warehouse_id")
+    delivery_type = str(di.get("type") or "DROPOFF").strip() or "DROPOFF"
+    deletion = cfg.get("deletion_sku_mode") or "PARTIAL"
+    if deletion not in ("PARTIAL", "FULL"):
+        deletion = "PARTIAL"
+    try:
+        drop_i = int(drop_id or 0)
+    except (TypeError, ValueError):
+        drop_i = 0
+    try:
+        seller_i = int(seller or 0)
+    except (TypeError, ValueError):
+        seller_i = 0
+    return {
+        "cluster_info": {
+            "macrolocal_cluster_id": int(macrolocal_cluster_id),
+            "items": items,
+        },
+        "deletion_sku_mode": deletion,
+        "delivery_info": {
+            "drop_off_warehouse": {"warehouse_id": drop_i, "warehouse_type": wh_type},
+            "seller_warehouse_id": seller_i,
+            "type": delivery_type,
+        },
+    }
+
+
+def _storage_warehouse_id_from_wh(wh: dict) -> int | None:
+    if not isinstance(wh, dict):
+        return None
+    for key in ("storage_warehouse_id", "warehouse_id", "id"):
+        raw = wh.get(key)
+        if raw in (None, "", 0, "0"):
+            continue
+        try:
+            val = int(raw)
+            if val > 0:
+                return val
+        except (TypeError, ValueError):
+            continue
+    nested = wh.get("storage_warehouse")
+    if isinstance(nested, dict):
+        return _storage_warehouse_id_from_wh(nested)
+    return None
+
+
+def _cluster_for_macrolocal(clusters: list, macrolocal_cluster_id: int) -> dict | None:
     req = int(macrolocal_cluster_id)
     for cl in clusters:
         if not isinstance(cl, dict):
             continue
         try:
-            ml = int(cl.get("macrolocal_cluster_id"))
+            if int(cl.get("macrolocal_cluster_id")) == req:
+                return cl
         except (TypeError, ValueError):
             continue
-        if ml == req:
-            return [{"macrolocal_cluster_id": ml}]
+    return None
+
+
+def summarize_draft_info_clusters(draft_info: dict | None, macrolocal_cluster_id: int) -> str:
+    """Краткая сводка clusters[] из v2/draft/create/info для логов."""
+    if not isinstance(draft_info, dict):
+        return "draft_info пуст"
+    payload = _result_payload(draft_info)
+    clusters = payload.get("clusters") or draft_info.get("clusters") or []
+    if not isinstance(clusters, list) or not clusters:
+        return "clusters[] пуст"
+    req = int(macrolocal_cluster_id)
+    parts: list[str] = []
     for cl in clusters:
         if not isinstance(cl, dict):
             continue
         try:
             ml = int(cl.get("macrolocal_cluster_id"))
         except (TypeError, ValueError):
-            continue
-        if ml > 0:
-            logger.debug(
-                "timeslot_parse: macrolocal {} не в draft/info, используем {} из черновика",
-                req,
-                ml,
-            )
-            return [{"macrolocal_cluster_id": ml}]
-    return fallback
+            ml = 0
+        wh_ids: list[int] = []
+        for wh in cl.get("warehouses") or []:
+            sw = _storage_warehouse_id_from_wh(wh) if isinstance(wh, dict) else None
+            if sw:
+                wh_ids.append(sw)
+        mark = "*" if ml == req else ""
+        parts.append(f"ml={ml}{mark} wh={wh_ids or '—'}")
+    return "; ".join(parts) if parts else "clusters без macrolocal"
+
+
+def timeslot_selected_wh_attempts(
+    draft_info: dict | None,
+    macrolocal_cluster_id: int,
+) -> list[list[dict] | None]:
+    """
+    Варианты selected_cluster_warehouses для POST /v2/draft/timeslot/info (по порядку).
+    None — не передавать поле (Ozon берёт scoring из черновика).
+    """
+    ml = int(macrolocal_cluster_id)
+    attempts: list[list[dict] | None] = []
+    seen: set[str] = set()
+
+    def add(entry: list[dict] | None) -> None:
+        key = repr(entry)
+        if key in seen:
+            return
+        seen.add(key)
+        attempts.append(entry)
+
+    if isinstance(draft_info, dict):
+        payload = _result_payload(draft_info)
+        clusters = payload.get("clusters") or draft_info.get("clusters") or []
+        if isinstance(clusters, list):
+            cl = _cluster_for_macrolocal(clusters, ml)
+            if cl:
+                for wh in cl.get("warehouses") or []:
+                    if not isinstance(wh, dict):
+                        continue
+                    sw = _storage_warehouse_id_from_wh(wh)
+                    if sw:
+                        add([{"macrolocal_cluster_id": ml, "storage_warehouse_id": sw}])
+
+    add([{"macrolocal_cluster_id": ml}])
+    add(None)
+    return attempts
+
+
+def build_selected_cluster_warehouses_from_draft(
+    draft_info: dict | None,
+    macrolocal_cluster_id: int,
+) -> list[dict]:
+    """Первый (предпочтительный) вариант selected_cluster_warehouses для timeslot/info."""
+    for cand in timeslot_selected_wh_attempts(draft_info, macrolocal_cluster_id):
+        if cand:
+            return cand
+    return [{"macrolocal_cluster_id": int(macrolocal_cluster_id)}]

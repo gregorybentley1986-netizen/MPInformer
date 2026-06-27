@@ -1765,56 +1765,38 @@ def _normalize_day_counts(day_counts):  # noqa: C901
     return []
 
 
-async def _load_supply_queue_cluster_scan(
+async def _supply_queue_results_for_scan(
     db: AsyncSession,
+    scan: SupplyQueueScan,
     *,
     max_days: int = 21,
-) -> tuple[Optional[SupplyQueueScan], list[dict], list[date], str]:
-    """Последний непустой скан: строки кластеров, даты колонок (от даты скана), подпись времени скана."""
-    scan: Optional[SupplyQueueScan] = None
+) -> tuple[list[dict], list[date], str]:
+    """Строки кластеров, даты колонок и подпись времени для одного scan_id."""
     results: list[dict] = []
     week_dates: list[date] = []
     scanned_at_str = ""
-    r_scans = await db.execute(
-        select(SupplyQueueScan).order_by(SupplyQueueScan.scanned_at.desc()).limit(30)
+    r_res = await db.execute(
+        select(SupplyQueueResult)
+        .where(SupplyQueueResult.scan_id == scan.id)
+        .order_by(SupplyQueueResult.cluster_name)
     )
-    last_scan = None
-    for candidate in r_scans.scalars().all():
-        try:
-            r_cnt = await db.execute(
-                select(func.count(SupplyQueueResult.id)).where(SupplyQueueResult.scan_id == candidate.id)
-            )
-            cnt = int(r_cnt.scalar() or 0)
-        except Exception:
-            cnt = 0
-        if cnt > 0:
-            last_scan = candidate
-            break
-    if last_scan:
-        scan = last_scan
-        r_res = await db.execute(
-            select(SupplyQueueResult)
-            .where(SupplyQueueResult.scan_id == last_scan.id)
-            .order_by(SupplyQueueResult.cluster_name)
-        )
-        raw_results = r_res.scalars().all()
-        for r in raw_results:
-            dc = _normalize_day_counts(getattr(r, "day_counts", None))
-            if max_days > 0 and len(dc) > max_days:
-                dc = dc[:max_days]
-            results.append({
-                "cluster_id": getattr(r, "cluster_id", None) or 0,
-                "cluster_name": (getattr(r, "cluster_name", None) or "").strip(),
-                "day_counts": dc,
-            })
-        if scan and scan.scanned_at:
-            dt = scan.scanned_at
-            if hasattr(dt, "astimezone"):
-                dt = dt.astimezone(MSK)
-            week_start = dt.date() if hasattr(dt, "date") else datetime.fromisoformat(str(dt)).date()
-            n = max_days if max_days > 0 else 21
-            week_dates = [week_start + timedelta(days=i) for i in range(n)]
-    if scan and scan.scanned_at:
+    for r in r_res.scalars().all():
+        dc = _normalize_day_counts(getattr(r, "day_counts", None))
+        if max_days > 0 and len(dc) > max_days:
+            dc = dc[:max_days]
+        results.append({
+            "cluster_id": getattr(r, "cluster_id", None) or 0,
+            "cluster_name": (getattr(r, "cluster_name", None) or "").strip(),
+            "day_counts": dc,
+        })
+    if scan.scanned_at:
+        dt = scan.scanned_at
+        if hasattr(dt, "astimezone"):
+            dt = dt.astimezone(MSK)
+        week_start = dt.date() if hasattr(dt, "date") else datetime.fromisoformat(str(dt)).date()
+        n = max_days if max_days > 0 else 21
+        week_dates = [week_start + timedelta(days=i) for i in range(n)]
+    if scan.scanned_at:
         _dt = scan.scanned_at
         if hasattr(_dt, "strftime"):
             if getattr(_dt, "tzinfo", None) is None:
@@ -1824,7 +1806,96 @@ async def _load_supply_queue_cluster_scan(
             scanned_at_str = _dt.strftime("%d.%m.%Y %H:%M") + " МСК"
         else:
             scanned_at_str = str(scan.scanned_at)
-    return scan, results, week_dates, scanned_at_str
+    return results, week_dates, scanned_at_str
+
+
+async def _find_latest_nonempty_supply_queue_scan(db: AsyncSession) -> Optional[SupplyQueueScan]:
+    r_scans = await db.execute(
+        select(SupplyQueueScan).order_by(SupplyQueueScan.scanned_at.desc()).limit(30)
+    )
+    for candidate in r_scans.scalars().all():
+        try:
+            r_cnt = await db.execute(
+                select(func.count(SupplyQueueResult.id)).where(SupplyQueueResult.scan_id == candidate.id)
+            )
+            cnt = int(r_cnt.scalar() or 0)
+        except Exception:
+            cnt = 0
+        if cnt > 0:
+            return candidate
+    return None
+
+
+async def _load_supply_queue_cluster_scan(
+    db: AsyncSession,
+    *,
+    max_days: int = 21,
+) -> tuple[Optional[SupplyQueueScan], list[dict], list[date], str, bool, dict | None]:
+    """
+    Скан для таблицы кластеров: строки, даты колонок, подпись времени.
+    Если идёт парсинг — отдаём уже сохранённые строки текущего scan_id (in_progress=True).
+    """
+    from app.modules.ozon.supply_scan import get_supply_scan_progress
+
+    scan: Optional[SupplyQueueScan] = None
+    results: list[dict] = []
+    week_dates: list[date] = []
+    scanned_at_str = ""
+    in_progress = False
+    scan_progress: dict | None = None
+
+    progress = get_supply_scan_progress()
+    if progress:
+        done = int(progress.get("done") or 0)
+        total = int(progress.get("total") or 0)
+        if total > 0 and done < total:
+            in_progress = True
+            scan_progress = dict(progress)
+            active_scan = await db.get(SupplyQueueScan, int(progress["scan_id"]))
+            if active_scan is not None and done > 0:
+                scan = active_scan
+                results, week_dates, scanned_at_str = await _supply_queue_results_for_scan(
+                    db, active_scan, max_days=max_days
+                )
+                return scan, results, week_dates, scanned_at_str, in_progress, scan_progress
+            prev_scan = await _find_latest_nonempty_supply_queue_scan(db)
+            if prev_scan is not None:
+                scan = prev_scan
+                results, week_dates, scanned_at_str = await _supply_queue_results_for_scan(
+                    db, prev_scan, max_days=max_days
+                )
+            return scan, results, week_dates, scanned_at_str, in_progress, scan_progress
+
+    last_scan = await _find_latest_nonempty_supply_queue_scan(db)
+    if last_scan:
+        scan = last_scan
+        results, week_dates, scanned_at_str = await _supply_queue_results_for_scan(
+            db, last_scan, max_days=max_days
+        )
+    return scan, results, week_dates, scanned_at_str, in_progress, scan_progress
+
+
+def _supply_queue_cluster_scan_json(
+    scan: Optional[SupplyQueueScan],
+    results: list[dict],
+    week_dates: list[date],
+    scanned_at_str: str,
+    *,
+    in_progress: bool = False,
+    scan_progress: dict | None = None,
+) -> dict:
+    total = int((scan_progress or {}).get("total") or len(results) or 0)
+    done = int((scan_progress or {}).get("done") or len(results) or 0)
+    return {
+        "ok": True,
+        "scan_id": getattr(scan, "id", None),
+        "scanned_at": scanned_at_str,
+        "in_progress": bool(in_progress),
+        "total_clusters": total,
+        "completed_clusters": done,
+        "week_dates": [d.isoformat() for d in week_dates],
+        "results": results,
+    }
 
 
 # Запасной delivery_info, если в БД нет supply_draft_config (как в slots_tracker.DEFAULT_DRAFT_BODY).
@@ -3123,7 +3194,9 @@ async def supply_queue(
     sq_st: list[str] | None = Query(None, description="Показывать заявки с этими статусами (повтор параметра sq_st)"),
 ):
     """Очередь поставок: кластеры по скану; заявки — list, детали — get (до 50 id за запрос)."""
-    scan, results, week_dates, scanned_at_str = await _load_supply_queue_cluster_scan(db, max_days=21)
+    scan, results, week_dates, scanned_at_str, cluster_scan_in_progress, cluster_scan_progress = (
+        await _load_supply_queue_cluster_scan(db, max_days=21)
+    )
     supply_order_list_rows: list[dict] = []
     supply_order_list_error = ""
     supply_order_get_error = ""
@@ -3304,6 +3377,8 @@ async def supply_queue(
             "scanned_at_str": scanned_at_str,
             "results": results,
             "week_dates": week_dates,
+            "cluster_scan_in_progress": cluster_scan_in_progress,
+            "cluster_scan_progress": cluster_scan_progress,
             "supply_order_list_rows": supply_order_list_rows_filtered,
             "supply_order_list_total": supply_order_total,
             "supply_order_list_error": supply_order_list_error,
@@ -3334,7 +3409,9 @@ async def supply_queue_create(
     db: AsyncSession = Depends(get_db),
 ):
     """Мастер создания заявки: товары, дата/кластер по матрице скана, затем слоты (через POST /api/supplies/draft)."""
-    scan, results, week_dates, scanned_at_str = await _load_supply_queue_cluster_scan(db, max_days=21)
+    scan, results, week_dates, scanned_at_str, cluster_scan_in_progress, cluster_scan_progress = (
+        await _load_supply_queue_cluster_scan(db, max_days=21)
+    )
     r = await db.execute(select(Product).order_by(Product.name))
     products = list(r.scalars().all())
     supply_products = [
@@ -3548,6 +3625,27 @@ async def api_supply_queue_refresh_progress(user: User = Depends(verify_site_use
             "message": data.get("message") or "",
             "at": data.get("at") or "",
         }
+    )
+
+
+@router.get("/api/supply-queue/cluster-scan")
+async def api_supply_queue_cluster_scan(
+    user: User = Depends(verify_site_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Таблица кластеров очереди поставок — для live-обновления во время парсинга."""
+    scan, results, week_dates, scanned_at_str, in_progress, scan_progress = (
+        await _load_supply_queue_cluster_scan(db, max_days=21)
+    )
+    return JSONResponse(
+        _supply_queue_cluster_scan_json(
+            scan,
+            results,
+            week_dates,
+            scanned_at_str,
+            in_progress=in_progress,
+            scan_progress=scan_progress,
+        )
     )
 
 
@@ -4223,7 +4321,7 @@ async def api_supplies_draft_options(
         client = OzonAPIClient()
         clusters = await client.get_cluster_list(cluster_type="CLUSTER_TYPE_OZON")
         delivery_defaults = await _delivery_defaults_from_supply_draft_config(db)
-        _scan, sq_results, week_dates, scanned_at_str = await _load_supply_queue_cluster_scan(db, max_days=14)
+        _scan, sq_results, week_dates, scanned_at_str, _, _ = await _load_supply_queue_cluster_scan(db, max_days=14)
         cluster_scan = {
             "scanned_at_str": scanned_at_str,
             "week_dates": [d.isoformat() for d in week_dates],
