@@ -3189,7 +3189,6 @@ async def _fetch_supply_order_composition_cargo_units(order_id: str) -> tuple[li
 @router.get("/supply-queue", response_class=HTMLResponse)
 async def supply_queue(
     request: Request,
-    background_tasks: BackgroundTasks,
     user: User = Depends(verify_site_user),
     db: AsyncSession = Depends(get_db),
     sq_from: str | None = Query(None, description="Начало интервала по дате отгрузки (YYYY-MM-DD), МСК"),
@@ -3363,8 +3362,6 @@ async def supply_queue(
     ozon_by_article: list = []
     last_updated_ozon = None
     try:
-        if not _cache_fresh(_stocks_cache.get("last_updated_ozon_table")):
-            background_tasks.add_task(_background_refresh_warehouse_stocks_cache)
         raw_w = _stocks_cache.get("ozon_table") or []
         last_updated_ozon = _stocks_cache.get("last_updated_ozon_table")
         ozon_by_article = deepcopy(raw_w) if raw_w else []

@@ -63,9 +63,17 @@
     .supply-queue-dot {
         width: 100%; height: 100%; border-radius: 4px; flex-shrink: 0;
         display: flex; align-items: center; justify-content: center;
-        font-size: 0.68rem; font-weight: 700; line-height: 1;
+        font-size: 11px; font-weight: 700; line-height: 1;
+        font-variant-numeric: tabular-nums;
+        overflow: visible;
     }
-    .supply-queue-dot-num { position: relative; z-index: 1; }
+    .supply-queue-dot-num {
+        position: relative; z-index: 1;
+        color: inherit !important;
+        font-size: inherit;
+        font-weight: inherit;
+        line-height: 1;
+    }
     /* Дни без слотов — светлосерые */
     .supply-queue-dot--empty { background: #f7f7f7 !important; border: 1px solid #d0d0d0; color: #888 !important; font-weight: 600; }
     /* RGB: красный 232,51,51 | жёлтый 223,235,52 | зелёный 52,235,140 */
@@ -219,7 +227,7 @@
                             <div class="supply-queue-dot supply-queue-dot--green" title="{{ c }} слотов"><span class="supply-queue-dot-num">{{ c }}</span></div>
                             {% endif %}
                         {% else %}
-                            <div class="supply-queue-dot supply-queue-dot--empty" title="—"></div>
+                            <div class="supply-queue-dot supply-queue-dot--empty" title="—"><span class="supply-queue-dot-num">—</span></div>
                         {% endif %}
                     </div>
                 </td>
@@ -590,7 +598,7 @@
                     var weekend = isWeekendIso(iso) ? ' weekend-col' : '';
                     var c = (idx < counts.length && counts[idx] !== null && counts[idx] !== undefined) ? counts[idx] : null;
                     html += '<td class="supply-queue-day-col' + weekend + '"><div class="supply-queue-cell">';
-                    html += (c === null) ? '<div class="supply-queue-dot supply-queue-dot--empty" title="—"></div>' : cellHtml(c);
+                    html += (c === null) ? '<div class="supply-queue-dot supply-queue-dot--empty" title="—"><span class="supply-queue-dot-num">—</span></div>' : cellHtml(c);
                     html += '</div></td>';
                 });
                 html += '</tr>';

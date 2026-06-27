@@ -1014,6 +1014,12 @@ class OzonAPIClient:
                         json={"search": search},
                         headers=self.headers,
                     )
+                    if response.status_code == 400:
+                        logger.debug(
+                            "Ozon FBO warehouse/list: HTTP 400 search={} — пропуск остальных запросов",
+                            search,
+                        )
+                        return result
                     response.raise_for_status()
                     data = response.json()
                     res = data.get("result")
