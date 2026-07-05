@@ -107,7 +107,7 @@ if errorlevel 1 (
 echo [OK] Restart command sent.
 
 echo [3/3] Wait for health...
-ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'until curl -fsS -X GET !HEALTH_URL! -o /dev/null; do sleep 1; done'"
+ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'sleep 3; until curl -fsS -X GET !HEALTH_URL! -o /dev/null; do sleep 1; done'"
 if errorlevel 1 (
   echo [ERROR] Health check failed after rollback.
   echo [INFO] Current service status:
@@ -169,7 +169,7 @@ if errorlevel 1 (
 echo [OK] Restart command sent.
 
 echo [3/3] Wait for health...
-ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'until curl -fsS -X GET !HEALTH_URL! -o /dev/null; do sleep 1; done'"
+ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'sleep 3; until curl -fsS -X GET !HEALTH_URL! -o /dev/null; do sleep 1; done'"
 if errorlevel 1 (
   echo [ERROR] Health check failed after localsync.
   ssh %SSH_OPTS% !SERVER! "sudo -n systemctl --no-pager status !SERVICE! -n 40"
@@ -325,7 +325,7 @@ if errorlevel 1 (
 echo [OK] Restart command sent.
 
 echo [INFO] Waiting for health GET timeout !RESTART_TIMEOUT_SEC!s ...
-ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'until curl -fsS -X GET !HEALTH_URL! -o /dev/null; do sleep 1; done'"
+ssh %SSH_OPTS% !SERVER! "timeout !RESTART_TIMEOUT_SEC! bash -lc 'sleep 3; until curl -fsS -X GET !HEALTH_URL! -o /dev/null; do sleep 1; done'"
 if errorlevel 1 (
   echo [ERROR] Restart timeout reached.
   echo [INFO] Current service status:
