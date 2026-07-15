@@ -80,6 +80,15 @@ from app.db.models import (
     finance_entry_tags,
 )
 from app.modules.notifications.scheduler import scheduler, stop_scheduler, start_scheduler
+from app.modules.informers_runtime import (
+    REPORT,
+    SLOTS,
+    SUPPLY,
+    is_running,
+    request_stop,
+    spawn,
+    status_snapshot,
+)
 from app.telegram.bot import stop_bot
 from app.site.routes import _spool_svg_dataurl
 
@@ -388,6 +397,8 @@ async def admin_dashboard(
     # Вывод времени только в МСК
     supply_status["last_scan_at_display"] = _datetime_to_msk_display(supply_status.get("last_scan_at"))
     slots_status["last_run_at_display"] = _datetime_to_msk_display(slots_status.get("last_run_at"))
+    supply_status["running"] = is_running(SUPPLY)
+    slots_status["running"] = is_running(SLOTS)
 
     return templates.TemplateResponse("admin/dashboard.html", {
         "request": request,
@@ -402,6 +413,7 @@ async def admin_dashboard(
             "report": {
                 "active": getattr(scheduler, "running", False) if scheduler else False,
                 "times": getattr(settings, "report_notification_times", "09:00"),
+                "running": is_running(REPORT),
             },
             "supply": supply_status,
             "slots": slots_status,
@@ -472,6 +484,8 @@ async def admin_informers(
         pass
     supply_status["last_scan_at_display"] = _datetime_to_msk_display(supply_status.get("last_scan_at"))
     slots_status["last_run_at_display"] = _datetime_to_msk_display(slots_status.get("last_run_at"))
+    supply_status["running"] = is_running(SUPPLY)
+    slots_status["running"] = is_running(SLOTS)
     tab = request.query_params.get("tab") or "report"
     if tab not in ("report", "supply", "slots"):
         tab = "report"
@@ -484,12 +498,26 @@ async def admin_informers(
             "report": {
                 "active": getattr(scheduler, "running", False) if scheduler else False,
                 "times": getattr(settings, "report_notification_times", "09:00"),
+                "running": is_running(REPORT),
             },
             "supply": supply_status,
             "slots": slots_status,
         },
+        "informers_runtime": status_snapshot(),
     })
 
+
+@router.get("/informers/stop/{kind}")
+async def admin_informer_stop(kind: str, username: str = Depends(verify_admin)):
+    """Остановить текущий запуск информера (report / supply / slots)."""
+    kind_norm = (kind or "").strip().lower()
+    tab = kind_norm if kind_norm in ("report", "supply", "slots") else "report"
+    if kind_norm not in ("report", "supply", "slots"):
+        return RedirectResponse(url=f"/admin/informers?tab={tab}&error=stop", status_code=303)
+    result = request_stop(kind_norm)
+    if result.get("ok"):
+        return RedirectResponse(url=f"/admin/informers?tab={tab}&success=stop", status_code=303)
+    return RedirectResponse(url=f"/admin/informers?tab={tab}&error=stop", status_code=303)
 
 @router.get("/informers/supply-scan-config")
 async def informers_supply_scan_config_get(
@@ -3474,11 +3502,13 @@ async def manual_supply_scan(username: str = Depends(verify_admin)):
     """Запустить парсинг очереди поставок в фоне (то же, что в 07:00)."""
     try:
         from app.modules.ozon.supply_scan import run_supply_queue_scan
-        asyncio.create_task(run_supply_queue_scan())
-        return RedirectResponse(url="/admin?success=supply_scan", status_code=303)
+        task = spawn(SUPPLY, run_supply_queue_scan())
+        if task is None:
+            return RedirectResponse(url="/admin/informers?tab=supply&error=already_running", status_code=303)
+        return RedirectResponse(url="/admin/informers?tab=supply&success=supply_scan", status_code=303)
     except Exception as e:
         logger.exception("Manual supply scan: %s", e)
-        return RedirectResponse(url="/admin?error=supply_scan", status_code=303)
+        return RedirectResponse(url="/admin/informers?tab=supply&error=supply_scan", status_code=303)
 
 
 @router.get("/report/slots-tracker")
@@ -3486,11 +3516,13 @@ async def manual_slots_tracker(username: str = Depends(verify_admin)):
     """Принудительный запуск Отслеживателя слотов в фоне (с разведением по времени с парсером)."""
     try:
         from app.modules.ozon.slots_tracker import run_slots_tracker_safe
-        asyncio.create_task(run_slots_tracker_safe())
-        return RedirectResponse(url="/admin?success=slots_tracker", status_code=303)
+        task = spawn(SLOTS, run_slots_tracker_safe())
+        if task is None:
+            return RedirectResponse(url="/admin/informers?tab=slots&error=already_running", status_code=303)
+        return RedirectResponse(url="/admin/informers?tab=slots&success=slots_tracker", status_code=303)
     except Exception as e:
         logger.exception("Manual slots tracker: %s", e)
-        return RedirectResponse(url="/admin?error=slots_tracker", status_code=303)
+        return RedirectResponse(url="/admin/informers?tab=slots&error=slots_tracker", status_code=303)
 
 
 @router.get("/report/manual")
@@ -3499,12 +3531,14 @@ async def manual_report(username: str = Depends(verify_admin)):
     try:
         from app.modules.notifications.reporter import collect_and_send_report
 
-        asyncio.create_task(collect_and_send_report())
+        task = spawn(REPORT, collect_and_send_report())
+        if task is None:
+            return RedirectResponse(url="/admin/informers?tab=report&error=already_running", status_code=303)
         logger.info("Ручной отчет запущен администратором")
-        return RedirectResponse(url="/admin?success=report", status_code=303)
+        return RedirectResponse(url="/admin/informers?tab=report&success=report", status_code=303)
     except Exception as e:
         logger.error(f"Ошибка при запуске ручного отчета: {e}")
-        return RedirectResponse(url="/admin?error=report", status_code=303)
+        return RedirectResponse(url="/admin/informers?tab=report&error=report", status_code=303)
 
 
 def _project_root() -> Path:

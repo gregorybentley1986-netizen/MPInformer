@@ -99,11 +99,39 @@
     .supply-saved h3 { font-size: 1rem; margin: 0 0 10px 0; color: var(--main-text); }
     .supply-saved pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.85rem; }
     .supply-saved.empty { color: var(--text-muted); }
+    .btn-success { background: #4caf50; color: #fff; }
+    .btn-success:hover { background: #45a049; }
+    .btn-danger { background: #c62828; color: #fff; }
+    .btn-danger:hover { background: #b71c1c; }
+    .inf-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
+    .inf-running-hint { font-size: 0.85rem; color: #a67c00; margin: 0; }
+    .alert { padding: 16px; margin-bottom: 20px; border: 1px solid transparent; }
+    .alert-success { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+    .alert-error { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
 </style>
 {% endblock %}
 
 {% block content %}
 <h1>Информеры</h1>
+
+{% if request.query_params.get("success") == "stop" %}
+<div class="alert alert-success">Остановка запрошена. Текущий запуск завершится в ближайший безопасный момент.</div>
+{% elif request.query_params.get("success") == "report" %}
+<div class="alert alert-success">Отчёт запущен и будет отправлен в Telegram.</div>
+{% elif request.query_params.get("success") == "supply_scan" %}
+<div class="alert alert-success">Парсинг очереди поставок запущен в фоне.</div>
+{% elif request.query_params.get("success") == "slots_tracker" %}
+<div class="alert alert-success">Отслеживатель слотов запущен в фоне.</div>
+{% elif request.query_params.get("success") %}
+<div class="alert alert-success">Операция выполнена.</div>
+{% endif %}
+{% if request.query_params.get("error") == "already_running" %}
+<div class="alert alert-error">Этот информер уже выполняется. Сначала остановите его.</div>
+{% elif request.query_params.get("error") == "stop" %}
+<div class="alert alert-error">Не удалось запросить остановку.</div>
+{% elif request.query_params.get("error") %}
+<div class="alert alert-error">Ошибка при запуске.</div>
+{% endif %}
 
 <div class="inf-page">
     <div class="inf-tabs">
@@ -118,15 +146,20 @@
                     Ежедневный отчёт
                     {% set rep = (informers_status.report if informers_status is defined and informers_status.report is defined else {}) %}
                     {% set rep_active = rep.active if rep is mapping and rep.active is not none else False %}
+                    {% set rep_running = rep.running if rep is mapping and rep.running else False %}
                     <span class="inf-status-pill {{ 'inf-status-pill-ok' if rep_active else 'inf-status-pill-off' }}">
                         <span class="inf-status-dot"></span>
-                        {% if rep_active %}Активен{% else %}Отключен{% endif %}
+                        {% if rep_running %}Выполняется{% elif rep_active %}Активен{% else %}Отключен{% endif %}
                     </span>
                 </h2>
                 <p style="color: var(--text-muted); margin-bottom: 12px; max-width: 640px;">
                     Собирает сводный отчёт и отправляет в Telegram по расписанию. Здесь можно запустить отчёт вручную.
                 </p>
-                <a href="/admin/report/manual" class="btn btn-success">Сформировать отчёт сейчас</a>
+                <div class="inf-actions">
+                    <a href="/admin/report/manual" class="btn btn-success">Сформировать отчёт сейчас</a>
+                    <a href="/admin/informers/stop/report" class="btn btn-danger">Остановить</a>
+                    {% if rep_running %}<p class="inf-running-hint">Сейчас выполняется…</p>{% endif %}
+                </div>
             </div>
         </div>
 
@@ -136,17 +169,20 @@
                     Парсер очереди поставок
                     {% set sup = (informers_status.supply if informers_status is defined and informers_status.supply is defined else {}) %}
                     {% set sup_cfg = sup.configured if sup is mapping and sup.configured is not none else False %}
-                    <span class="inf-status-pill {{ 'inf-status-pill-ok' if sup_cfg else 'inf-status-pill-off' }}">
+                    {% set sup_running = sup.running if sup is mapping and sup.running else False %}
+                    <span class="inf-status-pill {{ 'inf-status-pill-warn' if sup_running else ('inf-status-pill-ok' if sup_cfg else 'inf-status-pill-off') }}">
                         <span class="inf-status-dot"></span>
-                        {% if sup_cfg %}Настроен{% else %}Не настроен{% endif %}
+                        {% if sup_running %}Выполняется{% elif sup_cfg %}Настроен{% else %}Не настроен{% endif %}
                     </span>
                 </h2>
                 <p style="color: var(--text-muted); margin-bottom: 12px; max-width: 640px;">
                     Сканирует кластеры Ozon и строит таблицу доступных таймслотов на ближайшие недели.
                     Настройте параметры черновика — они используются при создании заявки для каждого кластера.
                 </p>
-                <div class="action-buttons" style="margin-bottom: 20px;">
+                <div class="inf-actions">
                     <a href="/admin/report/supply-scan" class="btn">Запустить скан очереди поставок</a>
+                    <a href="/admin/informers/stop/supply" class="btn btn-danger">Остановить</a>
+                    {% if sup_running %}<p class="inf-running-hint">Сейчас выполняется…</p>{% endif %}
                 </div>
 
                 <div id="supply-saved-summary" class="supply-saved empty">
@@ -204,19 +240,24 @@
                     {% set sl = (informers_status.slots if informers_status is defined and informers_status.slots is defined else {}) %}
                     {% set sl_cfg = sl.configured if sl is mapping and sl.configured is not none else False %}
                     {% set sl_en = sl.enabled if sl is mapping and sl.enabled is not none else False %}
+                    {% set sl_running = sl.running if sl is mapping and sl.running else False %}
                     {% set cls = 'inf-status-pill-off' %}
-                    {% if sl_cfg and sl_en %}{% set cls = 'inf-status-pill-ok' %}{% elif sl_cfg and not sl_en %}{% set cls = 'inf-status-pill-warn' %}{% endif %}
+                    {% if sl_running %}{% set cls = 'inf-status-pill-warn' %}
+                    {% elif sl_cfg and sl_en %}{% set cls = 'inf-status-pill-ok' %}
+                    {% elif sl_cfg and not sl_en %}{% set cls = 'inf-status-pill-warn' %}{% endif %}
                     <span class="inf-status-pill {{ cls }}">
                         <span class="inf-status-dot"></span>
-                        {% if not sl_cfg %}Не настроен{% elif sl_en %}Включен{% else %}Выключен{% endif %}
+                        {% if sl_running %}Выполняется{% elif not sl_cfg %}Не настроен{% elif sl_en %}Включен{% else %}Выключен{% endif %}
                     </span>
                 </h2>
                 <p style="color: var(--text-muted); margin-bottom: 16px; max-width: 640px;">
                     Отслеживает появление свободных таймслотов для выбранных кластеров Ozon в указанном периоде.
                     Параметры точки отгрузки берутся из конфига парсера очереди поставок. Уведомления в Telegram приходят только при появлении слотов.
                 </p>
-                <div class="tracker-save-wrap" style="margin-top: 0; margin-bottom: 16px;">
+                <div class="inf-actions" style="margin-top: 0;">
                     <a href="/admin/report/slots-tracker" class="btn">Запустить отслеживатель сейчас</a>
+                    <a href="/admin/informers/stop/slots" class="btn btn-danger">Остановить</a>
+                    {% if sl_running %}<p class="inf-running-hint">Сейчас выполняется…</p>{% endif %}
                 </div>
                 <form id="tracker-form">
                     <div class="tracker-field">

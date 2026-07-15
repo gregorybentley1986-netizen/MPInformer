@@ -918,6 +918,18 @@ async def collect_and_send_report():
     Собрать данные о заказах с 00:00 текущих суток (МСК) до текущего момента (МСК) и отправить отчёт в Telegram.
     Интервал считается по московскому времени; в API (Ozon, WB) передаётся UTC.
     """
+    from app.modules.informers_runtime import REPORT, clear_stop, running_scope
+
+    async with running_scope(REPORT):
+        clear_stop(REPORT)
+        await _collect_and_send_report_impl()
+
+
+async def _collect_and_send_report_impl():
+    """
+    Собрать данные о заказах с 00:00 текущих суток (МСК) до текущего момента (МСК) и отправить отчёт в Telegram.
+    Интервал считается по московскому времени; в API (Ozon, WB) передаётся UTC.
+    """
     from app.config import settings
     
     logger.info("Начало сбора данных для отчета...")

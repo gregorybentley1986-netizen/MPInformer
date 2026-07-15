@@ -23,6 +23,13 @@ from app.db.models import SupplyDraftConfig, SupplyQueueResult, SupplyQueueScan
 from app.db.database import AsyncSessionLocal
 from app.config import settings
 from app.modules.ozon.api_client import OzonAPIClient
+from app.modules.informers_runtime import (
+    SUPPLY,
+    clear_stop,
+    is_stop_requested,
+    running_scope,
+    sleep_or_stop,
+)
 from app.modules.ozon.scan_progress import (
     clear_supply_scan_progress as _clear_supply_scan_progress,
     set_supply_scan_progress as _set_supply_scan_progress,
@@ -320,8 +327,13 @@ async def run_supply_queue_scan() -> None:
     """
     from app.modules.ozon.runner import ozon_runner_lock
 
-    async with ozon_runner_lock:
-        await _run_supply_queue_scan_impl()
+    async with running_scope(SUPPLY):
+        clear_stop(SUPPLY)
+        async with ozon_runner_lock:
+            if is_stop_requested(SUPPLY):
+                logger.info("Supply scan: остановлен до старта")
+                return
+            await _run_supply_queue_scan_impl()
 
 
 async def _run_supply_queue_scan_impl() -> None:
@@ -355,13 +367,21 @@ async def _run_supply_queue_scan_impl() -> None:
 
     client = OzonAPIClient()
     results: list[tuple[int, str, str, list[int]]] = []
+    stopped = False
 
-    async def _finish_cluster(i: int, draft_created_at: float) -> None:
+    async def _finish_cluster(i: int, draft_created_at: float) -> bool:
+        """True — запрошена остановка."""
         _set_supply_scan_progress(scan_id=scan_id, total=total_clusters, done=i + 1)
-        await asyncio.sleep(max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at)))
+        return await sleep_or_stop(
+            SUPPLY, max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
+        )
 
     try:
         for i, cluster in enumerate(clusters):
+            if is_stop_requested(SUPPLY):
+                stopped = True
+                logger.info("Supply scan: остановка по запросу (кластер {}/{})", i, total_clusters)
+                break
             macrolocal_id = cluster_macrolocal_id(cluster)
             if macrolocal_id is None:
                 logger.warning("Supply scan: пропуск кластера без macrolocal_cluster_id: {}", cluster)
@@ -384,7 +404,9 @@ async def _run_supply_queue_scan_impl() -> None:
                         dates_text="ошибка создания черновика",
                         day_counts=[-1] * DAYS_COUNT,
                     )
-                    await _finish_cluster(i, draft_created_at)
+                    if await _finish_cluster(i, draft_created_at):
+                        stopped = True
+                        break
                     continue
             except httpx.HTTPStatusError as e:
                 resp_text = (e.response.text or "")[:1500]
@@ -402,7 +424,9 @@ async def _run_supply_queue_scan_impl() -> None:
                     dates_text="ошибка создания черновика",
                     day_counts=[-1] * DAYS_COUNT,
                 )
-                await _finish_cluster(i, draft_created_at)
+                if await _finish_cluster(i, draft_created_at):
+                    stopped = True
+                    break
                 continue
             except Exception as e:
                 logger.warning("Supply scan cluster {}: create draft failed: {}", stored_cluster_id, e)
@@ -414,10 +438,14 @@ async def _run_supply_queue_scan_impl() -> None:
                     dates_text="ошибка создания черновика",
                     day_counts=[-1] * DAYS_COUNT,
                 )
-                await _finish_cluster(i, draft_created_at)
+                if await _finish_cluster(i, draft_created_at):
+                    stopped = True
+                    break
                 continue
 
-            await asyncio.sleep(AFTER_DRAFT_WAIT_SEC)
+            if await sleep_or_stop(SUPPLY, AFTER_DRAFT_WAIT_SEC):
+                stopped = True
+                break
 
             success = False
             failed_no_slots = False
@@ -426,7 +454,9 @@ async def _run_supply_queue_scan_impl() -> None:
             for _ in range(STATUS_POLL_MAX_ATTEMPTS):
                 info = await client.get_draft_info(str(draft_id))
                 if info.get("_error"):
-                    await asyncio.sleep(STATUS_POLL_INTERVAL_SEC)
+                    if await sleep_or_stop(SUPPLY, STATUS_POLL_INTERVAL_SEC):
+                        stopped = True
+                        break
                     continue
                 st = parse_draft_status(info)
                 last_status = st
@@ -459,8 +489,12 @@ async def _run_supply_queue_scan_impl() -> None:
                         st,
                     )
                     break
-                await asyncio.sleep(STATUS_POLL_INTERVAL_SEC)
+                if await sleep_or_stop(SUPPLY, STATUS_POLL_INTERVAL_SEC):
+                    stopped = True
+                    break
 
+            if stopped:
+                break
             if failed_no_slots:
                 await _persist_cluster_scan_result(
                     scan_id,
@@ -470,7 +504,9 @@ async def _run_supply_queue_scan_impl() -> None:
                     dates_text="нет дат",
                     day_counts=[0] * DAYS_COUNT,
                 )
-                await _finish_cluster(i, draft_created_at)
+                if await _finish_cluster(i, draft_created_at):
+                    stopped = True
+                    break
                 continue
             if not success:
                 logger.warning(
@@ -488,18 +524,24 @@ async def _run_supply_queue_scan_impl() -> None:
                     dates_text="таймаут статуса",
                     day_counts=[-1] * DAYS_COUNT,
                 )
-                await _finish_cluster(i, draft_created_at)
+                if await _finish_cluster(i, draft_created_at):
+                    stopped = True
+                    break
                 continue
 
             wh_attempts = timeslot_selected_wh_attempts(last_draft_info, int(macrolocal_id))
-            await asyncio.sleep(TIMESLOT_RATE_SEC)
+            if await sleep_or_stop(SUPPLY, TIMESLOT_RATE_SEC):
+                stopped = True
+                break
 
             try:
                 ts_resp: dict = {}
                 used_wh: list[dict] | None = wh_attempts[0] if wh_attempts else None
                 for attempt_idx, selected_wh in enumerate(wh_attempts):
                     if attempt_idx > 0:
-                        await asyncio.sleep(TIMESLOT_404_RETRY_DELAY_SEC)
+                        if await sleep_or_stop(SUPPLY, TIMESLOT_404_RETRY_DELAY_SEC):
+                            stopped = True
+                            break
                     logger.info(
                         "Supply scan cluster {} ({}): timeslot попытка {}/{} draft_id={} macrolocal={} selected_wh={} date_from={} date_to={}",
                         stored_cluster_id,
@@ -535,6 +577,8 @@ async def _run_supply_queue_scan_impl() -> None:
                         selected_wh,
                         oz_snip,
                     )
+                if stopped:
+                    break
                 if ts_resp.get("_error"):
                     status_code = ts_resp.get("status_code")
                     if status_code in (404, 400):
@@ -625,9 +669,18 @@ async def _run_supply_queue_scan_impl() -> None:
                     day_counts=[-1] * DAYS_COUNT,
                 )
 
-            await _finish_cluster(i, draft_created_at)
+            if await _finish_cluster(i, draft_created_at):
+                stopped = True
+                break
     finally:
         _clear_supply_scan_progress()
+
+    if stopped:
+        logger.info(
+            "Supply scan: остановлен досрочно, scan_id={}, результатов={}",
+            scan_id,
+            len(results),
+        )
 
     if not results:
         logger.warning("Supply scan: results пустой, scan_id={} удалён (чтобы не затирать таблицу на сайте)", scan_id)

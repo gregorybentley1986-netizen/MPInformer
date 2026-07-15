@@ -5,7 +5,6 @@
 """
 from __future__ import annotations
 
-import asyncio
 import copy
 import io
 import time
@@ -29,6 +28,13 @@ from app.modules.ozon.timeslot_parse import (
     parse_draft_status,
     parse_timeslot_dates_text,
     parse_timeslot_day_counts,
+)
+from app.modules.informers_runtime import (
+    SLOTS,
+    clear_stop,
+    is_stop_requested,
+    running_scope,
+    sleep_or_stop,
 )
 from app.time_utils import MSK, now_msk
 
@@ -261,8 +267,13 @@ async def run_slots_tracker() -> None:
     found: list[tuple[int, str, str]] = []  # кластеры со слотами
     results: list[tuple[int, str, str]] = []  # по каждому кластеру (для логов)
     image_rows: list[tuple[int, str, str, list[int]]] = []  # (cluster_id, name, dates_text, day_counts) для картинки
+    stopped = False
 
     for cluster_id in cluster_ids:
+        if is_stop_requested(SLOTS):
+            stopped = True
+            logger.info("Slots tracker: остановка по запросу")
+            break
         cid = int(cluster_id) if cluster_id is not None else None
         if cid is None:
             continue
@@ -287,27 +298,38 @@ async def run_slots_tracker() -> None:
                 )
                 results.append((cid, cluster_name, "ошибка создания черновика"))
                 image_rows.append((cid, cluster_name, "ошибка", [-1] * period_days))
-                await asyncio.sleep(
-                    max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
-                )
+                if await sleep_or_stop(
+                    SLOTS, max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
+                ):
+                    stopped = True
+                    break
                 continue
         except Exception as e:
             logger.warning("Slots tracker cluster %s: create draft failed: %s", cid, e)
             results.append((cid, cluster_name, "ошибка: " + str(e)[:80]))
             image_rows.append((cid, cluster_name, "ошибка", [-1] * period_days))
-            await asyncio.sleep(
-                max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
-            )
+            if await sleep_or_stop(
+                SLOTS, max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
+            ):
+                stopped = True
+                break
             continue
 
-        await asyncio.sleep(AFTER_DRAFT_WAIT_SEC)
+        if await sleep_or_stop(SLOTS, AFTER_DRAFT_WAIT_SEC):
+            stopped = True
+            break
 
         success = False
         failed_no_slots = False
         for _ in range(STATUS_POLL_MAX_ATTEMPTS):
+            if is_stop_requested(SLOTS):
+                stopped = True
+                break
             info = await client.get_draft_info(str(draft_id))
             if info.get("_error"):
-                await asyncio.sleep(STATUS_POLL_INTERVAL_SEC)
+                if await sleep_or_stop(SLOTS, STATUS_POLL_INTERVAL_SEC):
+                    stopped = True
+                    break
                 continue
             payload_res = info.get("result") or info.get("data") or info
             st = parse_draft_status(info)
@@ -320,21 +342,33 @@ async def run_slots_tracker() -> None:
                 break
             if not is_draft_status_in_progress(st):
                 break
-            await asyncio.sleep(STATUS_POLL_INTERVAL_SEC)
+            if await sleep_or_stop(SLOTS, STATUS_POLL_INTERVAL_SEC):
+                stopped = True
+                break
+
+        if stopped:
+            break
 
         if failed_no_slots or not success:
             results.append((cid, cluster_name, "нет слотов (черновик не готов)"))
             image_rows.append((cid, cluster_name, "нет слотов", [0] * period_days))
-            await asyncio.sleep(
-                max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
-            )
+            if await sleep_or_stop(
+                SLOTS, max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
+            ):
+                stopped = True
+                break
             continue
 
-        await asyncio.sleep(TIMESLOT_RATE_SEC)
+        if await sleep_or_stop(SLOTS, TIMESLOT_RATE_SEC):
+            stopped = True
+            break
 
         try:
             ts_resp = None
             for retry in range(TIMESLOT_429_MAX_RETRIES + 1):
+                if is_stop_requested(SLOTS):
+                    stopped = True
+                    break
                 ts_resp = await client.get_draft_timeslots(
                     draft_id=int(draft_id),
                     date_from=today_str,
@@ -348,15 +382,21 @@ async def run_slots_tracker() -> None:
                     ts_resp.get("status_code") == 429
                     and retry < TIMESLOT_429_MAX_RETRIES
                 ):
-                    await asyncio.sleep(TIMESLOT_429_RETRY_DELAY_SEC)
+                    if await sleep_or_stop(SLOTS, TIMESLOT_429_RETRY_DELAY_SEC):
+                        stopped = True
+                        break
                     continue
+                break
+            if stopped:
                 break
             if ts_resp.get("_error"):
                 results.append((cid, cluster_name, "ошибка запроса таймслотов"))
                 image_rows.append((cid, cluster_name, "ошибка", [-1] * period_days))
-                await asyncio.sleep(
-                    max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
-                )
+                if await sleep_or_stop(
+                    SLOTS, max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
+                ):
+                    stopped = True
+                    break
                 continue
             dates_text, day_counts = _parse_dates_and_counts_in_period(
                 ts_resp, today_str, period_days, macrolocal_cluster_id=cid
@@ -377,9 +417,15 @@ async def run_slots_tracker() -> None:
             results.append((cid, cluster_name, "ошибка: " + str(e)[:80]))
             image_rows.append((cid, cluster_name, "ошибка", [-1] * period_days))
 
-        await asyncio.sleep(
-            max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
-        )
+        if await sleep_or_stop(
+            SLOTS, max(0, DRAFT_CREATE_INTERVAL_SEC - (time.monotonic() - draft_created_at))
+        ):
+            stopped = True
+            break
+
+    if stopped:
+        logger.info("Slots tracker: остановлен досрочно, проверено=%s", len(results))
+        return
 
     # Отправляем результаты ТОЛЬКО по кластерам, где есть слоты:
     # по одному сообщению (картинка с одной строкой) на каждый кластер.
@@ -400,6 +446,9 @@ async def run_slots_tracker() -> None:
 
         # Для каждого кластера со слотами ищем его строку в image_rows
         for cid, name, dates_text in found:
+            if is_stop_requested(SLOTS):
+                logger.info("Slots tracker: остановка при отправке уведомлений")
+                break
             row = None
             for r in image_rows:
                 if r[0] == cid:
@@ -430,38 +479,47 @@ async def run_slots_tracker() -> None:
 async def run_slots_tracker_safe() -> None:
     """
     Запуск отслеживателя под общей блокировкой Ozon (не вместе с парсером).
-    Если блокировка занята (выполняется парсер) — запуск откладывается на TRACKER_DEFER_SECONDS.
+    Если блокировка занята (выполняется парсер) — ждём TRACKER_DEFER_SECONDS и повторяем.
     После выполнения обновляет last_run_at.
     """
     from app.modules.ozon.runner import ozon_runner_lock, TRACKER_DEFER_SECONDS
 
-    if ozon_runner_lock.locked():
-        logger.info(
-            "Отслеживатель слотов: парсер или другая задача Ozon занята, откладываем запуск на %s с",
-            TRACKER_DEFER_SECONDS,
-        )
-        asyncio.create_task(_deferred_slots_tracker())
-        return
-    async with ozon_runner_lock:
-        await run_slots_tracker()
-        async with AsyncSessionLocal() as session:
-            r = await session.execute(
-                select(SlotsTrackerConfig).where(SlotsTrackerConfig.enabled == 1).limit(1)
-            )
-            row = r.scalar_one_or_none()
-            if row:
-                row.last_run_at = now_msk()
-                await session.commit()
+    async with running_scope(SLOTS):
+        clear_stop(SLOTS)
+        while True:
+            if is_stop_requested(SLOTS):
+                logger.info("Slots tracker: остановлен до старта")
+                return
+            if ozon_runner_lock.locked():
+                logger.info(
+                    "Отслеживатель слотов: парсер или другая задача Ozon занята, ждём %s с",
+                    TRACKER_DEFER_SECONDS,
+                )
+                if await sleep_or_stop(SLOTS, TRACKER_DEFER_SECONDS):
+                    logger.info("Slots tracker: ожидание отменено")
+                    return
+                continue
+            async with ozon_runner_lock:
+                if is_stop_requested(SLOTS):
+                    logger.info("Slots tracker: остановлен до старта")
+                    return
+                await run_slots_tracker()
+                if is_stop_requested(SLOTS):
+                    return
+                async with AsyncSessionLocal() as session:
+                    r = await session.execute(
+                        select(SlotsTrackerConfig).where(SlotsTrackerConfig.enabled == 1).limit(1)
+                    )
+                    row = r.scalar_one_or_none()
+                    if row:
+                        row.last_run_at = now_msk()
+                        await session.commit()
+            return
 
 
 async def _deferred_slots_tracker() -> None:
-    """Отложенный запуск отслеживателя после паузы (когда освободится блокировка)."""
-    from app.modules.ozon.runner import TRACKER_DEFER_SECONDS
-
-    await asyncio.sleep(TRACKER_DEFER_SECONDS)
+    """Совместимость: отложенный запуск = обычный safe (внутри сам ждёт lock)."""
     await run_slots_tracker_safe()
-
-
 async def run_slots_tracker_if_due() -> None:
     """
     Проверяет, пора ли запускать отслеживатель (по frequency_hours и last_run_at).
