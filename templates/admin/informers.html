@@ -114,8 +114,16 @@
 {% block content %}
 <h1>Информеры</h1>
 
-{% if request.query_params.get("success") == "stop" %}
-<div class="alert alert-success">Остановка запрошена. Текущий запуск завершится в ближайший безопасный момент.</div>
+{% if request.query_params.get("success") == "stopped" %}
+<div class="alert alert-success">Информер остановлен: текущий запуск прерван, расписание выключено.</div>
+{% elif request.query_params.get("success") == "stop_pending" %}
+<div class="alert alert-success">Остановка запрошена. Расписание выключено; текущий запуск завершится через несколько секунд.</div>
+{% elif request.query_params.get("success") == "disabled" %}
+<div class="alert alert-success">Расписание информера выключено.</div>
+{% elif request.query_params.get("success") == "already_stopped" %}
+<div class="alert alert-success">Информер уже был выключен, активных запусков нет.</div>
+{% elif request.query_params.get("success") == "enabled" %}
+<div class="alert alert-success">Расписание информера включено.</div>
 {% elif request.query_params.get("success") == "report" %}
 <div class="alert alert-success">Отчёт запущен и будет отправлен в Telegram.</div>
 {% elif request.query_params.get("success") == "supply_scan" %}
@@ -128,7 +136,9 @@
 {% if request.query_params.get("error") == "already_running" %}
 <div class="alert alert-error">Этот информер уже выполняется. Сначала остановите его.</div>
 {% elif request.query_params.get("error") == "stop" %}
-<div class="alert alert-error">Не удалось запросить остановку.</div>
+<div class="alert alert-error">Не удалось остановить информер.</div>
+{% elif request.query_params.get("error") == "enable" %}
+<div class="alert alert-error">Не удалось включить информер.</div>
 {% elif request.query_params.get("error") %}
 <div class="alert alert-error">Ошибка при запуске.</div>
 {% endif %}
@@ -157,7 +167,11 @@
                 </p>
                 <div class="inf-actions">
                     <a href="/admin/report/manual" class="btn btn-success">Сформировать отчёт сейчас</a>
+                    {% if rep_active %}
                     <a href="/admin/informers/stop/report" class="btn btn-danger">Остановить</a>
+                    {% else %}
+                    <a href="/admin/informers/enable/report" class="btn">Включить расписание</a>
+                    {% endif %}
                     {% if rep_running %}<p class="inf-running-hint">Сейчас выполняется…</p>{% endif %}
                 </div>
             </div>
@@ -170,9 +184,10 @@
                     {% set sup = (informers_status.supply if informers_status is defined and informers_status.supply is defined else {}) %}
                     {% set sup_cfg = sup.configured if sup is mapping and sup.configured is not none else False %}
                     {% set sup_running = sup.running if sup is mapping and sup.running else False %}
-                    <span class="inf-status-pill {{ 'inf-status-pill-warn' if sup_running else ('inf-status-pill-ok' if sup_cfg else 'inf-status-pill-off') }}">
+                    {% set sup_en = sup.enabled if sup is mapping and sup.enabled is not none else True %}
+                    <span class="inf-status-pill {{ 'inf-status-pill-warn' if sup_running else ('inf-status-pill-ok' if (sup_cfg and sup_en) else 'inf-status-pill-off') }}">
                         <span class="inf-status-dot"></span>
-                        {% if sup_running %}Выполняется{% elif sup_cfg %}Настроен{% else %}Не настроен{% endif %}
+                        {% if sup_running %}Выполняется{% elif not sup_cfg %}Не настроен{% elif sup_en %}Включен{% else %}Выключен{% endif %}
                     </span>
                 </h2>
                 <p style="color: var(--text-muted); margin-bottom: 12px; max-width: 640px;">
@@ -181,7 +196,11 @@
                 </p>
                 <div class="inf-actions">
                     <a href="/admin/report/supply-scan" class="btn">Запустить скан очереди поставок</a>
+                    {% if sup_en %}
                     <a href="/admin/informers/stop/supply" class="btn btn-danger">Остановить</a>
+                    {% else %}
+                    <a href="/admin/informers/enable/supply" class="btn">Включить расписание</a>
+                    {% endif %}
                     {% if sup_running %}<p class="inf-running-hint">Сейчас выполняется…</p>{% endif %}
                 </div>
 
@@ -256,7 +275,11 @@
                 </p>
                 <div class="inf-actions" style="margin-top: 0;">
                     <a href="/admin/report/slots-tracker" class="btn">Запустить отслеживатель сейчас</a>
+                    {% if sl_en %}
                     <a href="/admin/informers/stop/slots" class="btn btn-danger">Остановить</a>
+                    {% else %}
+                    <a href="/admin/informers/enable/slots" class="btn">Включить расписание</a>
+                    {% endif %}
                     {% if sl_running %}<p class="inf-running-hint">Сейчас выполняется…</p>{% endif %}
                 </div>
                 <form id="tracker-form">

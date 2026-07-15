@@ -85,9 +85,12 @@ from app.modules.informers_runtime import (
     SLOTS,
     SUPPLY,
     is_running,
+    is_schedule_enabled,
     request_stop,
+    set_schedule_enabled,
     spawn,
     status_snapshot,
+    wait_until_stopped,
 )
 from app.telegram.bot import stop_bot
 from app.site.routes import _spool_svg_dataurl
@@ -398,7 +401,10 @@ async def admin_dashboard(
     supply_status["last_scan_at_display"] = _datetime_to_msk_display(supply_status.get("last_scan_at"))
     slots_status["last_run_at_display"] = _datetime_to_msk_display(slots_status.get("last_run_at"))
     supply_status["running"] = is_running(SUPPLY)
+    supply_status["enabled"] = is_schedule_enabled(SUPPLY)
     slots_status["running"] = is_running(SLOTS)
+    if slots_status.get("configured"):
+        slots_status["enabled"] = bool(slots_status.get("enabled")) and is_schedule_enabled(SLOTS)
 
     return templates.TemplateResponse("admin/dashboard.html", {
         "request": request,
@@ -411,7 +417,7 @@ async def admin_dashboard(
         "scheduler_running": getattr(scheduler, "running", False) if scheduler else False,
         "informers_status": {
             "report": {
-                "active": getattr(scheduler, "running", False) if scheduler else False,
+                "active": is_schedule_enabled(REPORT),
                 "times": getattr(settings, "report_notification_times", "09:00"),
                 "running": is_running(REPORT),
             },
@@ -462,7 +468,7 @@ async def admin_informers(
                 "enabled": 1 if row.enabled else 0,
             }
             slots_status["configured"] = True
-            slots_status["enabled"] = bool(row.enabled)
+            slots_status["enabled"] = bool(row.enabled) and is_schedule_enabled(SLOTS)
             slots_status["last_run_at"] = row.last_run_at
     except Exception:
         pass
@@ -485,6 +491,7 @@ async def admin_informers(
     supply_status["last_scan_at_display"] = _datetime_to_msk_display(supply_status.get("last_scan_at"))
     slots_status["last_run_at_display"] = _datetime_to_msk_display(slots_status.get("last_run_at"))
     supply_status["running"] = is_running(SUPPLY)
+    supply_status["enabled"] = is_schedule_enabled(SUPPLY)
     slots_status["running"] = is_running(SLOTS)
     tab = request.query_params.get("tab") or "report"
     if tab not in ("report", "supply", "slots"):
@@ -496,7 +503,7 @@ async def admin_informers(
         "initial_tab": tab,
         "informers_status": {
             "report": {
-                "active": getattr(scheduler, "running", False) if scheduler else False,
+                "active": is_schedule_enabled(REPORT),
                 "times": getattr(settings, "report_notification_times", "09:00"),
                 "running": is_running(REPORT),
             },
@@ -508,17 +515,71 @@ async def admin_informers(
 
 
 @router.get("/informers/stop/{kind}")
-async def admin_informer_stop(kind: str, username: str = Depends(verify_admin)):
-    """Остановить текущий запуск информера (report / supply / slots)."""
+async def admin_informer_stop(
+    kind: str,
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Остановить текущий запуск и выключить расписание информера."""
     kind_norm = (kind or "").strip().lower()
     tab = kind_norm if kind_norm in ("report", "supply", "slots") else "report"
     if kind_norm not in ("report", "supply", "slots"):
         return RedirectResponse(url=f"/admin/informers?tab={tab}&error=stop", status_code=303)
-    result = request_stop(kind_norm)
-    if result.get("ok"):
-        return RedirectResponse(url=f"/admin/informers?tab={tab}&success=stop", status_code=303)
-    return RedirectResponse(url=f"/admin/informers?tab={tab}&error=stop", status_code=303)
 
+    result = request_stop(kind_norm)
+
+    # Для слотов дополнительно выключаем конфиг в БД (hourly job смотрит на enabled)
+    if kind_norm == "slots":
+        try:
+            r = await db.execute(select(SlotsTrackerConfig).limit(1))
+            row = r.scalar_one_or_none()
+            if row and row.enabled:
+                row.enabled = 0
+                await db.commit()
+                logger.info("Slots tracker: enabled=0 после остановки из админки")
+        except Exception as e:
+            logger.exception("Не удалось выключить slots config: %s", e)
+
+    stopped_clean = await wait_until_stopped(kind_norm, timeout=5.0)
+
+    if result.get("was_running") and stopped_clean:
+        q = "success=stopped"
+    elif result.get("was_running") and not stopped_clean:
+        q = "success=stop_pending"
+    elif result.get("was_enabled"):
+        q = "success=disabled"
+    else:
+        q = "success=already_stopped"
+
+    return RedirectResponse(url=f"/admin/informers?tab={tab}&{q}", status_code=303)
+
+
+@router.get("/informers/enable/{kind}")
+async def admin_informer_enable(
+    kind: str,
+    db: AsyncSession = Depends(get_db),
+    username: str = Depends(verify_admin),
+):
+    """Включить расписание информера (после Остановить)."""
+    kind_norm = (kind or "").strip().lower()
+    tab = kind_norm if kind_norm in ("report", "supply", "slots") else "report"
+    if kind_norm not in ("report", "supply", "slots"):
+        return RedirectResponse(url=f"/admin/informers?tab={tab}&error=enable", status_code=303)
+
+    set_schedule_enabled(kind_norm, True)
+
+    if kind_norm == "slots":
+        try:
+            r = await db.execute(select(SlotsTrackerConfig).limit(1))
+            row = r.scalar_one_or_none()
+            if row is not None:
+                row.enabled = 1
+                await db.commit()
+                logger.info("Slots tracker: enabled=1 после включения из админки")
+        except Exception as e:
+            logger.exception("Не удалось включить slots config: %s", e)
+
+    return RedirectResponse(url=f"/admin/informers?tab={tab}&success=enabled", status_code=303)
 @router.get("/informers/supply-scan-config")
 async def informers_supply_scan_config_get(
     username: str = Depends(verify_admin),
@@ -683,6 +744,7 @@ async def informers_slots_tracker_config_save(
             row.frequency_hours = frequency_hours
             row.enabled = enabled
             await db.commit()
+            set_schedule_enabled(SLOTS, bool(enabled))
             return JSONResponse(content={"ok": True, "message": "Конфиг отслеживателя обновлён"})
         new_row = SlotsTrackerConfig(
             cluster_ids=cluster_ids,
@@ -693,6 +755,7 @@ async def informers_slots_tracker_config_save(
         )
         db.add(new_row)
         await db.commit()
+        set_schedule_enabled(SLOTS, bool(enabled))
         return JSONResponse(content={"ok": True, "message": "Конфиг отслеживателя сохранён"})
     except Exception as e:
         logger.exception("Slots tracker config save: %s", e)
